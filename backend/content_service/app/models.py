@@ -1,0 +1,445 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
+from datetime import datetime
+from enum import Enum
+
+
+class Permission(str, Enum):
+    VIEW = "view"
+    EDIT = "edit"
+    DELETE = "delete"
+    ACCESS = "access"
+
+
+class RoleGroup(str, Enum):
+    ADMIN = "ADMIN"
+    HOST = "HOST"
+    ADVERTISER = "ADVERTISER"
+
+
+class Screen(str, Enum):
+    DASHBOARD = "dashboard"
+    USERS = "users"
+    COMPANIES = "companies"
+    CONTENT = "content"
+    MODERATION = "moderation"
+    ANALYTICS = "analytics"
+    SETTINGS = "settings"
+    BILLING = "billing"
+
+
+class CompanyCreate(BaseModel):
+    name: str
+    type: str = Field(..., pattern="^(HOST|ADVERTISER)$")  # HOST or ADVERTISER
+    address: str
+    city: str
+    country: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    status: str = "active"  # active or inactive
+
+
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    status: Optional[str] = None
+
+
+class Company(BaseModel):
+    id: Optional[str] = None
+    name: str
+    type: str
+    address: str
+    city: str
+    country: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    status: str = "active"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RolePermission(BaseModel):
+    id: Optional[str] = None
+    role_id: str  # Reference to the role this permission belongs to
+    screen: Screen
+    permissions: List[Permission] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Role(BaseModel):
+    id: Optional[str] = None
+    name: str
+    role_group: RoleGroup
+    company_id: str  # Role belongs to a company
+    is_default: bool = False
+    status: str = "active"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserRole(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    company_id: str
+    role_id: str  # Reference to Role instead of just role name
+    is_default: bool = False
+    status: str = "active"  # active or inactive
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class User(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    status: str = "active"  # active or inactive
+    hashed_password: Optional[str] = None
+    roles: List[UserRole] = []
+    oauth_provider: Optional[str] = None  # For OAuth support
+    oauth_id: Optional[str] = None
+    email_verified: bool = False
+    last_login: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserLogin(BaseModel):
+    username: str  # This will be the email
+    password: str
+
+
+class UserCreate(BaseModel):
+    name: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    password: str
+    roles: List[dict] = []  # List of {company_id: str, role_id: str, is_default: bool}
+    oauth_provider: Optional[str] = None
+    oauth_id: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    roles: Optional[List[dict]] = None
+
+
+class UserProfile(BaseModel):
+    id: str
+    name: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    status: str
+    roles: List[Dict] = []  # Expanded role information
+    companies: List[Dict] = []  # Company information
+    active_company: Optional[str] = None
+    active_role: Optional[str] = None
+    email_verified: bool = False
+    last_login: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoleCreate(BaseModel):
+    name: str
+    role_group: RoleGroup
+    company_id: str
+    permissions: List[Dict] = []  # List of {screen: str, permissions: List[str]}
+    is_default: bool = False
+
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    permissions: Optional[List[Dict]] = None
+    is_default: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class PermissionCheck(BaseModel):
+    user_id: str
+    company_id: str
+    screen: Screen
+    permission: Permission
+
+
+class OAuthLogin(BaseModel):
+    provider: str  # google, microsoft, etc.
+    code: str
+    redirect_uri: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str
+
+
+class ContentMeta(BaseModel):
+    id: Optional[str]
+    owner_id: str
+    filename: str
+    content_type: str
+    size: int
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = "quarantine"  # quarantine -> pending -> approved -> rejected
+
+
+class ContentMetadata(BaseModel):
+    id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    owner_id: str
+    categories: list[str] = []
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    tags: list[str] = []
+
+
+class UploadResponse(BaseModel):
+    filename: str
+    status: str
+    message: Optional[str] = None
+
+
+class ModerationResult(BaseModel):
+    content_id: str
+    ai_confidence: float = Field(..., ge=0.0, le=1.0)
+    action: str  # approved / quarantine / reject
+    reason: Optional[str] = None
+
+
+class Review(BaseModel):
+    id: Optional[str] = None
+    content_id: str
+    ai_confidence: Optional[float] = None
+    action: str  # approved | needs_review | rejected | manual_approve | manual_reject
+    reviewer_id: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserRegistration(BaseModel):
+    name: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    password: str
+
+
+class UserInvitation(BaseModel):
+    id: Optional[str] = None
+    email: str
+    invited_by: str  # User ID of the inviter
+    company_id: str
+    role_id: str
+    invitation_token: str
+    expires_at: datetime
+    status: str = "pending"  # pending, accepted, expired, cancelled
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PasswordResetToken(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    reset_token: str
+    expires_at: datetime
+    used: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# Screen/Kiosk Management Models
+class ScreenStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    MAINTENANCE = "maintenance"
+    OFFLINE = "offline"
+
+
+class ScreenOrientation(str, Enum):
+    LANDSCAPE = "landscape"
+    PORTRAIT = "portrait"
+
+
+class DigitalScreen(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    company_id: str  # Owner company
+    location: str  # Physical location description
+    resolution_width: int = 1920
+    resolution_height: int = 1080
+    orientation: ScreenOrientation = ScreenOrientation.LANDSCAPE
+    status: ScreenStatus = ScreenStatus.ACTIVE
+    ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+    last_seen: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ScreenCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    company_id: str
+    location: str
+    resolution_width: int = 1920
+    resolution_height: int = 1080
+    orientation: ScreenOrientation = ScreenOrientation.LANDSCAPE
+    ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+
+
+class ScreenUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    resolution_width: Optional[int] = None
+    resolution_height: Optional[int] = None
+    orientation: Optional[ScreenOrientation] = None
+    status: Optional[ScreenStatus] = None
+    ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+
+
+# Content Overlay Models
+class ContentOverlayStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    SCHEDULED = "scheduled"
+    EXPIRED = "expired"
+    PAUSED = "paused"
+
+
+class ContentOverlay(BaseModel):
+    id: Optional[str] = None
+    content_id: str  # Reference to uploaded content
+    screen_id: str   # Reference to digital screen
+    company_id: str  # Owner company
+    name: str        # Layout name
+    position_x: int = 0      # X position in pixels
+    position_y: int = 0      # Y position in pixels
+    width: int = 100         # Width in pixels
+    height: int = 100        # Height in pixels
+    z_index: int = 1         # Layer order (higher = front)
+    opacity: float = 1.0     # 0.0 to 1.0
+    rotation: float = 0.0    # Rotation in degrees
+    start_time: Optional[datetime] = None  # When to start showing
+    end_time: Optional[datetime] = None    # When to stop showing
+    status: ContentOverlayStatus = ContentOverlayStatus.DRAFT
+    created_by: str          # User who created this overlay
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContentOverlayCreate(BaseModel):
+    content_id: str
+    screen_id: str
+    company_id: str
+    name: str
+    position_x: int = 0
+    position_y: int = 0
+    width: int = 100
+    height: int = 100
+    z_index: int = 1
+    opacity: float = 1.0
+    rotation: float = 0.0
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    status: ContentOverlayStatus = ContentOverlayStatus.DRAFT
+
+
+class ContentOverlayUpdate(BaseModel):
+    name: Optional[str] = None
+    position_x: Optional[int] = None
+    position_y: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    z_index: Optional[int] = None
+    opacity: Optional[float] = None
+    rotation: Optional[float] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    status: Optional[ContentOverlayStatus] = None
+
+
+# Digital Twin Models
+class DigitalTwinStatus(str, Enum):
+    RUNNING = "running"
+    STOPPED = "stopped"
+    ERROR = "error"
+
+
+class DigitalTwin(BaseModel):
+    id: Optional[str] = None
+    name: str
+    screen_id: str           # Associated physical screen
+    company_id: str          # Owner company
+    description: Optional[str] = None
+    is_live_mirror: bool = False  # Mirror real screen content
+    test_content_ids: List[str] = []  # Content being tested
+    overlay_configs: List[str] = []   # Overlay configurations
+    status: DigitalTwinStatus = DigitalTwinStatus.STOPPED
+    created_by: str          # User who created this twin
+    last_accessed: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DigitalTwinCreate(BaseModel):
+    name: str
+    screen_id: str
+    company_id: str
+    description: Optional[str] = None
+    is_live_mirror: bool = False
+
+
+class DigitalTwinUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_live_mirror: Optional[bool] = None
+    test_content_ids: Optional[List[str]] = None
+    overlay_configs: Optional[List[str]] = None
+    status: Optional[DigitalTwinStatus] = None
+
+
+# Screen Layout Template Models
+class LayoutTemplate(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    company_id: str          # Owner company
+    template_data: Dict      # JSON configuration for layout
+    is_public: bool = False  # Available to all companies
+    usage_count: int = 0     # How many times used
+    created_by: str          # User who created template
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LayoutTemplateCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    company_id: str
+    template_data: Dict
+    is_public: bool = False
+
+
+class LayoutTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    template_data: Optional[Dict] = None
+    is_public: Optional[bool] = None

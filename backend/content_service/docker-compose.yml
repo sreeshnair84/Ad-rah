@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  content-service:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/openkiosk
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - SECRET_KEY=${SECRET_KEY:-changeme}
+      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+    depends_on:
+      - mongodb
+      - azurite
+    volumes:
+      - ./app:/app/app
+    networks:
+      - openkiosk
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - openkiosk
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service
+      - "10002:10002"  # Table service
+    volumes:
+      - azurite_data:/data
+    networks:
+      - openkiosk
+
+  event-processor:
+    build: .
+    command: ["python", "-m", "app.event_processor"]
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/openkiosk
+      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+      - AZURE_AI_ENDPOINT=${AZURE_AI_ENDPOINT}
+      - AZURE_AI_KEY=${AZURE_AI_KEY}
+    depends_on:
+      - mongodb
+    volumes:
+      - ./app:/app/app
+    networks:
+      - openkiosk
+
+volumes:
+  mongodb_data:
+  azurite_data:
+
+networks:
+  openkiosk:
+    driver: bridge
