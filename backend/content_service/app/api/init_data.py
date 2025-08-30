@@ -79,10 +79,37 @@ async def initialize_companies():
         }
     ]
     
-    company_store = repo._store.setdefault("__companies__", {})
-    for company in companies:
-        if company["id"] not in company_store:
-            company_store[company["id"]] = company
+    # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        company_store = repo._store.setdefault("__companies__", {})
+        for company in companies:
+            if company["id"] not in company_store:
+                company_store[company["id"]] = company
+    else:
+        # MongoRepo - use proper async methods
+        for company_data in companies:
+            from app.models import Company
+            # Create Company object with proper datetime conversion
+            company = Company(
+                id=company_data["id"],
+                name=company_data["name"],
+                type=company_data["type"],
+                address=company_data["address"],
+                city=company_data["city"],
+                country=company_data["country"],
+                phone=company_data.get("phone"),
+                email=company_data.get("email"),
+                website=company_data.get("website"),
+                status=company_data["status"],
+                created_at=datetime.fromisoformat(company_data["created_at"]),
+                updated_at=datetime.fromisoformat(company_data["updated_at"])
+            )
+            # Check if company already exists
+            if company.id:
+                existing = await repo.get_company(company.id)
+                if not existing:
+                    await repo.save_company(company)
 
 
 async def initialize_roles():
@@ -169,10 +196,33 @@ async def initialize_roles():
         }
     ]
     
-    role_store = repo._store.setdefault("__roles__", {})
-    for role in roles:
-        if role["id"] not in role_store:
-            role_store[role["id"]] = role
+    # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        role_store = repo._store.setdefault("__roles__", {})
+        for role in roles:
+            if role["id"] not in role_store:
+                role_store[role["id"]] = role
+    else:
+        # MongoRepo - use proper async methods
+        for role_data in roles:
+            from app.models import Role, RoleGroup
+            # Create Role object with proper enum conversion
+            role = Role(
+                id=role_data["id"],
+                name=role_data["name"],
+                role_group=RoleGroup(role_data["role_group"]),
+                company_id=role_data["company_id"],
+                is_default=role_data["is_default"],
+                status=role_data["status"],
+                created_at=datetime.fromisoformat(role_data["created_at"]),
+                updated_at=datetime.fromisoformat(role_data["updated_at"])
+            )
+            # Check if role already exists
+            if role.id:
+                existing = await repo.get_role(role.id)
+                if not existing:
+                    await repo.save_role(role)
     
     # Initialize role permissions
     await initialize_role_permissions()
@@ -286,10 +336,31 @@ async def initialize_role_permissions():
         }
     ]
     
-    permission_store = repo._store.setdefault("__role_permissions__", {})
-    for permission in permissions:
-        if permission["id"] not in permission_store:
-            permission_store[permission["id"]] = permission
+    # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        permission_store = repo._store.setdefault("__role_permissions__", {})
+        for permission in permissions:
+            if permission["id"] not in permission_store:
+                permission_store[permission["id"]] = permission
+    else:
+        # MongoRepo - use proper async methods
+        for permission_data in permissions:
+            from app.models import RolePermission, Screen, Permission
+            # Create RolePermission object with proper enum conversion
+            permission = RolePermission(
+                id=permission_data["id"],
+                role_id=permission_data["role_id"],
+                screen=Screen(permission_data["screen"]),
+                permissions=[Permission(p) for p in permission_data["permissions"]],
+                created_at=datetime.fromisoformat(permission_data["created_at"])
+            )
+            # Check if permission already exists
+            if permission.id:
+                existing_permissions = await repo.get_role_permissions(permission.role_id)
+                existing_ids = [p.get("id") for p in existing_permissions if p.get("id")]
+                if permission.id not in existing_ids:
+                    await repo.save_role_permission(permission)
 
 
 async def initialize_users():
@@ -420,10 +491,37 @@ async def initialize_users():
         }
     ]
     
-    user_store = repo._store.setdefault("__users__", {})
-    for user in users:
-        if user["id"] not in user_store:
-            user_store[user["id"]] = user
+    # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        user_store = repo._store.setdefault("__users__", {})
+        for user in users:
+            if user["id"] not in user_store:
+                user_store[user["id"]] = user
+    else:
+        # MongoRepo - use proper async methods
+        for user_data in users:
+            from app.models import User
+            # Create User object with proper datetime conversion
+            user = User(
+                id=user_data["id"],
+                name=user_data["name"],
+                email=user_data["email"],
+                phone=user_data.get("phone"),
+                status=user_data["status"],
+                hashed_password=user_data["hashed_password"],
+                oauth_provider=user_data.get("oauth_provider"),
+                oauth_id=user_data.get("oauth_id"),
+                email_verified=user_data["email_verified"],
+                last_login=datetime.fromisoformat(user_data["last_login"]) if user_data.get("last_login") else None,
+                created_at=datetime.fromisoformat(user_data["created_at"]),
+                updated_at=datetime.fromisoformat(user_data["updated_at"])
+            )
+            # Check if user already exists
+            if user.id:
+                existing = await repo.get_user(user.id)
+                if not existing:
+                    await repo.save_user(user)
     
     # Initialize user role assignments
     await initialize_user_roles()
@@ -513,7 +611,31 @@ async def initialize_user_roles():
         }
     ]
     
-    user_role_store = repo._store.setdefault("__user_roles__", {})
-    for user_role in user_roles:
-        if user_role["id"] not in user_role_store:
-            user_role_store[user_role["id"]] = user_role
+    # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        user_role_store = repo._store.setdefault("__user_roles__", {})
+        for user_role in user_roles:
+            if user_role["id"] not in user_role_store:
+                user_role_store[user_role["id"]] = user_role
+    else:
+        # MongoRepo - use proper async methods
+        for user_role_data in user_roles:
+            from app.models import UserRole
+            # Create UserRole object with proper datetime conversion
+            user_role = UserRole(
+                id=user_role_data["id"],
+                user_id=user_role_data["user_id"],
+                company_id=user_role_data["company_id"],
+                role_id=user_role_data["role_id"],
+                is_default=user_role_data["is_default"],
+                status=user_role_data["status"],
+                created_at=datetime.fromisoformat(user_role_data["created_at"]),
+                updated_at=datetime.fromisoformat(user_role_data["updated_at"])
+            )
+            # Check if user role already exists
+            if user_role.id:
+                existing_roles = await repo.get_user_roles(user_role.user_id)
+                existing_ids = [r.get("id") for r in existing_roles if r.get("id")]
+                if user_role.id not in existing_ids:
+                    await repo.save_user_role(user_role)

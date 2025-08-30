@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from app.auth import authenticate_user, create_access_token, get_current_user, get_current_user_with_roles
 
 class SwitchRoleRequest(BaseModel):
-    company_id: str
-    role: str
+    company_id: str = "system"
+    role_id: str
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,10 +29,6 @@ async def read_users_me_with_roles(current_user=Depends(get_current_user_with_ro
     return {"user": current_user}
 
 
-
-class SwitchRoleRequest(BaseModel):
-    company_id: str = "system"
-    role_id: str
 
 @router.post("/switch-role")
 async def switch_user_role(

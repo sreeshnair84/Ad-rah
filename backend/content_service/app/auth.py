@@ -68,36 +68,48 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
+        print(f"DEBUG: Received token: {token[:20]}...")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        username = payload.get("sub")
+        print(f"DEBUG: Extracted username: {username}")
+
         if username is None:
+            print("DEBUG: Username is None")
             raise credentials_exception
-            
+
         # Check token expiration
         exp = payload.get("exp")
         if exp is None:
+            print("DEBUG: Token has no expiration")
             raise credentials_exception
-            
+
         # Verify token hasn't expired
-        if datetime.utcnow().timestamp() > exp:
+        current_time = datetime.utcnow().timestamp()
+        print(f"DEBUG: Current time: {current_time}, Token exp: {exp}")
+        if current_time > exp:
+            print("DEBUG: Token has expired")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            
+
     except JWTError as e:
-        print(f"JWT Error: {e}")
+        print(f"DEBUG: JWT Error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    print(f"DEBUG: Looking up user by email: {username}")
     user_data = await repo.get_user_by_email(username)
+    print(f"DEBUG: User data found: {user_data is not None}")
+
     if user_data is None:
+        print("DEBUG: User not found in database")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
@@ -106,8 +118,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
     # Get user roles
     user_roles = await repo.get_user_roles(user_data["id"])
+    print(f"DEBUG: User roles found: {len(user_roles)} roles")
     user_data["roles"] = user_roles
 
+    print(f"DEBUG: Authentication successful for user: {username}")
     return user_data
 
 
@@ -118,9 +132,13 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
     # Get all companies for user's roles
     companies = []
     for role in user_data.get("roles", []):
-        company = await repo.get_company(role["company_id"])
-        if company:
-            companies.append(company)
+        try:
+            company = await repo.get_company(role["company_id"])
+            if company:
+                companies.append(company)
+        except Exception as e:
+            print(f"DEBUG: Error getting company {role.get('company_id')}: {e}")
+            # Continue without this company
 
     user_data["companies"] = companies
     
@@ -129,20 +147,29 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
     for user_role in user_data.get("roles", []):
         role_id = user_role.get("role_id")
         if role_id and role_id.strip():  # Check if role_id is not empty
-            role = await repo.get_role(role_id)
-            if role:
-                expanded_role = {
-                    **user_role,
-                    "role": role.get("role_group"),  # Add role_group as 'role' for frontend compatibility
-                    "role_name": role.get("name"),   # Add role name
-                    "role_details": role
-                }
-                expanded_roles.append(expanded_role)
-            else:
-                # Role not found, keep original but add default role info
+            try:
+                role = await repo.get_role(role_id)
+                if role:
+                    expanded_role = {
+                        **user_role,
+                        "role": role.get("role_group"),  # Add role_group as 'role' for frontend compatibility
+                        "role_name": role.get("name"),   # Add role name
+                        "role_details": role
+                    }
+                    expanded_roles.append(expanded_role)
+                else:
+                    # Role not found, keep original but add default role info
+                    expanded_roles.append({
+                        **user_role,
+                        "role": "ADMIN",  # Default to ADMIN for missing roles
+                        "role_name": "Administrator"
+                    })
+            except Exception as e:
+                print(f"DEBUG: Error getting role {role_id}: {e}")
+                # Continue with default role
                 expanded_roles.append({
                     **user_role,
-                    "role": "ADMIN",  # Default to ADMIN for missing roles
+                    "role": "ADMIN",
                     "role_name": "Administrator"
                 })
         else:
@@ -151,19 +178,27 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
             company_id = user_role.get("company_id")
             if company_id:
                 # Look for default roles for this company
-                default_roles = await repo.get_default_roles_by_company(company_id)
-                if default_roles:
-                    default_role = default_roles[0]
-                    expanded_role = {
-                        **user_role,
-                        "role_id": default_role.get("id"),  # Update with actual role_id
-                        "role": default_role.get("role_group"),
-                        "role_name": default_role.get("name"),
-                        "role_details": default_role
-                    }
-                    expanded_roles.append(expanded_role)
-                else:
-                    # No default role found, use fallback
+                try:
+                    default_roles = await repo.get_default_roles_by_company(company_id)
+                    if default_roles:
+                        default_role = default_roles[0]
+                        expanded_role = {
+                            **user_role,
+                            "role_id": default_role.get("id"),  # Update with actual role_id
+                            "role": default_role.get("role_group"),
+                            "role_name": default_role.get("name"),
+                            "role_details": default_role
+                        }
+                        expanded_roles.append(expanded_role)
+                    else:
+                        # No default role found, use fallback
+                        expanded_roles.append({
+                            **user_role,
+                            "role": "ADMIN",
+                            "role_name": "Administrator"
+                        })
+                except Exception as e:
+                    print(f"DEBUG: Error getting default roles for company {company_id}: {e}")
                     expanded_roles.append({
                         **user_role,
                         "role": "ADMIN",
@@ -275,6 +310,22 @@ async def init_default_data():
             print(f"Found {len(existing_companies)} existing companies and {len(existing_users)} existing users with roles, skipping initialization")
             return
         
+        # Clear any existing incomplete/duplicate data if we're re-initializing
+        if existing_companies or existing_users:
+            print(f"Clearing existing incomplete data: {len(existing_companies)} companies, {len(existing_users)} users")
+            # Clear existing data to avoid duplicates and conflicts
+            if hasattr(repo, '_store'):
+                # InMemoryRepo - clear stores
+                repo._store.pop("__companies__", None)
+                repo._store.pop("__users__", None) 
+                repo._store.pop("__roles__", None)
+                repo._store.pop("__user_roles__", None)
+                repo._store.pop("__role_permissions__", None)
+            else:
+                # For MongoDB, we could add clearing logic here if needed
+                # For now, let existing_data check handle it
+                pass
+        
         print(f"Found {len(existing_companies)} companies and {len(existing_users)} users, user roles exist: {user_roles_exist}, proceeding with initialization...")
 
         # Create default companies
@@ -346,6 +397,10 @@ async def init_default_data():
         admin_role_data = await repo.save_role(admin_role)
         host_role_data = await repo.save_role(host_role)
         advertiser_role_data = await repo.save_role(advertiser_role)
+
+        # Create role permissions for each role and screen
+        from app.rbac_permissions_v2 import create_default_role_permissions
+        await create_default_role_permissions(admin_role_data["id"], host_role_data["id"], advertiser_role_data["id"])
 
         # Create default users
         admin_user = User(

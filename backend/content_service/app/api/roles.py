@@ -2,9 +2,22 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict, Optional
 from datetime import datetime
 
-from app.models import Role, RolePermission, User
+from app.models import Role, RolePermission, User, RoleGroup
 from app.repo import repo
-from app.auth import get_current_user
+from app.auth import get_current_user_with_roles
+from bson import ObjectId
+
+
+def convert_objectid_to_str(data):
+    """Recursively convert ObjectId instances to strings in a data structure"""
+    if isinstance(data, ObjectId):
+        return str(data)
+    elif isinstance(data, dict):
+        return {key: convert_objectid_to_str(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [convert_objectid_to_str(item) for item in data]
+    else:
+        return data
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -12,59 +25,101 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 @router.get("/", response_model=List[Dict])
 async def list_roles(
     company_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """List all roles, optionally filtered by company"""
     try:
-        # Check if user has permission to view roles
-        if not await repo.check_user_permission(
-            current_user["id"], 
-            current_user.get("active_company", ""), 
-            "users", 
-            "view"
-        ):
-            # If not admin of current company, only allow viewing global roles
-            if current_user.get("active_role") != "ADMIN":
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Insufficient permissions to view roles"
-                )
+        # Check if user has ADMIN role
+        user_roles = current_user.get("roles", [])
+        print(f"DEBUG: User roles: {user_roles}")
+        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        print(f"DEBUG: Is admin: {is_admin}")
         
-        # Get all roles from repository
-        all_roles = []
-        role_store = repo._store.get("__roles__", {})
+        if not is_admin:
+            print("DEBUG: Raising 403 Forbidden")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can view roles"
+            )
         
-        for role_id, role_data in role_store.items():
-            # Filter by company if specified
-            if company_id and role_data.get("company_id") != company_id:
-                continue
+        # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            role_store = repo._store.get("__roles__", {})
+            user_role_store = repo._store.get("__user_roles__", {})
+            
+            all_roles = []
+            for role_id, role_data in role_store.items():
+                # Filter by company if specified
+                if company_id and role_data.get("company_id") != company_id:
+                    continue
+                    
+                # Get company name
+                company_name = "System"
+                if role_data.get("company_id") and role_data["company_id"] != "global":
+                    company = await repo.get_company(role_data["company_id"])
+                    if company:
+                        company_name = company.get("name", "Unknown Company")
                 
-            # Get company name
-            company_name = "System"
-            if role_data.get("company_id") and role_data["company_id"] != "global":
-                company = await repo.get_company(role_data["company_id"])
-                if company:
-                    company_name = company.get("name", "Unknown Company")
-            
-            # Count users with this role
-            user_roles = repo._store.get("__user_roles__", {})
-            user_count = sum(1 for ur in user_roles.values() 
-                           if ur.get("role_id") == role_id and ur.get("status") == "active")
-            
-            # Get permissions for this role
-            permissions = await get_role_permissions(role_id)
-            
-            role_info = {
-                **role_data,
-                "id": role_id,
-                "company_name": company_name,
-                "user_count": user_count,
-                "permissions": permissions
-            }
-            all_roles.append(role_info)
+                # Count users with this role
+                user_count = sum(1 for ur in user_role_store.values() 
+                               if ur.get("role_id") == role_id and ur.get("status") == "active")
+                
+                # Get permissions for this role
+                permissions = await get_role_permissions(role_id)
+                
+                role_info = {
+                    **role_data,
+                    "id": role_id,
+                    "company_name": company_name,
+                    "user_count": user_count,
+                    "permissions": permissions
+                }
+                all_roles.append(role_info)
+        else:
+            # MongoRepo - use proper async methods
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                query = {}
+                if company_id:
+                    query["company_id"] = company_id
+                
+                roles_cursor = await repo._role_col.find(query)
+                all_roles = []
+                async for role_data in roles_cursor:
+                    role_id = str(role_data["_id"])
+                    
+                    # Get company name
+                    company_name = "System"
+                    if role_data.get("company_id") and role_data["company_id"] != "global":
+                        company = await repo.get_company(role_data["company_id"])
+                        if company:
+                            company_name = company.get("name", "Unknown Company")
+                    
+                    # Count users with this role
+                    user_count = await repo._user_role_col.count_documents({
+                        "role_id": role_id, 
+                        "status": "active"
+                    })
+                    
+                    # Get permissions for this role
+                    permissions = await get_role_permissions(role_id)
+                    
+                    role_info = {
+                        **role_data,
+                        "id": role_id,
+                        "company_name": company_name,
+                        "user_count": user_count,
+                        "permissions": permissions
+                    }
+                    all_roles.append(role_info)
+            else:
+                all_roles = []
             
         return all_roles
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -75,12 +130,15 @@ async def list_roles(
 @router.post("/", response_model=Dict)
 async def create_role(
     role_data: Dict,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """Create a new role"""
     try:
-        # Check permissions
-        if current_user.get("active_role") != "ADMIN":
+        # Check if user has ADMIN role
+        user_roles = current_user.get("roles", [])
+        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        
+        if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can create roles"
@@ -124,7 +182,7 @@ async def create_role(
 @router.get("/{role_id}", response_model=Dict)
 async def get_role(
     role_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """Get a specific role by ID"""
     try:
@@ -154,12 +212,15 @@ async def get_role(
 async def update_role(
     role_id: str,
     role_data: Dict,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """Update an existing role"""
     try:
-        # Check permissions
-        if current_user.get("active_role") != "ADMIN":
+        # Check if user has ADMIN role
+        user_roles = current_user.get("roles", [])
+        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        
+        if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can update roles"
@@ -177,8 +238,18 @@ async def update_role(
         updated_data = {**existing_role, **role_data}
         updated_data["updated_at"] = datetime.utcnow()
         
-        # Save to repository  
-        repo._store.setdefault("__roles__", {})[role_id] = updated_data
+        # Save to repository
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            repo._store.setdefault("__roles__", {})[role_id] = updated_data
+        else:
+            # MongoRepo
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                await repo._role_col.update_one(
+                    {"id": role_id},
+                    {"$set": updated_data}
+                )
         
         return {
             "message": "Role updated successfully",
@@ -197,12 +268,15 @@ async def update_role(
 @router.delete("/{role_id}")
 async def delete_role(
     role_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """Delete a role"""
     try:
-        # Check permissions
-        if current_user.get("active_role") != "ADMIN":
+        # Check if user has ADMIN role
+        user_roles = current_user.get("roles", [])
+        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        
+        if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can delete roles"
@@ -224,9 +298,21 @@ async def delete_role(
             )
         
         # Check if role is assigned to users
-        user_roles = repo._store.get("__user_roles__", {})
-        assigned_count = sum(1 for ur in user_roles.values() 
-                           if ur.get("role_id") == role_id and ur.get("status") == "active")
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            user_roles = repo._store.get("__user_roles__", {})
+            assigned_count = sum(1 for ur in user_roles.values() 
+                               if ur.get("role_id") == role_id and ur.get("status") == "active")
+        else:
+            # MongoRepo
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                assigned_count = await repo._user_role_col.count_documents({
+                    "role_id": role_id, 
+                    "status": "active"
+                })
+            else:
+                assigned_count = 0
         
         if assigned_count > 0:
             raise HTTPException(
@@ -235,15 +321,24 @@ async def delete_role(
             )
         
         # Delete role
-        if role_id in repo._store.get("__roles__", {}):
-            del repo._store["__roles__"][role_id]
-            
-        # Delete associated permissions
-        permissions = repo._store.get("__role_permissions__", {})
-        to_delete = [p_id for p_id, perm in permissions.items() 
-                    if perm.get("role_id") == role_id]
-        for p_id in to_delete:
-            del permissions[p_id]
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            if role_id in repo._store.get("__roles__", {}):
+                del repo._store["__roles__"][role_id]
+                
+            # Delete associated permissions
+            permissions = repo._store.get("__role_permissions__", {})
+            to_delete = [p_id for p_id, perm in permissions.items() 
+                        if perm.get("role_id") == role_id]
+            for p_id in to_delete:
+                del permissions[p_id]
+        else:
+            # MongoRepo
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                await repo._role_col.delete_one({"id": role_id})
+                # Delete associated permissions
+                await repo._role_permission_col.delete_many({"role_id": role_id})
         
         return {"message": "Role deleted successfully"}
         
@@ -260,16 +355,32 @@ async def delete_role(
 async def get_role_permissions(role_id: str):
     """Get permissions for a specific role"""
     try:
-        permissions = []
-        permission_store = repo._store.get("__role_permissions__", {})
-        
-        for perm_id, perm_data in permission_store.items():
-            if perm_data.get("role_id") == role_id:
-                permissions.append({
-                    "id": perm_id,
-                    "screen": perm_data.get("screen"),
-                    "permissions": perm_data.get("permissions", [])
-                })
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            permissions = []
+            permission_store = repo._store.get("__role_permissions__", {})
+            
+            for perm_id, perm_data in permission_store.items():
+                if perm_data.get("role_id") == role_id:
+                    permissions.append({
+                        "id": perm_id,
+                        "screen": perm_data.get("screen"),
+                        "permissions": perm_data.get("permissions", [])
+                    })
+        else:
+            # MongoRepo
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                permissions_cursor = repo._role_permission_col.find({"role_id": role_id})
+                permissions = []
+                async for perm_data in permissions_cursor:
+                    permissions.append({
+                        "id": perm_data.get("id"),
+                        "screen": perm_data.get("screen"),
+                        "permissions": perm_data.get("permissions", [])
+                    })
+            else:
+                permissions = []
         
         return permissions
         
@@ -284,12 +395,15 @@ async def get_role_permissions(role_id: str):
 async def set_role_permissions(
     role_id: str,
     permissions_data: List[Dict],
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_roles)
 ):
     """Set permissions for a role"""
     try:
-        # Check permissions
-        if current_user.get("active_role") != "ADMIN":
+        # Check if user has ADMIN role
+        user_roles = current_user.get("roles", [])
+        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        
+        if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can manage role permissions"
@@ -304,26 +418,51 @@ async def set_role_permissions(
             )
         
         # Clear existing permissions for this role
-        permission_store = repo._store.setdefault("__role_permissions__", {})
-        to_delete = [p_id for p_id, perm in permission_store.items() 
-                    if perm.get("role_id") == role_id]
-        for p_id in to_delete:
-            del permission_store[p_id]
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            permission_store = repo._store.setdefault("__role_permissions__", {})
+            to_delete = [p_id for p_id, perm in permission_store.items() 
+                        if perm.get("role_id") == role_id]
+            for p_id in to_delete:
+                del permission_store[p_id]
+        else:
+            # MongoRepo
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                await repo._role_permission_col.delete_many({"role_id": role_id})
         
         # Add new permissions
         created_permissions = []
         for perm_data in permissions_data:
             if perm_data.get("permissions"):  # Only create if permissions exist
-                perm_id = f"{role_id}_{perm_data['screen']}_{len(permission_store)}"
-                permission = {
-                    "id": perm_id,
-                    "role_id": role_id,
-                    "screen": perm_data["screen"],
-                    "permissions": perm_data["permissions"],
-                    "created_at": datetime.utcnow().isoformat()
-                }
-                permission_store[perm_id] = permission
-                created_permissions.append(permission)
+                if hasattr(repo, '_store'):
+                    # InMemoryRepo
+                    permission_store = repo._store.setdefault("__role_permissions__", {})
+                    perm_id = f"{role_id}_{perm_data['screen']}_{len(permission_store)}"
+                    permission = {
+                        "id": perm_id,
+                        "role_id": role_id,
+                        "screen": perm_data["screen"],
+                        "permissions": perm_data["permissions"],
+                        "created_at": datetime.utcnow().isoformat()
+                    }
+                    permission_store[perm_id] = permission
+                    created_permissions.append(permission)
+                else:
+                    # MongoRepo
+                    from app.repo import MongoRepo
+                    if isinstance(repo, MongoRepo):
+                        import uuid
+                        perm_id = str(uuid.uuid4())
+                        permission = {
+                            "id": perm_id,
+                            "role_id": role_id,
+                            "screen": perm_data["screen"],
+                            "permissions": perm_data["permissions"],
+                            "created_at": datetime.utcnow().isoformat()
+                        }
+                        await repo._role_permission_col.insert_one(permission)
+                        created_permissions.append(permission)
         
         return {
             "message": "Role permissions updated successfully",
@@ -343,39 +482,76 @@ async def set_role_permissions(
 async def init_default_roles():
     """Initialize default roles in the repository"""
     try:
-        # Check if default roles already exist
-        roles_store = repo._store.setdefault("__roles__", {})
-        
-        if not roles_store:
-            # Create default admin role
-            admin_role = Role(
-                name="System Administrator",
-                role_group="ADMIN", 
-                company_id="global",
-                is_default=True,
-                status="active"
-            )
-            await repo.save_role(admin_role)
+        # Check if repo has _store (InMemoryRepo) or use MongoDB methods
+        if hasattr(repo, '_store'):
+            # InMemoryRepo
+            roles_store = repo._store.setdefault("__roles__", {})
             
-            # Create default host role
-            host_role = Role(
-                name="Host Manager",
-                role_group="HOST",
-                company_id="1",  # Default company
-                is_default=True,
-                status="active"
-            )
-            await repo.save_role(host_role)
-            
-            # Create default advertiser role
-            advertiser_role = Role(
-                name="Advertiser User",
-                role_group="ADVERTISER",
-                company_id="2",  # Default company
-                is_default=True,
-                status="active"
-            )
-            await repo.save_role(advertiser_role)
+            if not roles_store:
+                # Create default admin role
+                admin_role = Role(
+                    name="System Administrator",
+                    role_group=RoleGroup.ADMIN, 
+                    company_id="global",
+                    is_default=True,
+                    status="active"
+                )
+                await repo.save_role(admin_role)
+                
+                # Create default host role
+                host_role = Role(
+                    name="Host Manager",
+                    role_group=RoleGroup.HOST,
+                    company_id="1",  # Default company
+                    is_default=True,
+                    status="active"
+                )
+                await repo.save_role(host_role)
+                
+                # Create default advertiser role
+                advertiser_role = Role(
+                    name="Advertiser User",
+                    role_group=RoleGroup.ADVERTISER,
+                    company_id="2",  # Default company
+                    is_default=True,
+                    status="active"
+                )
+                await repo.save_role(advertiser_role)
+        else:
+            # MongoRepo - check if roles already exist
+            from app.repo import MongoRepo
+            if isinstance(repo, MongoRepo):
+                count = await repo._role_col.count_documents({})
+                if count == 0:
+                    # Create default admin role
+                    admin_role = Role(
+                        name="System Administrator",
+                        role_group=RoleGroup.ADMIN, 
+                        company_id="global",
+                        is_default=True,
+                        status="active"
+                    )
+                    await repo.save_role(admin_role)
+                    
+                    # Create default host role
+                    host_role = Role(
+                        name="Host Manager",
+                        role_group=RoleGroup.HOST,
+                        company_id="1",  # Default company
+                        is_default=True,
+                        status="active"
+                    )
+                    await repo.save_role(host_role)
+                    
+                    # Create default advertiser role
+                    advertiser_role = Role(
+                        name="Advertiser User",
+                        role_group=RoleGroup.ADVERTISER,
+                        company_id="2",  # Default company
+                        is_default=True,
+                        status="active"
+                    )
+                    await repo.save_role(advertiser_role)
             
     except Exception as e:
         print(f"Failed to initialize default roles: {e}")

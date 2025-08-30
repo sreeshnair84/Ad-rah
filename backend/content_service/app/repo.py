@@ -6,6 +6,14 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Try to import ObjectId for MongoDB operations
+try:
+    from bson import ObjectId
+    _OBJECTID_AVAILABLE = True
+except ImportError:
+    ObjectId = None
+    _OBJECTID_AVAILABLE = False
+
 # If MONGO_URI is set we will use motor; else use a simple in-memory store for dev/test
 if getattr(settings, "MONGO_URI", None):
     try:
@@ -82,7 +90,8 @@ class InMemoryRepo:
     # RolePermission operations
     async def save_role_permission(self, permission: RolePermission) -> dict:
         async with self._lock:
-            permission.id = permission.id or str(len(self._store) + 1) + "-rp"
+            role_perms = self._store.setdefault("__role_permissions__", {})
+            permission.id = permission.id or str(len(role_perms) + 1) + "-rp"
             self._store.setdefault("__role_permissions__", {})[permission.id] = permission.model_dump(exclude_none=True)
             return self._store["__role_permissions__"][permission.id]
 
@@ -307,7 +316,8 @@ class InMemoryRepo:
     # RolePermission operations
     async def save_role_permission(self, permission) -> dict:
         async with self._lock:
-            permission.id = permission.id or str(len(self._store) + 1) + "-rp"
+            role_perms = self._store.setdefault("__role_permissions__", {})
+            permission.id = permission.id or str(len(role_perms) + 1) + "-rp"
             self._store.setdefault("__role_permissions__", {})[permission.id] = permission.model_dump(exclude_none=True)
             return self._store["__role_permissions__"][permission.id]
 
@@ -501,7 +511,39 @@ class MongoRepo:
 
     async def get_user_roles(self, user_id: str) -> List[Dict]:
         cursor = self._user_role_col.find({"user_id": user_id})
-        return [d async for d in cursor]
+        user_roles = []
+        async for user_role_data in cursor:
+            role_id = user_role_data.get("role_id")
+            company_id = user_role_data.get("company_id")
+            
+            # Get role details
+            role = None
+            if role_id:
+                role = await self.get_role(role_id)
+            
+            # Get company details
+            company = None
+            if company_id and company_id != "global":
+                company = await self.get_company(company_id)
+            
+            # Convert ObjectIds to strings in role and company data
+            if role and _OBJECTID_AVAILABLE and ObjectId is not None:
+                role = {k: str(v) if isinstance(v, ObjectId) else v for k, v in role.items()}
+            if company and _OBJECTID_AVAILABLE and ObjectId is not None:
+                company = {k: str(v) if isinstance(v, ObjectId) else v for k, v in company.items()}
+            
+            # Expand user role with details
+            expanded_role = {
+                **user_role_data,
+                "id": str(user_role_data["_id"]),
+                "role": role.get("role_group", "") if role else "",
+                "role_name": role.get("name", "") if role else "",
+                "company_name": company.get("name", "Unknown") if company else ("System" if company_id == "global" else "Unknown"),
+                "role_details": role
+            }
+            user_roles.append(expanded_role)
+        
+        return user_roles
 
     async def get_user_roles_by_company(self, user_id: str, company_id: str) -> List[Dict]:
         cursor = self._user_role_col.find({"user_id": user_id, "company_id": company_id})
@@ -546,32 +588,26 @@ class MongoRepo:
         if not user:
             return None
 
+        # Convert ObjectIds in user data
+        if _OBJECTID_AVAILABLE and ObjectId is not None:
+            user = {k: str(v) if isinstance(v, ObjectId) else v for k, v in user.items()}
+
         user_roles = await self.get_user_roles(user_id)
         companies = []
 
         for role in user_roles:
             company_id = role.get("company_id")
-            if company_id:
+            if company_id and company_id != "global":
                 company = await self.get_company(company_id)
                 if company:
+                    # Convert ObjectIds in company data
+                    if _OBJECTID_AVAILABLE and ObjectId is not None:
+                        company = {k: str(v) if isinstance(v, ObjectId) else v for k, v in company.items()}
                     companies.append(company)
-
-        # Expand roles with role details
-        expanded_roles = []
-        for user_role in user_roles:
-            role_id = user_role.get("role_id")
-            if role_id:
-                role = await self.get_role(role_id)
-                if role:
-                    expanded_role = {
-                        **user_role,
-                        "role_details": role
-                    }
-                    expanded_roles.append(expanded_role)
 
         profile_data = {
             **user,
-            "roles": expanded_roles,
+            "roles": user_roles,
             "companies": companies
         }
 
