@@ -69,27 +69,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    print(f"[AUTH] DEBUG: Received token: {token[:20]}...")
+    print(f"[AUTH] DEBUG: Token length: {len(token) if token else 0}")
+
+    if not token:
+        print("[AUTH] ERROR: No token provided")
+        raise credentials_exception
+
     try:
-        print(f"DEBUG: Received token: {token[:20]}...")
+        print(f"[AUTH] DEBUG: Attempting to decode JWT token")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
-        print(f"DEBUG: Extracted username: {username}")
+        print(f"[AUTH] DEBUG: Extracted username: {username}")
 
         if username is None:
-            print("DEBUG: Username is None")
+            print("[AUTH] ERROR: Username is None in token payload")
             raise credentials_exception
 
         # Check token expiration
         exp = payload.get("exp")
         if exp is None:
-            print("DEBUG: Token has no expiration")
+            print("[AUTH] ERROR: Token has no expiration")
             raise credentials_exception
 
         # Verify token hasn't expired
         current_time = datetime.utcnow().timestamp()
-        print(f"DEBUG: Current time: {current_time}, Token exp: {exp}")
+        print(f"[AUTH] DEBUG: Current time: {current_time}, Token exp: {exp}")
         if current_time > exp:
-            print("DEBUG: Token has expired")
+            print("[AUTH] ERROR: Token has expired")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired",
@@ -97,19 +104,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             )
 
     except JWTError as e:
-        print(f"DEBUG: JWT Error: {e}")
+        print(f"[AUTH] ERROR: JWT Error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    print(f"DEBUG: Looking up user by email: {username}")
+    print(f"[AUTH] DEBUG: Looking up user by email: {username}")
     user_data = await repo.get_user_by_email(username)
-    print(f"DEBUG: User data found: {user_data is not None}")
+    print(f"[AUTH] DEBUG: User data found: {user_data is not None}")
 
     if user_data is None:
-        print("DEBUG: User not found in database")
+        print(f"[AUTH] ERROR: User not found in database: {username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
@@ -118,34 +125,55 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
     # Get user roles
     user_roles = await repo.get_user_roles(user_data["id"])
-    print(f"DEBUG: User roles found: {len(user_roles)} roles")
+    print(f"[AUTH] DEBUG: User roles found: {len(user_roles)} roles")
     user_data["roles"] = user_roles
 
-    print(f"DEBUG: Authentication successful for user: {username}")
+    print(f"[AUTH] SUCCESS: Authentication successful for user: {username}")
     return user_data
 
 
 async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
     """Get current user with their roles and companies"""
+    print("[AUTH] INFO: Starting get_current_user_with_roles")
+
     user_data = await get_current_user(token)
+    print(f"[AUTH] DEBUG: Base user data retrieved: {user_data.get('email') if user_data else 'None'}")
 
     # Get all companies for user's roles
     companies = []
-    for role in user_data.get("roles", []):
+    user_roles = user_data.get("roles", [])
+    print(f"[AUTH] DEBUG: Processing {len(user_roles)} user roles")
+
+    for role in user_roles:
         try:
-            company = await repo.get_company(role["company_id"])
-            if company:
-                companies.append(company)
+            company_id = role.get("company_id")
+            print(f"[AUTH] DEBUG: Processing role with company_id: {company_id}")
+
+            if company_id and company_id != "global":
+                company = await repo.get_company(company_id)
+                if company:
+                    companies.append(company)
+                    print(f"[AUTH] DEBUG: Added company: {company.get('name')}")
+                else:
+                    print(f"[AUTH] WARNING: Company not found for ID: {company_id}")
+            else:
+                print(f"[AUTH] DEBUG: Skipping global company or empty company_id: {company_id}")
+
         except Exception as e:
-            print(f"DEBUG: Error getting company {role.get('company_id')}: {e}")
+            print(f"[AUTH] ERROR: Error getting company {role.get('company_id')}: {e}")
             # Continue without this company
 
     user_data["companies"] = companies
-    
+    print(f"[AUTH] DEBUG: Added {len(companies)} companies to user data")
+
     # Expand roles with role details
     expanded_roles = []
-    for user_role in user_data.get("roles", []):
+    print("[AUTH] DEBUG: Starting role expansion")
+
+    for user_role in user_roles:
         role_id = user_role.get("role_id")
+        print(f"[AUTH] DEBUG: Processing user_role with role_id: {role_id}")
+
         if role_id and role_id.strip():  # Check if role_id is not empty
             try:
                 role = await repo.get_role(role_id)
@@ -157,15 +185,17 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                         "role_details": role
                     }
                     expanded_roles.append(expanded_role)
+                    print(f"[AUTH] DEBUG: Expanded role: {role.get('name')}")
                 else:
                     # Role not found, keep original but add default role info
+                    print(f"[AUTH] WARNING: Role not found for ID: {role_id}, using fallback")
                     expanded_roles.append({
                         **user_role,
                         "role": "ADMIN",  # Default to ADMIN for missing roles
                         "role_name": "Administrator"
                     })
             except Exception as e:
-                print(f"DEBUG: Error getting role {role_id}: {e}")
+                print(f"[AUTH] ERROR: Error getting role {role_id}: {e}")
                 # Continue with default role
                 expanded_roles.append({
                     **user_role,
@@ -174,7 +204,7 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                 })
         else:
             # No role_id, this might be an old format or corrupted data
-            # Try to find a suitable default role for the company
+            print(f"[AUTH] WARNING: Empty role_id found in user_role: {user_role}")
             company_id = user_role.get("company_id")
             if company_id:
                 # Look for default roles for this company
@@ -190,15 +220,17 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                             "role_details": default_role
                         }
                         expanded_roles.append(expanded_role)
+                        print(f"[AUTH] DEBUG: Used default role for company: {default_role.get('name')}")
                     else:
                         # No default role found, use fallback
+                        print(f"[AUTH] WARNING: No default role found for company {company_id}, using fallback")
                         expanded_roles.append({
                             **user_role,
                             "role": "ADMIN",
                             "role_name": "Administrator"
                         })
                 except Exception as e:
-                    print(f"DEBUG: Error getting default roles for company {company_id}: {e}")
+                    print(f"[AUTH] ERROR: Error getting default roles for company {company_id}: {e}")
                     expanded_roles.append({
                         **user_role,
                         "role": "ADMIN",
@@ -206,19 +238,21 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                     })
             else:
                 # No company_id either, use fallback
+                print(f"[AUTH] WARNING: No company_id found, using fallback role")
                 expanded_roles.append({
                     **user_role,
                     "role": "ADMIN",
                     "role_name": "Administrator"
                 })
-    
+
     user_data["roles"] = expanded_roles
-    
+    print(f"[AUTH] DEBUG: Final expanded roles count: {len(expanded_roles)}")
+
     # Convert ObjectId to string for JSON serialization
     if "_id" in user_data:
         user_data["id"] = str(user_data["_id"])
         del user_data["_id"]
-    
+
     for role in user_data.get("roles", []):
         if "_id" in role:
             role["id"] = str(role["_id"])
@@ -229,12 +263,13 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
             if "_id" in role_details:
                 role_details["id"] = str(role_details["_id"])
                 del role_details["_id"]
-    
+
     for company in companies:
         if "_id" in company:
             company["id"] = str(company["_id"])
             del company["_id"]
-    
+
+    print(f"[AUTH] SUCCESS: get_current_user_with_roles completed for user: {user_data.get('email')}")
     return user_data
 
 

@@ -92,13 +92,15 @@ async def create_role(
 
 
 @router.get("/", response_model=List[Dict])
+@router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_roles(
     company_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user_with_roles)
 ):
     """List all roles, optionally filtered by company"""
     try:
-        logger.info(f"User {current_user.get('email')} requesting roles list, company_id: {company_id}")
+        print(f"[ROLES] INFO: User {current_user.get('email')} requesting roles list, company_id: {company_id}")
+        print(f"[ROLES] DEBUG: Current user roles: {len(current_user.get('roles', []))}")
         
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
@@ -109,20 +111,28 @@ async def list_roles(
             for role in user_roles
         )
         
+        print(f"[ROLES] DEBUG: Is admin: {is_admin}")
+        print(f"[ROLES] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': r.get('role_details', {}).get('role_group')} for r in user_roles]}")
+        
         if not is_admin:
-            logger.warning(f"User {current_user.get('email')} denied roles list access - insufficient permissions")
+            print(f"[ROLES] WARNING: User {current_user.get('email')} denied roles list access - insufficient permissions")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to view roles"
             )
         
+        print("[ROLES] INFO: User has admin permissions, proceeding with role listing")
+        
         # Fetch actual roles from repository
         roles = []
         if hasattr(repo, '_store'):
             # InMemoryRepo
+            print("[ROLES] DEBUG: Using InMemoryRepo")
             roles_store = repo._store.get("__roles__", {})
             companies_store = repo._store.get("__companies__", {})
             user_roles_store = repo._store.get("__user_roles__", {})
+            
+            print(f"[ROLES] DEBUG: Found {len(roles_store)} roles in store")
             
             for role_id, role_data in roles_store.items():
                 # Get company name
@@ -150,6 +160,7 @@ async def list_roles(
                     roles.append(role_info)
         else:
             # MongoRepo
+            print("[ROLES] DEBUG: Using MongoRepo")
             from app.repo import MongoRepo
             if isinstance(repo, MongoRepo):
                 query = {} if company_id is None else {"company_id": company_id}
@@ -179,14 +190,16 @@ async def list_roles(
                         "updated_at": role_data.get("updated_at", "")
                     }))
         
-        logger.info(f"Retrieved {len(roles)} roles for user {current_user.get('email')}")
+        print(f"[ROLES] INFO: Retrieved {len(roles)} roles for user {current_user.get('email')}")
         return roles
         
-    except HTTPException as he:
-        logger.warning(f"HTTPException in list_roles: {he.status_code} - {he.detail}")
+    except HTTPException:
+        print(f"[ROLES] ERROR: HTTPException raised")
         raise
     except Exception as e:
-        logger.error(f"Failed to fetch roles: {str(e)}", exc_info=True)
+        print(f"[ROLES] ERROR: Failed to fetch roles: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch roles: {str(e)}"

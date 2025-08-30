@@ -8,6 +8,7 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 
 
 @router.get("/", response_model=List[Company])
+@router.get("", response_model=List[Company])  # Add route without trailing slash
 async def list_companies():
     """List all companies"""
     companies = await repo.list_companies()

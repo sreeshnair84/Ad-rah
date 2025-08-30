@@ -79,6 +79,7 @@ async def submit_company_application(application_data: CompanyApplicationCreate)
 
 
 @router.get("/", response_model=List[Dict])
+@router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_company_applications(
     status: Optional[str] = Query(None, description="Filter by status"),
     company_type: Optional[str] = Query(None, description="Filter by company type"),
@@ -86,6 +87,9 @@ async def list_company_applications(
 ):
     """List company applications (Admin only)"""
     try:
+        print(f"[COMPANY_APPS] INFO: User {current_user.get('email')} requesting company applications list")
+        print(f"[COMPANY_APPS] DEBUG: Current user roles: {len(current_user.get('roles', []))}")
+        
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
         is_admin = any(
@@ -95,18 +99,30 @@ async def list_company_applications(
             for role in user_roles
         )
         
+        print(f"[COMPANY_APPS] DEBUG: Is admin: {is_admin}")
+        print(f"[COMPANY_APPS] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': r.get('role_details', {}).get('role_group')} for r in user_roles]}")
+        
         if not is_admin:
+            print(f"[COMPANY_APPS] WARNING: User {current_user.get('email')} denied company applications access - insufficient permissions")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can view company applications"
             )
         
+        print("[COMPANY_APPS] INFO: User has admin permissions, proceeding with application listing")
+        
         applications = await repo.list_company_applications(status=status, company_type=company_type)
+        print(f"[COMPANY_APPS] INFO: Retrieved {len(applications)} applications for user {current_user.get('email')}")
+        
         return [convert_objectid_to_str(app) for app in applications]
         
     except HTTPException:
+        print("[COMPANY_APPS] ERROR: HTTPException raised")
         raise
     except Exception as e:
+        print(f"[COMPANY_APPS] ERROR: Failed to fetch applications: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch applications: {str(e)}"
