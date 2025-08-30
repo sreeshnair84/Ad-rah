@@ -67,3 +67,15 @@ async def post_decision(review_id: str, decision: str = Form(...), reviewer_id: 
     item["notes"] = notes
     saved = await repo.save_review(item)
     return saved
+
+
+@router.get("/pending")
+async def get_pending_reviews():
+    """Get reviews that need manual attention (for Host dashboard)"""
+    try:
+        reviews = await repo.list_reviews()
+        # Filter for reviews that need manual review
+        pending_reviews = [r for r in reviews if r.get("action") == "needs_review"]
+        return pending_reviews
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to get pending reviews: {e}")

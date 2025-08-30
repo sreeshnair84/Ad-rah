@@ -22,109 +22,21 @@ def convert_objectid_to_str(data):
 router = APIRouter(prefix="/roles", tags=["roles"])
 
 
-@router.get("/", response_model=List[Dict])
-async def list_roles(
-    company_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user_with_roles)
-):
-    """List all roles, optionally filtered by company"""
-    try:
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        print(f"DEBUG: User roles: {user_roles}")
-        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
-        print(f"DEBUG: Is admin: {is_admin}")
-        
-        if not is_admin:
-            print("DEBUG: Raising 403 Forbidden")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can view roles"
-            )
-        
-        # Check if repo has _store (InMemoryRepo) or use MongoDB methods
-        if hasattr(repo, '_store'):
-            # InMemoryRepo
-            role_store = repo._store.get("__roles__", {})
-            user_role_store = repo._store.get("__user_roles__", {})
-            
-            all_roles = []
-            for role_id, role_data in role_store.items():
-                # Filter by company if specified
-                if company_id and role_data.get("company_id") != company_id:
-                    continue
-                    
-                # Get company name
-                company_name = "System"
-                if role_data.get("company_id") and role_data["company_id"] != "global":
-                    company = await repo.get_company(role_data["company_id"])
-                    if company:
-                        company_name = company.get("name", "Unknown Company")
-                
-                # Count users with this role
-                user_count = sum(1 for ur in user_role_store.values() 
-                               if ur.get("role_id") == role_id and ur.get("status") == "active")
-                
-                # Get permissions for this role
-                permissions = await get_role_permissions(role_id)
-                
-                role_info = {
-                    **role_data,
-                    "id": role_id,
-                    "company_name": company_name,
-                    "user_count": user_count,
-                    "permissions": permissions
-                }
-                all_roles.append(role_info)
-        else:
-            # MongoRepo - use proper async methods
-            from app.repo import MongoRepo
-            if isinstance(repo, MongoRepo):
-                query = {}
-                if company_id:
-                    query["company_id"] = company_id
-                
-                roles_cursor = await repo._role_col.find(query)
-                all_roles = []
-                async for role_data in roles_cursor:
-                    role_id = str(role_data["_id"])
-                    
-                    # Get company name
-                    company_name = "System"
-                    if role_data.get("company_id") and role_data["company_id"] != "global":
-                        company = await repo.get_company(role_data["company_id"])
-                        if company:
-                            company_name = company.get("name", "Unknown Company")
-                    
-                    # Count users with this role
-                    user_count = await repo._user_role_col.count_documents({
-                        "role_id": role_id, 
-                        "status": "active"
-                    })
-                    
-                    # Get permissions for this role
-                    permissions = await get_role_permissions(role_id)
-                    
-                    role_info = {
-                        **role_data,
-                        "id": role_id,
-                        "company_name": company_name,
-                        "user_count": user_count,
-                        "permissions": permissions
-                    }
-                    all_roles.append(role_info)
-            else:
-                all_roles = []
-            
-        return all_roles
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch roles: {str(e)}"
-        )
+@router.get("/debug/admin-check")
+async def debug_admin_check(current_user: dict = Depends(get_current_user_with_roles)):
+    """Debug admin check"""
+    user_roles = current_user.get("roles", [])
+    is_admin = any(
+        role.get("role") == "ADMIN" or 
+        role.get("role_group") == "ADMIN" or
+        (role.get("role_details", {}).get("role_group") == "ADMIN")
+        for role in user_roles
+    )
+    return {
+        "user_email": current_user.get("email"),
+        "user_roles": user_roles,
+        "is_admin": is_admin
+    }
 
 
 @router.post("/", response_model=Dict)
@@ -136,7 +48,12 @@ async def create_role(
     try:
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
-        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        is_admin = any(
+            role.get("role") == "ADMIN" or 
+            role.get("role_group") == "ADMIN" or
+            (role.get("role_details", {}).get("role_group") == "ADMIN")
+            for role in user_roles
+        )
         
         if not is_admin:
             raise HTTPException(
@@ -167,7 +84,7 @@ async def create_role(
         
         return {
             "message": "Role created successfully",
-            "role": saved_role
+            "role": convert_objectid_to_str(saved_role)
         }
         
     except HTTPException:
@@ -177,6 +94,19 @@ async def create_role(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create role: {str(e)}"
         )
+
+
+@router.get("/", response_model=List[Dict])
+async def list_roles(
+    company_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user_with_roles)
+):
+    """List all roles, optionally filtered by company"""
+    # DISTINCTIVE ERROR FOR DEBUGGING
+    raise HTTPException(
+        status_code=status.HTTP_418_IM_A_TEAPOT,
+        detail="DEBUGGING: This is the roles.py list_roles function being called"
+    )
 
 
 @router.get("/{role_id}", response_model=Dict)
@@ -194,10 +124,10 @@ async def get_role(
             )
             
         # Get permissions
-        permissions = await get_role_permissions(role_id)
+        permissions = await _get_role_permissions_helper(role_id)
         role["permissions"] = permissions
         
-        return role
+        return convert_objectid_to_str(role)
         
     except HTTPException:
         raise
@@ -218,7 +148,12 @@ async def update_role(
     try:
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
-        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        is_admin = any(
+            role.get("role") == "ADMIN" or 
+            role.get("role_group") == "ADMIN" or
+            (role.get("role_details", {}).get("role_group") == "ADMIN")
+            for role in user_roles
+        )
         
         if not is_admin:
             raise HTTPException(
@@ -253,7 +188,7 @@ async def update_role(
         
         return {
             "message": "Role updated successfully",
-            "role": updated_data
+            "role": convert_objectid_to_str(updated_data)
         }
         
     except HTTPException:
@@ -274,7 +209,12 @@ async def delete_role(
     try:
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
-        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        is_admin = any(
+            role.get("role") == "ADMIN" or 
+            role.get("role_group") == "ADMIN" or
+            (role.get("role_details", {}).get("role_group") == "ADMIN")
+            for role in user_roles
+        )
         
         if not is_admin:
             raise HTTPException(
@@ -351,38 +291,43 @@ async def delete_role(
         )
 
 
+async def _get_role_permissions_helper(role_id: str):
+    """Internal helper function to get permissions for a specific role"""
+    if hasattr(repo, '_store'):
+        # InMemoryRepo
+        permissions = []
+        permission_store = repo._store.get("__role_permissions__", {})
+        
+        for perm_id, perm_data in permission_store.items():
+            if perm_data.get("role_id") == role_id:
+                permissions.append({
+                    "id": perm_id,
+                    "screen": perm_data.get("screen"),
+                    "permissions": perm_data.get("permissions", [])
+                })
+    else:
+        # MongoRepo
+        from app.repo import MongoRepo
+        if isinstance(repo, MongoRepo):
+            permissions_cursor = repo._role_permission_col.find({"role_id": role_id})
+            permissions = []
+            async for perm_data in permissions_cursor:
+                permissions.append(convert_objectid_to_str({
+                    "id": perm_data.get("id"),
+                    "screen": perm_data.get("screen"),
+                    "permissions": perm_data.get("permissions", [])
+                }))
+        else:
+            permissions = []
+    
+    return permissions
+
+
 @router.get("/{role_id}/permissions", response_model=List[Dict])
 async def get_role_permissions(role_id: str):
     """Get permissions for a specific role"""
     try:
-        if hasattr(repo, '_store'):
-            # InMemoryRepo
-            permissions = []
-            permission_store = repo._store.get("__role_permissions__", {})
-            
-            for perm_id, perm_data in permission_store.items():
-                if perm_data.get("role_id") == role_id:
-                    permissions.append({
-                        "id": perm_id,
-                        "screen": perm_data.get("screen"),
-                        "permissions": perm_data.get("permissions", [])
-                    })
-        else:
-            # MongoRepo
-            from app.repo import MongoRepo
-            if isinstance(repo, MongoRepo):
-                permissions_cursor = repo._role_permission_col.find({"role_id": role_id})
-                permissions = []
-                async for perm_data in permissions_cursor:
-                    permissions.append({
-                        "id": perm_data.get("id"),
-                        "screen": perm_data.get("screen"),
-                        "permissions": perm_data.get("permissions", [])
-                    })
-            else:
-                permissions = []
-        
-        return permissions
+        return await _get_role_permissions_helper(role_id)
         
     except Exception as e:
         raise HTTPException(
@@ -401,7 +346,12 @@ async def set_role_permissions(
     try:
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
-        is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+        is_admin = any(
+            role.get("role") == "ADMIN" or 
+            role.get("role_group") == "ADMIN" or
+            (role.get("role_details", {}).get("role_group") == "ADMIN")
+            for role in user_roles
+        )
         
         if not is_admin:
             raise HTTPException(

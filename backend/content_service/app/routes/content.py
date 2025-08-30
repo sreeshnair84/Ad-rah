@@ -95,6 +95,57 @@ async def simulate_moderation(content_id: str = Form(...)):
     return ModerationResult(content_id=content_id, ai_confidence=confidence, action=action, reason=reason)
 
 
+@router.put("/{content_id}/status")
+async def update_content_status(content_id: str, status: str = Form(...)):
+    # Update content status (for Host approval workflow)
+    try:
+        # Get existing metadata
+        item = await repo.get(content_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="content not found")
+
+        # Update status
+        item["status"] = status
+        # Convert dict to ContentMetadata for type safety
+        from app.models import ContentMetadata
+        metadata = ContentMetadata(**item)
+        saved = await repo.save(metadata)
+        return saved
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to update status: {e}")
+
+
+@router.post("/submit-for-review")
+async def submit_for_review(content_id: str = Form(...), owner_id: str = Form(...)):
+    """Submit content for Host review (Advertiser workflow)"""
+    try:
+        # Get content metadata
+        item = await repo.get(content_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="content not found")
+
+        # Update status to pending review
+        item["status"] = "pending"
+        # Convert dict to ContentMetadata for type safety
+        from app.models import ContentMetadata
+        metadata = ContentMetadata(**item)
+        await repo.save(metadata)
+
+        # Create review record
+        review = {
+            "content_id": content_id,
+            "action": "needs_review",
+            "ai_confidence": None,  # Will be set by AI moderation
+            "reviewer_id": None,
+            "notes": "Submitted for Host review"
+        }
+        await repo.save_review(review)
+
+        return {"status": "submitted", "message": "Content submitted for review"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to submit for review: {e}")
+
+
 @router.get("/ping")
 async def ping():
     return JSONResponse({"pong": True})
