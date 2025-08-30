@@ -373,7 +373,7 @@ async def init_default_data():
         admin_role = Role(
             name="System Administrator",
             role_group=RoleGroup.ADMIN,
-            company_id=admin_company_data["id"] if admin_company_data else "",
+            company_id="global",
             is_default=True,
             status="active"
         )
@@ -436,7 +436,7 @@ async def init_default_data():
         # Create user roles
         admin_user_role = UserRole(
             user_id=admin_user_data["id"] if admin_user_data else "",
-            company_id=admin_company_data["id"] if admin_company_data else "",
+            company_id="global",
             role_id=admin_role_data["id"] if admin_role_data else "",
             is_default=True,
             status="active"

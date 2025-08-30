@@ -175,8 +175,8 @@ def initialize_mock_data():
         layout_template_store[template["id"]] = template
 
 
-# Initialize mock data on module load
-initialize_mock_data()
+# Mock data initialization is handled by startup lifecycle in main.py
+# initialize_mock_data()
 
 
 # Digital Screen endpoints

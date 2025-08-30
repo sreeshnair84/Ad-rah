@@ -1,7 +1,8 @@
 from typing import Optional, Dict, List
 import asyncio
 import logging
-from app.models import ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, UserInvitation, PasswordResetToken
+from datetime import datetime
+from app.models import ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, UserInvitation, PasswordResetToken, CompanyApplication, CompanyApplicationStatus
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,10 @@ class InMemoryRepo:
     # ContentMeta operations
     async def save_content_meta(self, meta: ContentMeta) -> dict:
         async with self._lock:
-            meta.id = meta.id or str(len(self._store) + 1) + "-cm"
-            self._store.setdefault("__content_meta__", {})[meta.id] = meta.model_dump(exclude_none=True)
-            return self._store["__content_meta__"][meta.id]
+            content_meta = self._store.setdefault("__content_meta__", {})
+            meta.id = meta.id or str(len(content_meta) + 1) + "-cm"
+            content_meta[meta.id] = meta.model_dump(exclude_none=True)
+            return content_meta[meta.id]
 
     async def get_content_meta(self, _id: str) -> Optional[dict]:
         return self._store.get("__content_meta__", {}).get(_id)
@@ -60,9 +62,10 @@ class InMemoryRepo:
     # Role operations
     async def save_role(self, role: Role) -> dict:
         async with self._lock:
-            role.id = role.id or str(len(self._store) + 1) + "-r"
-            self._store.setdefault("__roles__", {})[role.id] = role.model_dump(exclude_none=True)
-            return self._store["__roles__"][role.id]
+            roles = self._store.setdefault("__roles__", {})
+            role.id = role.id or str(len(roles) + 1) + "-r"
+            roles[role.id] = role.model_dump(exclude_none=True)
+            return roles[role.id]
 
     async def get_role(self, _id: str) -> Optional[dict]:
         return self._store.get("__roles__", {}).get(_id)
@@ -92,8 +95,8 @@ class InMemoryRepo:
         async with self._lock:
             role_perms = self._store.setdefault("__role_permissions__", {})
             permission.id = permission.id or str(len(role_perms) + 1) + "-rp"
-            self._store.setdefault("__role_permissions__", {})[permission.id] = permission.model_dump(exclude_none=True)
-            return self._store["__role_permissions__"][permission.id]
+            role_perms[permission.id] = permission.model_dump(exclude_none=True)
+            return role_perms[permission.id]
 
     async def get_role_permissions(self, role_id: str) -> List[Dict]:
         permissions = self._store.get("__role_permissions__", {})
@@ -102,10 +105,10 @@ class InMemoryRepo:
     # moderation related
     async def save_review(self, review: dict) -> dict:
         async with self._lock:
-            rid = review.get("id") or str(len(self._store) + 1) + "-r"
+            reviews = self._store.setdefault("__reviews__", {})
+            rid = review.get("id") or str(len(reviews) + 1) + "-rev"
             review["id"] = rid
-            # store under reviews collection key
-            self._store.setdefault("__reviews__", {})[rid] = review
+            reviews[rid] = review
             return review
 
     async def list_reviews(self) -> List[Dict]:
@@ -114,9 +117,10 @@ class InMemoryRepo:
     # Company operations
     async def save_company(self, company: Company) -> dict:
         async with self._lock:
-            company.id = company.id or str(len(self._store) + 1) + "-c"
-            self._store.setdefault("__companies__", {})[company.id] = company.model_dump(exclude_none=True)
-            return self._store["__companies__"][company.id]
+            companies = self._store.setdefault("__companies__", {})
+            company.id = company.id or str(len(companies) + 1) + "-c"
+            companies[company.id] = company.model_dump(exclude_none=True)
+            return companies[company.id]
 
     async def get_company(self, _id: str) -> Optional[dict]:
         return self._store.get("__companies__", {}).get(_id)
@@ -134,9 +138,10 @@ class InMemoryRepo:
     # User operations
     async def save_user(self, user: User) -> dict:
         async with self._lock:
-            user.id = user.id or str(len(self._store) + 1) + "-u"
-            self._store.setdefault("__users__", {})[user.id] = user.model_dump(exclude_none=True)
-            return self._store["__users__"][user.id]
+            users = self._store.setdefault("__users__", {})
+            user.id = user.id or str(len(users) + 1) + "-u"
+            users[user.id] = user.model_dump(exclude_none=True)
+            return users[user.id]
 
     async def get_user(self, _id: str) -> Optional[dict]:
         return self._store.get("__users__", {}).get(_id)
@@ -161,9 +166,10 @@ class InMemoryRepo:
     # UserRole operations
     async def save_user_role(self, user_role: UserRole) -> dict:
         async with self._lock:
-            user_role.id = user_role.id or str(len(self._store) + 1) + "-ur"
-            self._store.setdefault("__user_roles__", {})[user_role.id] = user_role.model_dump(exclude_none=True)
-            return self._store["__user_roles__"][user_role.id]
+            user_roles = self._store.setdefault("__user_roles__", {})
+            user_role.id = user_role.id or str(len(user_roles) + 1) + "-ur"
+            user_roles[user_role.id] = user_role.model_dump(exclude_none=True)
+            return user_roles[user_role.id]
 
     async def get_user_roles(self, user_id: str) -> List[Dict]:
         roles = self._store.get("__user_roles__", {})
@@ -293,44 +299,67 @@ class InMemoryRepo:
                 return True
             return False
 
-    # Role operations
-    async def save_role(self, role) -> dict:
-        async with self._lock:
-            role.id = role.id or str(len(self._store) + 1) + "-r"
-            self._store.setdefault("__roles__", {})[role.id] = role.model_dump(exclude_none=True)
-            return self._store["__roles__"][role.id]
-
-    async def get_role(self, _id: str) -> Optional[dict]:
-        return self._store.get("__roles__", {}).get(_id)
-
-    async def list_roles(self) -> List[Dict]:
-        return list(self._store.get("__roles__", {}).values())
-
-    async def delete_role(self, _id: str) -> bool:
-        async with self._lock:
-            if _id in self._store.get("__roles__", {}):
-                del self._store["__roles__"][_id]
-                return True
-            return False
-
-    # RolePermission operations
-    async def save_role_permission(self, permission) -> dict:
-        async with self._lock:
-            role_perms = self._store.setdefault("__role_permissions__", {})
-            permission.id = permission.id or str(len(role_perms) + 1) + "-rp"
-            self._store.setdefault("__role_permissions__", {})[permission.id] = permission.model_dump(exclude_none=True)
-            return self._store["__role_permissions__"][permission.id]
-
-    async def get_role_permissions(self, role_id: str) -> List[Dict]:
-        permissions = self._store.get("__role_permissions__", {})
-        return [perm for perm in permissions.values() if perm.get("role_id") == role_id]
-
     async def delete_role_permission(self, _id: str) -> bool:
         async with self._lock:
             if _id in self._store.get("__role_permissions__", {}):
                 del self._store["__role_permissions__"][_id]
                 return True
             return False
+
+    # Company Application operations
+    async def save_company_application(self, application: CompanyApplication) -> dict:
+        async with self._lock:
+            if not application.id:
+                app_count = len(self._store.get("__company_applications__", {}))
+                application.id = str(app_count + 1) + "-ca"
+            
+            app_data = application.model_dump(exclude_none=True)
+            self._store.setdefault("__company_applications__", {})[application.id] = app_data
+            return self._store["__company_applications__"][application.id]
+
+    async def get_company_application(self, application_id: str) -> Optional[dict]:
+        return self._store.get("__company_applications__", {}).get(application_id)
+
+    async def list_company_applications(self, 
+                                       status: Optional[str] = None, 
+                                       company_type: Optional[str] = None) -> List[dict]:
+        applications = list(self._store.get("__company_applications__", {}).values())
+        
+        if status:
+            applications = [app for app in applications if app.get("status") == status]
+        if company_type:
+            applications = [app for app in applications if app.get("company_type") == company_type]
+            
+        return applications
+
+    async def update_company_application_status(self, 
+                                               application_id: str, 
+                                               status: str, 
+                                               reviewer_id: str, 
+                                               notes: str) -> bool:
+        async with self._lock:
+            applications = self._store.get("__company_applications__", {})
+            if application_id in applications:
+                applications[application_id]["status"] = status
+                applications[application_id]["reviewer_id"] = reviewer_id
+                applications[application_id]["reviewer_notes"] = notes
+                applications[application_id]["reviewed_at"] = datetime.utcnow().isoformat()
+                applications[application_id]["updated_at"] = datetime.utcnow().isoformat()
+                return True
+            return False
+
+    async def update_company_application(self, application_id: str, updates: dict) -> bool:
+        async with self._lock:
+            applications = self._store.get("__company_applications__", {})
+            if application_id in applications:
+                applications[application_id].update(updates)
+                applications[application_id]["updated_at"] = datetime.utcnow().isoformat()
+                return True
+            return False
+
+    async def get_company_applications_by_status(self, status: str) -> List[dict]:
+        applications = self._store.get("__company_applications__", {}).values()
+        return [app for app in applications if app.get("status") == status]
 
 
 class MongoRepo:
@@ -662,6 +691,63 @@ class MongoRepo:
             {"$set": {"used": True}}
         )
         return result.modified_count > 0
+
+    # Company Application operations
+    @property
+    def _company_application_col(self):
+        return self._db["company_applications"]
+
+    async def save_company_application(self, application: CompanyApplication) -> dict:
+        data = application.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._company_application_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_company_application(self, application_id: str) -> Optional[dict]:
+        return await self._company_application_col.find_one({"id": application_id})
+
+    async def list_company_applications(self, 
+                                       status: Optional[str] = None, 
+                                       company_type: Optional[str] = None) -> List[dict]:
+        query = {}
+        if status:
+            query["status"] = status
+        if company_type:
+            query["company_type"] = company_type
+        
+        cursor = self._company_application_col.find(query).sort("submitted_at", -1)
+        return [doc async for doc in cursor]
+
+    async def update_company_application_status(self, 
+                                               application_id: str, 
+                                               status: str, 
+                                               reviewer_id: str, 
+                                               notes: str) -> bool:
+        result = await self._company_application_col.update_one(
+            {"id": application_id},
+            {"$set": {
+                "status": status,
+                "reviewer_id": reviewer_id,
+                "reviewer_notes": notes,
+                "reviewed_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        return result.modified_count > 0
+
+    async def update_company_application(self, application_id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._company_application_col.update_one(
+            {"id": application_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def get_company_applications_by_status(self, status: str) -> List[dict]:
+        cursor = self._company_application_col.find({"status": status}).sort("submitted_at", -1)
+        return [doc async for doc in cursor]
 
 
 # choose repo implementation

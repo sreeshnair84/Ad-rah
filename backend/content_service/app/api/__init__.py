@@ -11,6 +11,7 @@ from .roles import router as roles_router
 from .events import router as events_router
 from .registration import router as registration_router
 from .screens import router as screens_router
+from .company_applications import router as company_applications_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -23,3 +24,4 @@ api_router.include_router(users_router)
 api_router.include_router(roles_router)
 api_router.include_router(events_router)
 api_router.include_router(screens_router)
+api_router.include_router(company_applications_router)

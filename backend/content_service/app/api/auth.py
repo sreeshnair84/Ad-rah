@@ -29,6 +29,62 @@ async def read_users_me_with_roles(current_user=Depends(get_current_user_with_ro
     return {"user": current_user}
 
 
+@router.get("/debug/repo-state")  
+async def debug_repo_state():
+    """Check repo state from within server"""
+    from app.repo import repo
+    result = {
+        "repo_type": type(repo).__name__,
+        "has_store": hasattr(repo, '_store')
+    }
+    
+    if hasattr(repo, '_store'):
+        result["store_keys"] = list(repo._store.keys())
+        result["users_count"] = len(repo._store.get("__users__", {}))
+        
+        # Show user details
+        users = repo._store.get("__users__", {})
+        result["users"] = [{"id": uid, "email": user.get("email")} for uid, user in users.items()]
+    
+    return result
+
+
+@router.post("/admin/force-init")
+async def force_initialize_data():
+    """Force initialize data from within server context"""
+    try:
+        from app.auth import init_default_data
+        from app.repo import repo
+        
+        # Show before state
+        before_users = len(repo._store.get("__users__", {})) if hasattr(repo, '_store') else 0
+        
+        # Clear and initialize
+        if hasattr(repo, '_store'):
+            repo._store.clear()
+        
+        await init_default_data()
+        
+        # Show after state
+        if hasattr(repo, '_store'):
+            users = repo._store.get("__users__", {})
+            user_list = [{"id": uid, "email": user.get("email")} for uid, user in users.items()]
+            
+            return {
+                "success": True,
+                "message": "Data force initialized",
+                "before_users": before_users,
+                "after_users": len(users),
+                "users": user_list
+            }
+        else:
+            return {"success": True, "message": "MongoDB data initialized"}
+            
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
 
 @router.post("/switch-role")
 async def switch_user_role(

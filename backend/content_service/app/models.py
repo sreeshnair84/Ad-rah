@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from datetime import datetime
 from enum import Enum
+import uuid
 
 
 class Permission(str, Enum):
@@ -443,3 +444,83 @@ class LayoutTemplateUpdate(BaseModel):
     description: Optional[str] = None
     template_data: Optional[Dict] = None
     is_public: Optional[bool] = None
+
+
+# Company Registration Application Models
+class CompanyApplicationStatus(str, Enum):
+    PENDING = "pending"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class CompanyType(str, Enum):
+    HOST = "HOST"
+    ADVERTISER = "ADVERTISER"
+
+
+class CompanyApplication(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    
+    # Company Information
+    company_name: str
+    company_type: CompanyType
+    business_license: str
+    address: str
+    city: str
+    country: str
+    website: Optional[str] = None
+    description: str
+    
+    # Applicant Information  
+    applicant_name: str
+    applicant_email: str
+    applicant_phone: str
+    
+    # Process Tracking
+    status: CompanyApplicationStatus = CompanyApplicationStatus.PENDING
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    reviewed_at: Optional[datetime] = None
+    reviewer_id: Optional[str] = None  # Track approving admin
+    reviewer_notes: Optional[str] = None
+    
+    # Document Management
+    documents: Dict[str, str] = Field(default_factory=dict)  # document_type -> file_url/path
+    
+    # Post-Approval Linking
+    created_company_id: Optional[str] = None
+    created_user_id: Optional[str] = None
+    
+    # Audit Fields
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CompanyApplicationCreate(BaseModel):
+    company_name: str
+    company_type: CompanyType
+    business_license: str
+    address: str
+    city: str
+    country: str
+    website: Optional[str] = None
+    description: str
+    applicant_name: str
+    applicant_email: str
+    applicant_phone: str
+    documents: Dict[str, str] = Field(default_factory=dict)
+
+
+class CompanyApplicationReview(BaseModel):
+    decision: Literal["approved", "rejected"]
+    notes: Optional[str] = None
+
+
+class CompanyApplicationUpdate(BaseModel):
+    status: Optional[CompanyApplicationStatus] = None
+    reviewed_at: Optional[datetime] = None
+    reviewer_id: Optional[str] = None
+    reviewer_notes: Optional[str] = None
+    created_company_id: Optional[str] = None
+    created_user_id: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(find:*)",
+      "Bash(uvicorn:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

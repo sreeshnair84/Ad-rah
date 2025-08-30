@@ -21,39 +21,13 @@ def convert_objectid_to_str(data: Any) -> Any:
     else:
         return data
 
-print("DEBUG: users.py module loaded with debug changes")
+# Users API endpoints
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 # Data initialization is handled by the main application at server startup
 
 
-@router.get("/test-admin")
-async def test_admin_access(current_user: dict = Depends(require_roles("ADMIN"))):
-    """Test admin access"""
-    return {"message": "Admin access granted", "user_id": current_user.get("id")}
-
-
-@router.get("/debug-check-no-auth")
-async def debug_check():
-    """Debug endpoint to confirm module loading without auth"""
-    return {"message": "Users module loaded successfully with LATEST changes", "timestamp": "2025-08-28T16:32:00"}
-
-@router.get("/bypass-users")
-async def bypass_list_users(current_user: dict = Depends(get_current_user_with_roles)):
-    """Bypass users endpoint for debugging"""
-    print(f"BYPASS DEBUG: User data: {current_user}")
-    return {"message": "Success", "user_email": current_user.get("email"), "roles": current_user.get("roles", [])}
-
-@router.get("/test-working")
-async def test_working():
-    """Test if endpoint is working"""
-    return {"message": "Users module is working", "timestamp": "2025-08-30T06:15:00"}
-
-@router.get("/simple-test")
-async def simple_test():
-    """Very simple test"""
-    return {"working": True}
 
 
 @router.get("/", response_model=List[Dict])
@@ -65,7 +39,6 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
         
         # Check if user has ADMIN role
         user_roles = current_user.get("roles", [])
-        print(f"DEBUG: Current user roles: {user_roles}")
         has_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
@@ -76,10 +49,7 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
             role_list = [role.get("role") for role in user_roles]
             role_group_list = [role.get("role_group") for role in user_roles] 
             role_details_list = [role.get("role_details", {}).get("role_group") for role in user_roles]
-            print(f"DEBUG: Admin check failed - user roles: {role_list}, role_groups: {role_group_list}, role_details: {role_details_list}")
-            # Temporarily bypass admin check for debugging
-            print("DEBUG: Bypassing admin check for debugging purposes")
-            # raise HTTPException(status_code=403, detail="Only admins can list users")
+            raise HTTPException(status_code=403, detail="Only admins can list users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):

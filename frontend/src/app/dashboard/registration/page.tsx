@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,10 +31,11 @@ import {
   Phone,
   Mail,
   MapPin,
-  Globe
+  Globe,
+  Loader2
 } from 'lucide-react';
 
-interface RegistrationRequest {
+interface CompanyApplication {
   id: string;
   company_name: string;
   company_type: 'HOST' | 'ADVERTISER';
@@ -52,81 +53,134 @@ interface RegistrationRequest {
   reviewed_at?: string;
   reviewer_id?: string;
   reviewer_notes?: string;
-  documents: {
-    business_license: string;
-    trade_license?: string;
-    vat_certificate?: string;
-    id_copy?: string;
-  };
+  documents: Record<string, string>;
+  created_company_id?: string;
+  created_user_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ApplicationStats {
+  total: number;
+  pending: number;
+  under_review: number;
+  approved: number;
+  rejected: number;
+  host_applications: number;
+  advertiser_applications: number;
 }
 
 export default function RegistrationManagementPage() {
   const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('applications');
-  const [selectedRequest, setSelectedRequest] = useState<RegistrationRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<CompanyApplication | null>(null);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewDecision, setReviewDecision] = useState<'approved' | 'rejected'>('approved');
+  
+  // State for API data
+  const [applications, setApplications] = useState<CompanyApplication[]>([]);
+  const [stats, setStats] = useState<ApplicationStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Mock data - replace with API call
-  const [registrationRequests] = useState<RegistrationRequest[]>([
-    {
-      id: '1',
-      company_name: 'Emirates Mall Management',
-      company_type: 'HOST',
-      applicant_name: 'Ahmed Al Mansouri',
-      applicant_email: 'ahmed@emiratesmall.ae',
-      applicant_phone: '+971-50-123-4567',
-      business_license: 'BL-2024-001',
-      address: 'Sheikh Zayed Road',
-      city: 'Dubai',
-      country: 'UAE',
-      website: 'https://www.emiratesmall.ae',
-      description: 'Premier shopping mall in Dubai with 200+ stores and entertainment facilities.',
-      status: 'pending',
-      submitted_at: '2025-08-28T10:30:00Z',
-      documents: {
-        business_license: 'emirates_mall_bl.pdf',
-        trade_license: 'emirates_mall_tl.pdf',
-        vat_certificate: 'emirates_mall_vat.pdf'
+  // Fetch applications from API
+  const fetchApplications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/company-applications', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch applications');
       }
-    },
-    {
-      id: '2', 
-      company_name: 'Creative Digital Agency',
-      company_type: 'ADVERTISER',
-      applicant_name: 'Sarah Johnson',
-      applicant_email: 'sarah@creativedigital.ae',
-      applicant_phone: '+971-55-987-6543',
-      business_license: 'BL-2024-002',
-      address: 'Dubai Media City',
-      city: 'Dubai',
-      country: 'UAE',
-      description: 'Full-service digital marketing agency specializing in retail and hospitality.',
-      status: 'under_review',
-      submitted_at: '2025-08-27T15:45:00Z',
-      reviewed_at: '2025-08-28T09:15:00Z',
-      reviewer_id: 'admin1',
-      documents: {
-        business_license: 'creative_digital_bl.pdf',
-        vat_certificate: 'creative_digital_vat.pdf'
-      }
+
+      const data = await response.json();
+      setApplications(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch applications');
     }
-  ]);
+  };
 
-  // Check if user has admin access
-  if (!hasRole('ADMIN')) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Alert className="max-w-md">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to access registration management. Contact your administrator.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  // Fetch application statistics
+  const fetchStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/company-applications/stats/summary', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch statistics');
+      }
+
+      const data = await response.json();
+      setStats(data);
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchApplications(), fetchStats()]);
+      setLoading(false);
+    };
+    
+    loadData();
+  }, []);
+
+  // Handle review submission
+  const handleReviewSubmit = async () => {
+    if (!selectedRequest) return;
+
+    setSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/company-applications/${selectedRequest.id}/review`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          decision: reviewDecision,
+          notes: reviewNotes
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit review');
+      }
+
+      // Refresh data after successful review
+      await Promise.all([fetchApplications(), fetchStats()]);
+      
+      setShowReviewDialog(false);
+      setSelectedRequest(null);
+      setReviewNotes('');
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openReviewDialog = (request: CompanyApplication, decision: 'approved' | 'rejected') => {
+    setSelectedRequest(request);
+    setReviewDecision(decision);
+    setReviewNotes('');
+    setShowReviewDialog(true);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -155,38 +209,46 @@ export default function RegistrationManagementPage() {
     );
   };
 
-  const handleReviewSubmit = () => {
-    if (selectedRequest) {
-      // Update the request status
-      const updatedRequest = {
-        ...selectedRequest,
-        status: reviewDecision,
-        reviewed_at: new Date().toISOString(),
-        reviewer_id: user?.id || 'admin',
-        reviewer_notes: reviewNotes
-      };
-      
-      console.log('Review submitted:', updatedRequest);
-      setShowReviewDialog(false);
-      setSelectedRequest(null);
-      setReviewNotes('');
-    }
-  };
+  // Check if user has admin access
+  if (!hasRole('ADMIN')) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Alert className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            You don't have permission to access registration management. Contact your administrator.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
-  const openReviewDialog = (request: RegistrationRequest, decision: 'approved' | 'rejected') => {
-    setSelectedRequest(request);
-    setReviewDecision(decision);
-    setReviewNotes('');
-    setShowReviewDialog(true);
-  };
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-gray-600">Loading applications...</span>
+        </div>
+      </div>
+    );
+  }
 
-  const pendingCount = registrationRequests.filter(r => r.status === 'pending').length;
-  const underReviewCount = registrationRequests.filter(r => r.status === 'under_review').length;
-  const approvedCount = registrationRequests.filter(r => r.status === 'approved').length;
-  const rejectedCount = registrationRequests.filter(r => r.status === 'rejected').length;
+  const pendingCount = stats?.pending || 0;
+  const underReviewCount = stats?.under_review || 0;
+  const approvedCount = stats?.approved || 0;
+  const rejectedCount = stats?.rejected || 0;
 
   return (
     <div className="p-6 space-y-6">
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Registration Management</h1>
@@ -295,7 +357,7 @@ export default function RegistrationManagementPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {registrationRequests
+                  {applications
                     .filter(r => r.status === 'pending' || r.status === 'under_review')
                     .map((request) => (
                     <TableRow key={request.id}>
@@ -392,6 +454,11 @@ export default function RegistrationManagementPage() {
                                   </div>
                                   
                                   <div>
+                                    <h4 className="font-semibold mb-2">Business License</h4>
+                                    <p className="text-sm text-muted-foreground">{request.business_license}</p>
+                                  </div>
+                                  
+                                  <div>
                                     <h4 className="font-semibold mb-2">Submitted Documents</h4>
                                     <div className="space-y-2">
                                       {Object.entries(request.documents).map(([type, filename]) => (
@@ -400,7 +467,7 @@ export default function RegistrationManagementPage() {
                                             <div className="flex items-center gap-2">
                                               <FileText className="w-4 h-4" />
                                               <span className="text-sm">
-                                                {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}: {filename}
                                               </span>
                                             </div>
                                             <Button variant="ghost" size="sm">
@@ -456,6 +523,14 @@ export default function RegistrationManagementPage() {
                   ))}
                 </TableBody>
               </Table>
+              
+              {applications.filter(r => r.status === 'pending' || r.status === 'under_review').length === 0 && (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No pending applications</h3>
+                  <p className="text-gray-500">All applications have been reviewed</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -469,10 +544,46 @@ export default function RegistrationManagementPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No approved companies yet</p>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Approved Date</TableHead>
+                    <TableHead>Created Company ID</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {applications
+                    .filter(r => r.status === 'approved')
+                    .map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{request.company_name}</span>
+                          <span className="text-sm text-muted-foreground">{request.applicant_name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getCompanyTypeBadge(request.company_type)}
+                      </TableCell>
+                      <TableCell>
+                        {request.reviewed_at ? new Date(request.reviewed_at).toLocaleDateString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-sm">{request.created_company_id || 'Pending'}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {applications.filter(r => r.status === 'approved').length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No approved companies yet</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -486,10 +597,46 @@ export default function RegistrationManagementPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <XCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No rejected applications</p>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Rejected Date</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {applications
+                    .filter(r => r.status === 'rejected')
+                    .map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{request.company_name}</span>
+                          <span className="text-sm text-muted-foreground">{request.applicant_name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getCompanyTypeBadge(request.company_type)}
+                      </TableCell>
+                      <TableCell>
+                        {request.reviewed_at ? new Date(request.reviewed_at).toLocaleDateString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">{request.reviewer_notes || 'No reason provided'}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {applications.filter(r => r.status === 'rejected').length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <XCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No rejected applications</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -539,24 +686,22 @@ export default function RegistrationManagementPage() {
           </div>
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowReviewDialog(false)}>
+            <Button variant="outline" onClick={() => setShowReviewDialog(false)} disabled={submitting}>
               Cancel
             </Button>
             <Button 
               onClick={handleReviewSubmit}
               variant={reviewDecision === 'approved' ? 'default' : 'destructive'}
+              disabled={submitting}
             >
-              {reviewDecision === 'approved' ? (
-                <>
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Approve Registration
-                </>
+              {submitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : reviewDecision === 'approved' ? (
+                <CheckCircle className="w-4 h-4 mr-2" />
               ) : (
-                <>
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Reject Application
-                </>
+                <XCircle className="w-4 h-4 mr-2" />
               )}
+              {submitting ? 'Processing...' : reviewDecision === 'approved' ? 'Approve Registration' : 'Reject Application'}
             </Button>
           </DialogFooter>
         </DialogContent>
