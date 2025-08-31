@@ -1,8 +1,13 @@
 from typing import Optional, Dict, List
 import asyncio
 import logging
-from datetime import datetime
-from app.models import ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, UserInvitation, PasswordResetToken, CompanyApplication, CompanyApplicationStatus
+from datetime import datetime, timedelta
+from app.models import (
+    ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, 
+    UserInvitation, PasswordResetToken, CompanyApplication, CompanyApplicationStatus, 
+    DigitalScreen, DeviceRegistrationKey, ContentCategory, ContentTag, HostPreference,
+    DeviceCredentials, DeviceHeartbeat, DeviceFingerprint, DeviceCapabilities
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -361,6 +366,281 @@ class InMemoryRepo:
         applications = self._store.get("__company_applications__", {}).values()
         return [app for app in applications if app.get("status") == status]
 
+    # DigitalScreen operations
+    async def save_digital_screen(self, screen: DigitalScreen) -> dict:
+        async with self._lock:
+            screens = self._store.setdefault("__digital_screens__", {})
+            screen.id = screen.id or str(len(screens) + 1) + "-ds"
+            screens[screen.id] = screen.model_dump(exclude_none=True)
+            return screens[screen.id]
+
+    async def get_digital_screen(self, _id: str) -> Optional[dict]:
+        return self._store.get("__digital_screens__", {}).get(_id)
+
+    async def list_digital_screens(self, company_id: Optional[str] = None) -> List[Dict]:
+        screens = list(self._store.get("__digital_screens__", {}).values())
+        if company_id:
+            screens = [s for s in screens if s.get("company_id") == company_id]
+        return screens
+
+    async def update_digital_screen(self, _id: str, updates: dict) -> bool:
+        async with self._lock:
+            screens = self._store.get("__digital_screens__", {})
+            if _id in screens:
+                screens[_id].update(updates)
+                screens[_id]["updated_at"] = datetime.utcnow()  # Use datetime object instead of ISO string
+                return True
+            return False
+
+    async def delete_digital_screen(self, _id: str) -> bool:
+        async with self._lock:
+            screens = self._store.get("__digital_screens__", {})
+            if _id in screens:
+                del screens[_id]
+                return True
+            return False
+
+    # DeviceRegistrationKey operations
+    async def save_device_registration_key(self, key: DeviceRegistrationKey) -> dict:
+        async with self._lock:
+            keys = self._store.setdefault("__device_registration_keys__", {})
+            key.id = key.id or str(len(keys) + 1) + "-key"
+            keys[key.id] = key.model_dump(exclude_none=True)
+            return keys[key.id]
+
+    async def get_device_registration_key(self, key: str) -> Optional[dict]:
+        keys = self._store.get("__device_registration_keys__", {})
+        for k in keys.values():
+            if k.get("key") == key:
+                return k
+        return None
+
+    async def list_device_registration_keys(self, company_id: Optional[str] = None) -> List[Dict]:
+        keys = list(self._store.get("__device_registration_keys__", {}).values())
+        if company_id:
+            keys = [k for k in keys if k.get("company_id") == company_id]
+        return keys
+
+    async def mark_key_used(self, key_id: str, device_id: str) -> bool:
+        async with self._lock:
+            keys = self._store.get("__device_registration_keys__", {})
+            if key_id in keys:
+                keys[key_id]["used"] = True
+                keys[key_id]["used_at"] = datetime.utcnow().isoformat()
+                keys[key_id]["used_by_device"] = device_id
+                return True
+            return False
+
+    async def delete_device_registration_key(self, key_id: str) -> bool:
+        async with self._lock:
+            keys = self._store.get("__device_registration_keys__", {})
+            if key_id in keys:
+                del keys[key_id]
+                return True
+            return False
+
+    # ContentCategory operations
+    async def save_content_category(self, category: ContentCategory) -> dict:
+        async with self._lock:
+            categories = self._store.setdefault("__content_categories__", {})
+            category.id = category.id or str(len(categories) + 1) + "-cat"
+            categories[category.id] = category.model_dump(exclude_none=True)
+            return categories[category.id]
+
+    async def get_content_category(self, _id: str) -> Optional[dict]:
+        return self._store.get("__content_categories__", {}).get(_id)
+
+    async def list_content_categories(self, active_only: bool = True) -> List[Dict]:
+        categories = list(self._store.get("__content_categories__", {}).values())
+        if active_only:
+            categories = [c for c in categories if c.get("is_active", True)]
+        return categories
+
+    async def update_content_category(self, _id: str, updates: dict) -> bool:
+        async with self._lock:
+            categories = self._store.get("__content_categories__", {})
+            if _id in categories:
+                categories[_id].update(updates)
+                categories[_id]["updated_at"] = datetime.utcnow()
+                return True
+            return False
+
+    async def delete_content_category(self, _id: str) -> bool:
+        async with self._lock:
+            categories = self._store.get("__content_categories__", {})
+            if _id in categories:
+                del categories[_id]
+                return True
+            return False
+
+    # ContentTag operations
+    async def save_content_tag(self, tag: ContentTag) -> dict:
+        async with self._lock:
+            tags = self._store.setdefault("__content_tags__", {})
+            tag.id = tag.id or str(len(tags) + 1) + "-tag"
+            tags[tag.id] = tag.model_dump(exclude_none=True)
+            return tags[tag.id]
+
+    async def get_content_tag(self, _id: str) -> Optional[dict]:
+        return self._store.get("__content_tags__", {}).get(_id)
+
+    async def list_content_tags(self, active_only: bool = True, category_id: Optional[str] = None) -> List[Dict]:
+        tags = list(self._store.get("__content_tags__", {}).values())
+        if active_only:
+            tags = [t for t in tags if t.get("is_active", True)]
+        if category_id:
+            tags = [t for t in tags if t.get("category_id") == category_id]
+        return tags
+
+    async def update_content_tag(self, _id: str, updates: dict) -> bool:
+        async with self._lock:
+            tags = self._store.get("__content_tags__", {})
+            if _id in tags:
+                tags[_id].update(updates)
+                tags[_id]["updated_at"] = datetime.utcnow()
+                return True
+            return False
+
+    async def delete_content_tag(self, _id: str) -> bool:
+        async with self._lock:
+            tags = self._store.get("__content_tags__", {})
+            if _id in tags:
+                del tags[_id]
+                return True
+            return False
+
+    # HostPreference operations
+    async def save_host_preference(self, preference: HostPreference) -> dict:
+        async with self._lock:
+            preferences = self._store.setdefault("__host_preferences__", {})
+            preference.id = preference.id or str(len(preferences) + 1) + "-pref"
+            preferences[preference.id] = preference.model_dump(exclude_none=True)
+            return preferences[preference.id]
+
+    async def get_host_preferences(self, company_id: str, screen_id: Optional[str] = None) -> List[Dict]:
+        preferences = list(self._store.get("__host_preferences__", {}).values())
+        preferences = [p for p in preferences if p.get("company_id") == company_id]
+        if screen_id:
+            preferences = [p for p in preferences if p.get("screen_id") == screen_id or p.get("screen_id") is None]
+        return preferences
+
+    async def update_host_preference(self, _id: str, updates: dict) -> bool:
+        async with self._lock:
+            preferences = self._store.get("__host_preferences__", {})
+            if _id in preferences:
+                preferences[_id].update(updates)
+                preferences[_id]["updated_at"] = datetime.utcnow()
+                return True
+            return False
+
+    async def delete_host_preference(self, _id: str) -> bool:
+        async with self._lock:
+            preferences = self._store.get("__host_preferences__", {})
+            if _id in preferences:
+                del preferences[_id]
+                return True
+            return False
+
+    # DeviceCredentials operations
+    async def save_device_credentials(self, credentials: DeviceCredentials) -> dict:
+        async with self._lock:
+            creds = self._store.setdefault("__device_credentials__", {})
+            credentials.id = credentials.id or str(len(creds) + 1) + "-cred"
+            creds[credentials.id] = credentials.model_dump(exclude_none=True)
+            return creds[credentials.id]
+
+    async def get_device_credentials(self, device_id: str) -> Optional[dict]:
+        creds = self._store.get("__device_credentials__", {})
+        for cred in creds.values():
+            if cred.get("device_id") == device_id and not cred.get("revoked", False):
+                return cred
+        return None
+
+    async def revoke_device_credentials(self, device_id: str) -> bool:
+        async with self._lock:
+            creds = self._store.get("__device_credentials__", {})
+            for cred_id, cred in creds.items():
+                if cred.get("device_id") == device_id:
+                    creds[cred_id]["revoked"] = True
+                    creds[cred_id]["revoked_at"] = datetime.utcnow()
+                    return True
+            return False
+
+    async def update_device_credentials(self, device_id: str, updates: dict) -> bool:
+        async with self._lock:
+            creds = self._store.get("__device_credentials__", {})
+            for cred_id, cred in creds.items():
+                if cred.get("device_id") == device_id and not cred.get("revoked", False):
+                    creds[cred_id].update(updates)
+                    creds[cred_id]["last_refreshed"] = datetime.utcnow()
+                    return True
+            return False
+
+    # DeviceHeartbeat operations
+    async def save_device_heartbeat(self, heartbeat: DeviceHeartbeat) -> dict:
+        async with self._lock:
+            heartbeats = self._store.setdefault("__device_heartbeats__", {})
+            heartbeat.id = heartbeat.id or str(len(heartbeats) + 1) + "-hb"
+            heartbeats[heartbeat.id] = heartbeat.model_dump(exclude_none=True)
+            return heartbeats[heartbeat.id]
+
+    async def get_latest_heartbeat(self, device_id: str) -> Optional[dict]:
+        heartbeats = list(self._store.get("__device_heartbeats__", {}).values())
+        device_heartbeats = [hb for hb in heartbeats if hb.get("device_id") == device_id]
+        if device_heartbeats:
+            # Return the most recent heartbeat
+            return max(device_heartbeats, key=lambda x: x.get("timestamp", datetime.min))
+        return None
+
+    async def get_device_heartbeats(self, device_id: str, limit: int = 100) -> List[Dict]:
+        heartbeats = list(self._store.get("__device_heartbeats__", {}).values())
+        device_heartbeats = [hb for hb in heartbeats if hb.get("device_id") == device_id]
+        # Sort by timestamp descending and limit results
+        device_heartbeats.sort(key=lambda x: x.get("timestamp", datetime.min), reverse=True)
+        return device_heartbeats[:limit]
+
+    async def cleanup_old_heartbeats(self, older_than_hours: int = 24) -> int:
+        """Clean up heartbeats older than specified hours"""
+        async with self._lock:
+            heartbeats = self._store.get("__device_heartbeats__", {})
+            cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
+            
+            old_heartbeat_ids = []
+            for hb_id, heartbeat in heartbeats.items():
+                timestamp = heartbeat.get("timestamp")
+                if isinstance(timestamp, str):
+                    timestamp = datetime.fromisoformat(timestamp)
+                if timestamp and timestamp < cutoff_time:
+                    old_heartbeat_ids.append(hb_id)
+            
+            for hb_id in old_heartbeat_ids:
+                del heartbeats[hb_id]
+                
+            return len(old_heartbeat_ids)
+
+    # Enhanced device operations
+    async def get_device_with_credentials(self, device_id: str) -> Optional[Dict]:
+        """Get device with its credentials and latest heartbeat"""
+        device = await self.get_digital_screen(device_id)
+        if not device:
+            return None
+            
+        credentials = await self.get_device_credentials(device_id)
+        latest_heartbeat = await self.get_latest_heartbeat(device_id)
+        
+        return {
+            "device": device,
+            "credentials": credentials,
+            "latest_heartbeat": latest_heartbeat
+        }
+
+    async def get_devices_by_status(self, status: Optional[str] = None, company_id: Optional[str] = None) -> List[Dict]:
+        """Get devices filtered by status and/or company"""
+        devices = await self.list_digital_screens(company_id)
+        if status:
+            devices = [d for d in devices if d.get("status") == status]
+        return devices
+
 
 class MongoRepo:
     def __init__(self, uri: str):
@@ -567,7 +847,7 @@ class MongoRepo:
                 "id": str(user_role_data["_id"]),
                 "role": role.get("role_group", "") if role else "",
                 "role_name": role.get("name", "") if role else "",
-                "company_name": company.get("name", "Unknown") if company else ("System" if company_id == "global" else "Unknown"),
+                "company_name": company.get("name") if company else ("System" if company_id == "global" else None),
                 "role_details": role
             }
             user_roles.append(expanded_role)
@@ -748,6 +1028,79 @@ class MongoRepo:
     async def get_company_applications_by_status(self, status: str) -> List[dict]:
         cursor = self._company_application_col.find({"status": status}).sort("submitted_at", -1)
         return [doc async for doc in cursor]
+
+    # DigitalScreen operations
+    @property
+    def _digital_screen_col(self):
+        return self._db["digital_screens"]
+
+    async def save_digital_screen(self, screen: DigitalScreen) -> dict:
+        data = screen.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._digital_screen_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_digital_screen(self, _id: str) -> Optional[dict]:
+        return await self._digital_screen_col.find_one({"id": _id})
+
+    async def list_digital_screens(self, company_id: Optional[str] = None) -> List[Dict]:
+        query = {}
+        if company_id:
+            query["company_id"] = company_id
+        cursor = self._digital_screen_col.find(query)
+        return [d async for d in cursor]
+
+    async def update_digital_screen(self, _id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._digital_screen_col.update_one(
+            {"id": _id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_digital_screen(self, _id: str) -> bool:
+        result = await self._digital_screen_col.delete_one({"id": _id})
+        return result.deleted_count > 0
+
+    # DeviceRegistrationKey operations
+    @property
+    def _device_registration_key_col(self):
+        return self._db["device_registration_keys"]
+
+    async def save_device_registration_key(self, key: DeviceRegistrationKey) -> dict:
+        data = key.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._device_registration_key_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_device_registration_key(self, key: str) -> Optional[dict]:
+        return await self._device_registration_key_col.find_one({"key": key})
+
+    async def list_device_registration_keys(self, company_id: Optional[str] = None) -> List[Dict]:
+        query = {}
+        if company_id:
+            query["company_id"] = company_id
+        cursor = self._device_registration_key_col.find(query)
+        return [d async for d in cursor]
+
+    async def mark_key_used(self, key_id: str, device_id: str) -> bool:
+        result = await self._device_registration_key_col.update_one(
+            {"id": key_id},
+            {"$set": {
+                "used": True,
+                "used_at": datetime.utcnow(),
+                "used_by_device": device_id
+            }}
+        )
+        return result.modified_count > 0
+
+    async def delete_device_registration_key(self, key_id: str) -> bool:
+        result = await self._device_registration_key_col.delete_one({"id": key_id})
+        return result.deleted_count > 0
 
 
 # choose repo implementation

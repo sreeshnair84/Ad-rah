@@ -11,48 +11,20 @@ export function useAdsApproval() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock data - in real app this would come from API
-    const mockAds: AdsApprovalItem[] = [
-      {
-        id: 'AD-001',
-        type: 'image',
-        category_id: 'food',
-        business_id: 'biz1',
-        company_id: '1',
-        status: 'pending',
-        file_path: '/images/pizza-ad.jpg',
-        metadata: { title: 'Special Pizza Deal', description: '50% off on all pizzas' },
-        advertiser: 'Mario\'s Pizza',
-        submittedDate: '2025-08-26'
-      },
-      {
-        id: 'AD-002',
-        type: 'video',
-        category_id: 'fashion',
-        business_id: 'biz2',
-        company_id: '2',
-        status: 'pending',
-        file_path: '/images/fashion-sale.mp4',
-        metadata: { title: 'Summer Fashion Sale', description: 'Up to 70% off on summer collection' },
-        advertiser: 'Fashion Hub',
-        submittedDate: '2025-08-25'
-      },
-      {
-        id: 'AD-003',
-        type: 'image',
-        category_id: 'services',
-        business_id: 'biz3',
-        company_id: '3',
-        status: 'pending',
-        file_path: '/images/cleaning-service.jpg',
-        metadata: { title: 'Professional Cleaning', description: 'Expert cleaning services for your home' },
-        advertiser: 'CleanPro Services',
-        submittedDate: '2025-08-24'
+    // TODO: Replace with actual API call to fetch ads for approval
+    const fetchAdsForApproval = async () => {
+      try {
+        // const response = await fetch('/api/ads/pending-approval');
+        // const data = await response.json();
+        // setAds(data.ads);
+      } catch (error) {
+        console.error('Failed to fetch ads for approval:', error);
+      } finally {
+        setLoading(false);
       }
-    ];
+    };
 
-    setAds(mockAds);
-    setLoading(false);
+    fetchAdsForApproval();
   }, []);
 
   const handleApprove = (adId: string) => {

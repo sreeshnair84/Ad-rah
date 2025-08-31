@@ -6,36 +6,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+interface Schedule {
+  id: string;
+  campaign: string;
+  startDate: string;
+  endDate: string;
+  frequency: string;
+  status: string;
+  screens: number;
+}
+
 export default function SchedulesPage() {
-  const [schedules] = useState([
-    {
-      id: 'SCH-001',
-      campaign: 'Summer Pizza Deal',
-      startDate: '2025-08-20',
-      endDate: '2025-08-31',
-      frequency: 'Daily',
-      status: 'active',
-      screens: 5
-    },
-    {
-      id: 'SCH-002',
-      campaign: 'Fashion Sale',
-      startDate: '2025-08-15',
-      endDate: '2025-08-25',
-      frequency: 'Weekly',
-      status: 'scheduled',
-      screens: 3
-    },
-    {
-      id: 'SCH-003',
-      campaign: 'Restaurant Special',
-      startDate: '2025-08-01',
-      endDate: '2025-08-10',
-      frequency: 'Daily',
-      status: 'completed',
-      screens: 8
-    }
-  ]);
+  const [schedules] = useState<Schedule[]>([]); // TODO: Replace with API call to fetch schedules
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -65,7 +47,7 @@ export default function SchedulesPage() {
             <CardTitle>Active Campaigns</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">3</p>
+            <p className="text-2xl font-bold">0</p> {/* TODO: Replace with API data */}
             <p className="text-sm text-gray-600">Running now</p>
           </CardContent>
         </Card>
@@ -74,7 +56,7 @@ export default function SchedulesPage() {
             <CardTitle>Scheduled</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">5</p>
+            <p className="text-2xl font-bold">0</p> {/* TODO: Replace with API data */}
             <p className="text-sm text-gray-600">Upcoming</p>
           </CardContent>
         </Card>
@@ -83,7 +65,7 @@ export default function SchedulesPage() {
             <CardTitle>Total Screens</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">16</p>
+            <p className="text-2xl font-bold">0</p> {/* TODO: Replace with API data */}
             <p className="text-sm text-gray-600">Available</p>
           </CardContent>
         </Card>

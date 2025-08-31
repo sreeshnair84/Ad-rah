@@ -199,7 +199,40 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 6. 📊 Add monitoring and observability
 7. 🚀 Prepare for production deployment
 
+## New API Endpoints
+
+### Categories & Tags Management
+```bash
+# Categories
+GET    /api/categories/              # List all categories
+POST   /api/categories/              # Create category (Admin)
+GET    /api/categories/{id}          # Get specific category
+PUT    /api/categories/{id}          # Update category (Admin)
+DELETE /api/categories/{id}          # Delete category (Admin)
+
+# Tags
+GET    /api/categories/tags         # List all tags
+POST   /api/categories/tags         # Create tag (Admin/Advertiser)
+GET    /api/categories/tags/{id}    # Get specific tag
+PUT    /api/categories/tags/{id}    # Update tag (Admin/Advertiser)
+DELETE /api/categories/tags/{id}    # Delete tag (Admin/Advertiser)
+
+# Host Preferences
+POST   /api/categories/preferences                    # Create host preferences
+GET    /api/categories/preferences/{company_id}      # Get host preferences
+PUT    /api/categories/preferences/{preference_id}   # Update preferences
+DELETE /api/categories/preferences/{preference_id}   # Delete preferences
+```
+
+### Authentication Flow
+```bash
+POST   /api/auth/token           # Login
+GET    /api/auth/me              # Get current user
+GET    /api/auth/me/with-roles   # Get user with roles and companies
+POST   /api/auth/switch-role     # Switch active role/company
+```
+
 ---
-**Last Updated**: 2025-08-28
-**Enterprise Architect**: Claude Code Analysis
-**Status**: Development Phase - Critical Issues Identified
+**Last Updated**: 2025-08-31
+**Status**: ✅ Security Issues Resolved - Ready for Production Testing
+**Next Phase**: Deployment and Monitoring Setup

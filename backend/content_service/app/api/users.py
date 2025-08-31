@@ -78,8 +78,8 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
                             "company_id": company_id or "",
                             "role_id": role_id or "",
                             "role": role.get("role_group", "") if role else "",
-                            "role_name": role.get("name", "") if role else "Unknown Role",
-                            "company_name": company.get("name", "Unknown") if company else "Unknown Company",
+                            "role_name": role.get("name", "") if role else "",
+                            "company_name": company.get("name") if company else None,
                             "is_default": ur_data.get("is_default", False),
                             "status": ur_data.get("status", "active"),
                             "created_at": str(ur_data.get("created_at", "")),
@@ -185,7 +185,7 @@ async def get_user(user_id: str, current_user: dict = Depends(get_current_user_w
                         "role_id": ur_data.get("role_id"),
                         "role": role.get("role_group", ""),
                         "role_name": role.get("name", ""),
-                        "company_name": company.get("name", "Unknown"),
+                        "company_name": company.get("name") or None,
                         "is_default": ur_data.get("is_default", False),
                         "status": ur_data.get("status", "active"),
                         "created_at": ur_data.get("created_at", ""),
@@ -247,7 +247,7 @@ async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_
             roles_data = []
             for role_id, role_data in role_store.items():
                 company = company_store.get(role_data.get("company_id"), {})
-                company_name = "System" if role_data.get("company_id") == "global" else company.get("name", "Unknown")
+                company_name = "System" if role_data.get("company_id") == "global" else company.get("name") or None
                 
                 roles_data.append({
                     "id": role_id,
@@ -271,7 +271,7 @@ async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_
                     if company_id and company_id != "global":
                         company = await repo.get_company(company_id)
                         if company:
-                            company_name = company.get("name", "Unknown")
+                            company_name = company.get("name") or None or None
                     
                     role_item = {
                         "id": role_id,

@@ -12,6 +12,9 @@ from .events import router as events_router
 from .registration import router as registration_router
 from .screens import router as screens_router
 from .company_applications import router as company_applications_router
+from .device import router as device_router
+from .categories import router as categories_router
+from .websocket import router as websocket_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -25,3 +28,6 @@ api_router.include_router(roles_router)
 api_router.include_router(events_router)
 api_router.include_router(screens_router)
 api_router.include_router(company_applications_router)
+api_router.include_router(device_router)
+api_router.include_router(categories_router)
+api_router.include_router(websocket_router)

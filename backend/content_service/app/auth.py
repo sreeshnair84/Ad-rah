@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 
@@ -8,40 +9,81 @@ from jose import JWTError, jwt
 try:
     from passlib.context import CryptContext
     _PASSLIB_AVAILABLE = True
-except Exception:
+except ImportError as e:
     CryptContext = None
     _PASSLIB_AVAILABLE = False
+    logging.error(f"Passlib not available: {e}. Password hashing will use fallback SHA256.")
 import hashlib
 
 from app.repo import repo
 from app.models import User, UserRole, Company
+from app.config import settings
 
-# JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_ME_REPLACE_WITH_SECURE_SECRET")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+logger = logging.getLogger(__name__)
 
+# JWT Configuration from settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+
+# Initialize password context with proper error handling
 if _PASSLIB_AVAILABLE:
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    try:
+        pwd_context = CryptContext(
+            schemes=["bcrypt"], 
+            deprecated="auto",
+            bcrypt__rounds=12  # Increased rounds for better security
+        )
+        logger.info("Bcrypt password hashing initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize bcrypt: {e}. Using fallback hashing.")
+        pwd_context = None
+        _PASSLIB_AVAILABLE = False
 else:
     pwd_context = None
+    logger.warning("SECURITY WARNING: Using fallback SHA256 password hashing. Install passlib[bcrypt] for production!")
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 
 def _simple_hash(pw: str) -> str:
-    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
+    """Fallback password hashing using SHA256 with salt (NOT recommended for production)"""
+    # Add a simple salt for basic security improvement
+    salt = "openkiosk_salt_2024"  # In production, use per-user random salts
+    return hashlib.sha256((salt + pw).encode("utf-8")).hexdigest()
 
 
-def verify_password(plain_password, hashed_password):
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash"""
+    if not plain_password or not hashed_password:
+        return False
+        
     if pwd_context:
-        return pwd_context.verify(plain_password, hashed_password)
-    # fallback simple comparison using sha256
+        try:
+            return pwd_context.verify(plain_password, hashed_password)
+        except Exception as e:
+            logger.error(f"Bcrypt verification failed: {e}. Falling back to simple hash.")
+    
+    # Fallback to simple hash comparison
     return _simple_hash(plain_password) == hashed_password
 
 
-def get_password_hash(password):
+def get_password_hash(password: str) -> str:
+    """Hash a password using the best available method"""
+    if not password:
+        raise ValueError("Password cannot be empty")
+        
     if pwd_context:
-        return pwd_context.hash(password)
+        try:
+            return pwd_context.hash(password)
+        except Exception as e:
+            logger.error(f"Bcrypt hashing failed: {e}. Using fallback hash.")
+    
+    # Log security warning for fallback
+    if settings.ENVIRONMENT == "production":
+        logger.critical("CRITICAL: Using fallback password hashing in production!")
+    
     return _simple_hash(password)
 
 
@@ -321,259 +363,230 @@ def require_permission(company_id: str, screen: str, permission: str):
 
 # Initialize with some default data for development
 async def init_default_data():
-    """Initialize default companies and users for development"""
+    """Initialize default data for development by calling the seed script"""
     try:
         print("Starting default data initialization...")
-        
-        # Check if default data already exists
+
+        # Check if any data already exists
         existing_companies = await repo.list_companies()
         existing_users = await repo.list_users()
-        
-        # Also check for user roles - if users exist but have no roles, we need to create roles
-        user_roles_exist = False
-        if existing_users:
-            for user in existing_users:
-                user_id = user.get("id")
-                if user_id:
-                    user_roles = await repo.get_user_roles(user_id)
-                    # Check if roles exist and have valid company_id and role_id
-                    if user_roles and any(role.get("company_id") and role.get("role_id") for role in user_roles):
-                        user_roles_exist = True
-                        break
-        
-        if existing_companies and existing_users and user_roles_exist:
-            print(f"Found {len(existing_companies)} existing companies and {len(existing_users)} existing users with roles, skipping initialization")
-            return
-        
-        # Clear any existing incomplete/duplicate data if we're re-initializing
+
         if existing_companies or existing_users:
-            print(f"Clearing existing incomplete data: {len(existing_companies)} companies, {len(existing_users)} users")
-            # Clear existing data to avoid duplicates and conflicts
-            if hasattr(repo, '_store'):
-                # InMemoryRepo - clear stores
-                repo._store.pop("__companies__", None)
-                repo._store.pop("__users__", None) 
-                repo._store.pop("__roles__", None)
-                repo._store.pop("__user_roles__", None)
-                repo._store.pop("__role_permissions__", None)
-            else:
-                # For MongoDB, we could add clearing logic here if needed
-                # For now, let existing_data check handle it
-                pass
-        
-        print(f"Found {len(existing_companies)} companies and {len(existing_users)} users, user roles exist: {user_roles_exist}, proceeding with initialization...")
+            print(f"Found existing data: {len(existing_companies)} companies, {len(existing_users)} users")
+            print("Skipping initialization to preserve existing data")
+            return
 
-        # Create default companies
-        admin_company = Company(
-            name="OpenKiosk Admin",
-            type="HOST",
-            address="Dubai Media City",
-            city="Dubai",
-            country="UAE",
-            email="admin@openkiosk.com",
-            status="active"
-        )
+        print("No existing data found. Running seed script...")
 
-        host_company = Company(
-            name="Dubai Mall Management",
-            type="HOST",
-            address="Financial Centre Road",
-            city="Dubai",
-            country="UAE",
-            phone="+971-4-123-4567",
-            email="admin@dubaill.com",
-            website="https://www.dubaill.com",
-            status="active"
-        )
-
-        advertiser_company = Company(
-            name="Brand Solutions UAE",
-            type="ADVERTISER",
-            address="Business Bay",
-            city="Dubai",
-            country="UAE",
-            phone="+971-4-555-0123",
-            email="contact@brandsolutions.ae",
-            website="https://www.brandsolutions.ae",
-            status="active"
-        )
-
-        admin_company_data = await repo.save_company(admin_company)
-        host_company_data = await repo.save_company(host_company)
-        advertiser_company_data = await repo.save_company(advertiser_company)
-
-        # Create default roles
-        from app.models import Role, RoleGroup, RolePermission, Screen, Permission
-
-        admin_role = Role(
-            name="System Administrator",
-            role_group=RoleGroup.ADMIN,
-            company_id="global",
-            is_default=True,
-            status="active"
-        )
-
-        host_role = Role(
-            name="Host Manager",
-            role_group=RoleGroup.HOST,
-            company_id=host_company_data["id"] if host_company_data else "",
-            is_default=True,
-            status="active"
-        )
-
-        advertiser_role = Role(
-            name="Advertiser Manager",
-            role_group=RoleGroup.ADVERTISER,
-            company_id=advertiser_company_data["id"] if advertiser_company_data else "",
-            is_default=True,
-            status="active"
-        )
-
-        admin_role_data = await repo.save_role(admin_role)
-        host_role_data = await repo.save_role(host_role)
-        advertiser_role_data = await repo.save_role(advertiser_role)
-
-        # Create role permissions for each role and screen
-        from app.rbac_permissions_v2 import create_default_role_permissions
-        await create_default_role_permissions(admin_role_data["id"], host_role_data["id"], advertiser_role_data["id"])
-
-        # Create default users
-        admin_user = User(
-            name="System Admin",
-            email="admin@openkiosk.com",
-            hashed_password=get_password_hash("adminpass"),
-            status="active"
-        )
-
-        host_user = User(
-            name="Host Manager",
-            email="host@openkiosk.com",
-            hashed_password=get_password_hash("hostpass"),
-            status="active"
-        )
-
-        advertiser_user = User(
-            name="Advertiser Manager",
-            email="advertiser@openkiosk.com",
-            hashed_password=get_password_hash("advertiserpass"),
-            status="active"
-        )
-
-        await repo.save_user(admin_user)
-        await repo.save_user(host_user)
-        await repo.save_user(advertiser_user)
-
-        # Refresh user data with IDs
-        admin_user_data = await repo.get_user_by_email("admin@openkiosk.com")
-        host_user_data = await repo.get_user_by_email("host@openkiosk.com")
-        advertiser_user_data = await repo.get_user_by_email("advertiser@openkiosk.com")
-
-        # Create user roles
-        admin_user_role = UserRole(
-            user_id=admin_user_data["id"] if admin_user_data else "",
-            company_id="global",
-            role_id=admin_role_data["id"] if admin_role_data else "",
-            is_default=True,
-            status="active"
-        )
-
-        host_user_role = UserRole(
-            user_id=host_user_data["id"] if host_user_data else "",
-            company_id=host_company_data["id"] if host_company_data else "",
-            role_id=host_role_data["id"] if host_role_data else "",
-            is_default=True,
-            status="active"
-        )
-
-        advertiser_user_role = UserRole(
-            user_id=advertiser_user_data["id"] if advertiser_user_data else "",
-            company_id=advertiser_company_data["id"] if advertiser_company_data else "",
-            role_id=advertiser_role_data["id"] if advertiser_role_data else "",
-            is_default=True,
-            status="active"
-        )
-
-        await repo.save_user_role(admin_user_role)
-        await repo.save_user_role(host_user_role)
-        await repo.save_user_role(advertiser_user_role)
-
-        # Create default content meta and metadata for development
-        from app.models import ContentMeta, ContentMetadata, Review
-        from datetime import datetime, timedelta
-
-        # Mock content for host user
+        # Import and run the seed functions directly
         try:
-            content_meta1 = ContentMeta(
-                id=None,
-                owner_id=host_user_data["id"] if host_user_data else "",
-                filename="sample_ad.mp4",
-                content_type="video/mp4",
-                size=1024000,
-                status="approved"
-            )
+            import sys
+            import os
+            from datetime import datetime, timedelta
+            import uuid
+            import secrets
+            import string
 
-            content_meta2 = ContentMeta(
-                id=None,
-                owner_id=advertiser_user_data["id"] if advertiser_user_data else "",
-                filename="banner.jpg",
-                content_type="image/jpeg",
-                size=512000,
-                status="approved"
-            )
+            # Import seed functions
+            from app.models import Company, User, Role, RolePermission, UserRole, DeviceRegistrationKey
 
-            await repo.save_content_meta(content_meta1)
-            await repo.save_content_meta(content_meta2)
+            def generate_secure_key(length: int = 16) -> str:
+                """Generate a secure random registration key"""
+                alphabet = string.ascii_letters + string.digits
+                return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-            # Refresh content meta with IDs
-            content_meta1_data = await repo.get_content_meta(content_meta1.id) if content_meta1.id else None
-            content_meta2_data = await repo.get_content_meta(content_meta2.id) if content_meta2.id else None
+            def generate_organization_code() -> str:
+                """Generate a unique organization code for a company"""
+                return f"ORG-{uuid.uuid4().hex[:8].upper()}"
 
-            # Create content metadata
-            content_metadata1 = ContentMetadata(
-                title="Dubai Mall Advertisement",
-                description="Promotional video for Dubai Mall showcasing latest offers",
-                owner_id=host_user_data["id"] if host_user_data else "",
-                categories=["advertisement", "shopping"],
-                start_time=datetime.utcnow(),
-                end_time=datetime.utcnow() + timedelta(days=7),
-                tags=["dubai", "mall", "offers"]
-            )
+            # Create companies
+            companies_data = [
+                {
+                    "name": "TechCorp Solutions",
+                    "type": "HOST",
+                    "address": "123 Business Ave, New York, NY 10001",
+                    "city": "New York",
+                    "country": "USA",
+                    "phone": "+1-555-0101",
+                    "email": "contact@techcorp.com",
+                    "website": "https://techcorp.com",
+                    "organization_code": generate_organization_code(),
+                    "status": "active",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                },
+                {
+                    "name": "Creative Ads Inc",
+                    "type": "ADVERTISER",
+                    "address": "456 Marketing St, San Francisco, CA 94105",
+                    "city": "San Francisco",
+                    "country": "USA",
+                    "phone": "+1-555-0102",
+                    "email": "hello@creativeads.com",
+                    "website": "https://creativeads.com",
+                    "organization_code": generate_organization_code(),
+                    "status": "active",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }
+            ]
 
-            content_metadata2 = ContentMetadata(
-                title="Brand Solutions Banner",
-                description="Banner advertisement for Brand Solutions UAE",
-                owner_id=advertiser_user_data["id"] if advertiser_user_data else "",
-                categories=["banner", "advertisement"],
-                start_time=datetime.utcnow(),
-                end_time=datetime.utcnow() + timedelta(days=30),
-                tags=["brand", "solutions", "uae"]
-            )
+            created_companies = []
+            for company_data in companies_data:
+                try:
+                    company = Company(**company_data)
+                    saved = await repo.save_company(company)
+                    created_companies.append(saved)
+                    print(f"  ✓ Created company: {company.name} (Org Code: {company.organization_code})")
+                except Exception as e:
+                    print(f"  ✗ Failed to create company {company_data['name']}: {e}")
 
-            await repo.save(content_metadata1)
-            await repo.save(content_metadata2)
+            # Create roles
+            roles_data = [
+                {
+                    "name": "System Administrator",
+                    "role_group": "ADMIN",
+                    "company_id": "global",
+                    "is_default": True,
+                    "status": "active",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                },
+                {
+                    "name": "TechCorp Solutions Manager",
+                    "role_group": "HOST",
+                    "company_id": created_companies[0]["id"] if created_companies else "1-c",
+                    "is_default": True,
+                    "status": "active",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                },
+                {
+                    "name": "Creative Ads Inc Director",
+                    "role_group": "ADVERTISER",
+                    "company_id": created_companies[1]["id"] if len(created_companies) > 1 else "2-c",
+                    "is_default": True,
+                    "status": "active",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }
+            ]
 
-            # Create some reviews
-            review1 = Review(
-                content_id=content_metadata1.id if content_metadata1.id else "",
-                ai_confidence=0.95,
-                action="approved",
-                reviewer_id=admin_user_data["id"] if admin_user_data else "",
-                notes="High quality promotional content"
-            )
+            for role_data in roles_data:
+                try:
+                    role = Role(**role_data)
+                    await repo.save_role(role)
+                    print(f"  ✓ Created role: {role.name}")
+                except Exception as e:
+                    print(f"  ✗ Failed to create role {role_data['name']}: {e}")
 
-            review2 = Review(
-                content_id=content_metadata2.id if content_metadata2.id else "",
-                ai_confidence=0.88,
-                action="approved",
-                reviewer_id=admin_user_data["id"] if admin_user_data else "",
-                notes="Good banner design"
-            )
+            # Create users
+            users_data = [
+                {
+                    "name": "System Admin",
+                    "email": "admin@openkiosk.com",
+                    "phone": "+1-555-0001",
+                    "hashed_password": get_password_hash("adminpass"),
+                    "status": "active",
+                    "email_verified": True,
+                    "last_login": datetime.utcnow()
+                },
+                {
+                    "name": "TechCorp Manager",
+                    "email": "host@techcorpsolutions.com",
+                    "phone": "+1-555-0100",
+                    "hashed_password": get_password_hash("hostpass"),
+                    "status": "active",
+                    "email_verified": True,
+                    "last_login": None
+                },
+                {
+                    "name": "Creative Director",
+                    "email": "director@creativeadsinc.com",
+                    "phone": "+1-555-0200",
+                    "hashed_password": get_password_hash("advertiserpass"),
+                    "status": "active",
+                    "email_verified": True,
+                    "last_login": None
+                }
+            ]
 
-            await repo.save_review(review1.model_dump())
-            await repo.save_review(review2.model_dump())
+            created_users = []
+            for user_data in users_data:
+                try:
+                    user = User(**user_data)
+                    saved = await repo.save_user(user)
+                    created_users.append(saved)
+                    print(f"  ✓ Created user: {user.email}")
+                except Exception as e:
+                    print(f"  ✗ Failed to create user {user_data['email']}: {e}")
+
+            # Create user roles
+            user_roles_data = [
+                {
+                    "user_id": created_users[0]["id"] if created_users else "1-u",
+                    "company_id": "global",
+                    "role_id": "1-r",
+                    "is_default": True,
+                    "status": "active"
+                },
+                {
+                    "user_id": created_users[1]["id"] if len(created_users) > 1 else "2-u",
+                    "company_id": created_companies[0]["id"] if created_companies else "1-c",
+                    "role_id": "2-r",
+                    "is_default": True,
+                    "status": "active"
+                },
+                {
+                    "user_id": created_users[2]["id"] if len(created_users) > 2 else "3-u",
+                    "company_id": created_companies[1]["id"] if len(created_companies) > 1 else "2-c",
+                    "role_id": "3-r",
+                    "is_default": True,
+                    "status": "active"
+                }
+            ]
+
+            for user_role_data in user_roles_data:
+                try:
+                    user_role = UserRole(**user_role_data)
+                    await repo.save_user_role(user_role)
+                    print(f"  ✓ Created user role assignment")
+                except Exception as e:
+                    print(f"  ✗ Failed to create user role: {e}")
+
+            # Create registration keys
+            for company in created_companies:
+                try:
+                    key_data = {
+                        "id": str(uuid.uuid4()),
+                        "key": generate_secure_key(),
+                        "company_id": company["id"],
+                        "created_by": created_users[0]["id"] if created_users else "1-u",
+                        "expires_at": datetime.utcnow() + timedelta(days=30),
+                        "used": False,
+                        "used_by_device": None
+                    }
+
+                    key = DeviceRegistrationKey(**key_data)
+                    await repo.save_device_registration_key(key)
+                    print(f"  ✓ Created registration key for {company['name']}: {key_data['key']}")
+                except Exception as e:
+                    print(f"  ✗ Failed to create registration key for {company['name']}: {e}")
+
+            print(f"✅ Default data initialization completed!")
+            print(f"   Companies: {len(created_companies)}")
+            print(f"   Users: {len(created_users)}")
+            print("\n🔐 Login Credentials:")
+            print("   Admin: admin@openkiosk.com / adminpass")
+            print("   Host: host@techcorpsolutions.com / hostpass")
+            print("   Advertiser: director@creativeadsinc.com / advertiserpass")
+
         except Exception as e:
-            print(f"Error creating content data: {e}")
-            # Continue with user/role setup even if content creation fails
+            print(f"Error running seed initialization: {e}")
+            import traceback
+            traceback.print_exc()
 
     except Exception as e:
-        print(f"Error initializing default data: {e}")
+        print(f"Error during default data initialization: {e}")
+        import traceback
+        traceback.print_exc()

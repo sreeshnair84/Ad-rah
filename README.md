@@ -2,20 +2,54 @@
 
 A comprehensive content management and digital signage platform built with modern technologies.
 
-## Overview
+## Key Features
 
-The Adārah platform provides a complete solution for managing digital content across multiple locations, featuring AI-powered content moderation, multi-tenant architecture, and seamless integration with popular digital signage systems.
+### 🔐 **Secure Multi-Tenant Architecture**
+- **Organization Codes**: Unique identifiers for each company (ORG-XXXXXXX format)
+- **Registration Keys**: Secure 16-character keys for device registration
+- **Role-Based Access Control**: Complete RBAC with granular permissions
+- **Company Isolation**: Full data separation between tenants
 
-## Tech Stack
+### 📊 **Content Management**
+- **AI-Powered Moderation**: Azure AI Content Safety integration
+- **Multi-Format Support**: Images, videos, and documents
+- **Automated Workflows**: Event-driven content processing
+- **Real-time Status Updates**: Live content approval tracking
 
-- **Backend**: Python 3.12+ with FastAPI
-- **Frontend**: Next.js 15 with TypeScript and Tailwind CSS
-- **Database**: MongoDB
-- **Storage**: Azure Blob Storage (with Azurite emulator for local development)
-- **Message Queue**: Azure Service Bus
-- **AI Services**: Azure AI Content Safety
-- **Infrastructure**: Azure Bicep templates
-- **Containerization**: Docker & Docker Compose
+### 🖥️ **Digital Signage Integration**
+- **Device Registration**: Secure device onboarding with org codes and keys
+- **Multi-Device Support**: Manage thousands of screens across locations
+- **Real-time Content Delivery**: Instant content updates to registered devices
+- **Performance Monitoring**: Device health and uptime tracking
+
+### 👥 **User Management**
+- **Multi-Role Support**: Admin, Host Manager, Screen Operator, Advertiser roles
+- **Company-Based Access**: Users belong to specific companies with appropriate permissions
+- **Secure Authentication**: JWT-based auth with bcrypt password hashing
+- **Role Switching**: Users can switch between their assigned roles
+
+## Security & Architecture
+
+### 🔒 **Security Features**
+- **Secure Key Generation**: Cryptographically secure organization codes and registration keys
+- **JWT Authentication**: Token-based authentication with configurable expiration
+- **Password Hashing**: bcrypt-based password security
+- **Role-Based Access Control**: Granular permissions system
+- **Multi-Tenant Isolation**: Complete data separation between companies
+
+### 🏗️ **Architecture Highlights**
+- **Event-Driven Processing**: Azure Service Bus for reliable message processing
+- **Microservices Design**: Modular backend services with clear separation of concerns
+- **Scalable Storage**: Azure Blob Storage with local Azurite emulator
+- **AI Integration**: Azure AI Content Safety for automated content moderation
+- **Docker Containerization**: Consistent deployment across environments
+
+### 📈 **Production Readiness**
+- **Infrastructure as Code**: Azure Bicep templates for automated deployment
+- **Monitoring & Logging**: Comprehensive logging and health checks
+- **Database Optimization**: Efficient MongoDB queries and indexing
+- **API Documentation**: Auto-generated Swagger/OpenAPI documentation
+- **Testing Framework**: Comprehensive test suite with pytest
 
 ## Prerequisites
 
@@ -26,50 +60,48 @@ Before you begin, ensure you have the following installed:
 - **Docker & Docker Compose** - [Install Docker](https://docs.docker.com/get-docker/)
 - **Git** - [Download from git-scm.com](https://git-scm.com)
 
-## Quick Start (Recommended)
+## Data Seeding & Development Setup
 
-The fastest way to get started is using Docker Compose, which sets up the entire development environment:
+### Automated Data Seeding
 
-### 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd open_kiosk
-```
-
-### 2. Start Backend Services
+The platform includes a comprehensive seeding system for development and testing:
 
 ```bash
-# Navigate to the backend service
+# After starting the backend services
 cd backend/content_service
 
-# Start all services (backend, database, storage emulator)
-docker-compose up -d
-
-# View logs to see startup progress
-docker-compose logs -f
+# Run the seeding script
+python seed_data.py
 ```
 
-This will start:
-- **Content Service** (FastAPI) on `http://localhost:8000`
-- **MongoDB** on port `27017`
-- **Azurite** (Azure Storage emulator) on ports `10000-10002`
-- **Event Processor** (background service for AI moderation)
+**What gets created:**
+- ✅ 4 sample companies with unique organization codes
+- ✅ 9 users with proper role assignments
+- ✅ Secure registration keys for device registration
+- ✅ Complete RBAC permissions setup
+- ✅ Sample content and metadata
 
-### 3. Start Frontend
+### Development Workflow
 
-```bash
-# Open a new terminal and navigate to frontend directory
-cd frontend
+1. **Start Services**: `docker-compose up -d` (from backend/content_service)
+2. **Seed Data**: `python seed_data.py`
+3. **Start Frontend**: `npm run dev` (from frontend directory)
+4. **Access Application**: 
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
 
-# Install dependencies
-npm install
+### Testing the Platform
 
-# Start development server
-npm run dev
-```
+**Login Credentials:**
+- **Admin**: admin@openkiosk.com / adminpass
+- **Host**: host@techcorpsolutions.com / hostpass
+- **Advertiser**: director@creativeadsinc.com / advertiserpass
 
-The frontend will be available at `http://localhost:3000` and automatically connects to the backend API.
+**Device Registration:**
+- Use organization codes (ORG-XXXXXXX) and registration keys from seeding output
+- Test multi-tenant isolation and role-based permissions
+- Verify content upload and AI moderation workflows
 
 ## Manual Setup (Alternative)
 
@@ -170,22 +202,52 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## Default Test Data
 
-When you start the backend for the first time, it automatically creates mock data:
+The application includes a comprehensive data seeding system that creates production-ready test data:
+
+### Data Seeding
+
+Run the seeding script to populate the database with test data:
+
+```bash
+# Navigate to backend service
+cd backend/content_service
+
+# Run the seeding script
+python seed_data.py
+```
+
+This creates:
+- **4 Sample Companies** with unique organization codes (ORG-XXXXXXX format)
+- **9 Users** with proper role assignments across companies
+- **Secure Registration Keys** for device registration (16-character keys)
+- **Complete RBAC Setup** with permissions and role assignments
 
 ### Default Companies
-- **OpenKiosk Admin** (HOST)
-- **Dubai Mall Management** (HOST)
-- **Brand Solutions UAE** (ADVERTISER)
+- **TechCorp Solutions** (HOST) - ORG-XXXXXXX
+- **Creative Ads Inc** (ADVERTISER) - ORG-XXXXXXX
+- **Digital Displays LLC** (HOST) - ORG-XXXXXXX
+- **AdVantage Media** (ADVERTISER) - ORG-XXXXXXX
 
 ### Default Users
 - `admin@openkiosk.com` / `adminpass` (System Administrator)
-- `host@openkiosk.com` / `hostpass` (Host Manager)
-- `advertiser@openkiosk.com` / `advertiserpass` (Advertiser Manager)
+- `host@techcorpsolutions.com` / `hostpass` (Host Manager)
+- `operator@techcorpsolutions.com` / `hostpass` (Screen Operator)
+- `director@creativeadsinc.com` / `advertiserpass` (Advertiser Director)
+- `creator@creativeadsinc.com` / `advertiserpass` (Content Creator)
 
-### Sample Content
-- Dubai Mall promotional video advertisement
-- Brand Solutions UAE banner advertisement
-- Associated metadata and AI moderation reviews
+### Registration Keys
+Each company gets a unique 16-character registration key for device registration:
+- TechCorp Solutions: [Generated key]
+- Creative Ads Inc: [Generated key]
+- Digital Displays LLC: [Generated key]
+- AdVantage Media: [Generated key]
+
+### Organization Codes
+Each company has a unique organization code used for device registration:
+- TechCorp Solutions: ORG-XXXXXXX
+- Creative Ads Inc: ORG-XXXXXXX
+- Digital Displays LLC: ORG-XXXXXXX
+- AdVantage Media: ORG-XXXXXXX
 
 ## Running Tests
 
@@ -247,19 +309,34 @@ Once the backend is running, you can access:
 ├── backend/
 │   └── content_service/          # FastAPI microservice
 │       ├── app/                  # Application code
-│       ├── tests/                # Unit tests
+│       │   ├── api/              # API routes and endpoints
+│       │   ├── auth.py           # Authentication & authorization
+│       │   ├── models.py         # Pydantic data models
+│       │   ├── repo.py           # Data repository layer
+│       │   └── routes/           # Additional route handlers
+│       ├── seed_data.py          # Database seeding script
+│       ├── tests/                # Unit and integration tests
 │       ├── data/                 # Local data storage
-│       └── Dockerfile            # Docker configuration
+│       ├── requirements.txt      # Python dependencies
+│       ├── Dockerfile            # Docker configuration
+│       └── docker-compose.yml    # Multi-service orchestration
 ├── frontend/                     # Next.js application
 │   ├── src/
-│   │   ├── app/                  # Next.js app router
+│   │   ├── app/                  # Next.js app router pages
 │   │   ├── components/           # React components
+│   │   ├── hooks/                # Custom React hooks
 │   │   └── lib/                  # Utility libraries
-│   └── public/                   # Static assets
+│   ├── package.json              # Node.js dependencies
+│   └── next.config.ts            # Next.js configuration
+├── flutter/                      # Flutter mobile app
+│   └── adarah_digital_signage/   # Digital signage kiosk app
 ├── infra/                        # Infrastructure as Code
 │   └── main.bicep               # Azure Bicep templates
 ├── docs/                        # Documentation
-└── images/                      # Project images
+│   ├── api.md                   # API documentation
+│   ├── ARCHITECTURE.md          # System architecture
+│   └── *.md                     # Additional docs
+└── README.md                    # This file
 ```
 
 ## Development Workflow

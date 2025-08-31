@@ -137,7 +137,7 @@ async def list_roles(
             for role_id, role_data in roles_store.items():
                 # Get company name
                 company = companies_store.get(role_data.get("company_id"), {})
-                company_name = company.get("name", "Unknown Company")
+                company_name = company.get("name") or None
                 
                 # Count users with this role
                 user_count = sum(1 for ur in user_roles_store.values() 
@@ -169,7 +169,7 @@ async def list_roles(
                 async for role_data in roles_cursor:
                     # Get company name
                     company = await repo.get_company(role_data.get("company_id"))
-                    company_name = company.get("name", "Unknown Company") if company else "Unknown Company"
+                    company_name = company.get("name") if company else None
                     
                     # Count users with this role
                     user_count = await repo._user_role_col.count_documents({

@@ -6,42 +6,20 @@ export function useAds() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock data - in real app this would come from API
-    const mockAds: Ad[] = [
-      {
-        id: '1',
-        type: 'image',
-        category_id: 'food',
-        business_id: 'biz1',
-        company_id: 'company1',
-        status: 'approved',
-        file_path: '/images/sample.jpg',
-        metadata: { title: 'Delicious Pizza', description: 'Hot and fresh pizza' }
-      },
-      {
-        id: '2',
-        type: 'video',
-        category_id: 'retail',
-        business_id: 'biz1',
-        company_id: 'company1',
-        status: 'pending',
-        file_path: '/images/sample.mp4',
-        metadata: { title: 'Fashion Sale', description: '50% off on all items' }
-      },
-      {
-        id: '3',
-        type: 'image',
-        category_id: 'entertainment',
-        business_id: 'biz1',
-        company_id: 'company1',
-        status: 'rejected',
-        file_path: '/images/sample2.jpg',
-        metadata: { title: 'Movie Night', description: 'Watch latest movies' }
+    // TODO: Replace with actual API call to fetch ads
+    const fetchAds = async () => {
+      try {
+        // const response = await fetch('/api/ads');
+        // const data = await response.json();
+        // setAds(data.ads);
+      } catch (error) {
+        console.error('Failed to fetch ads:', error);
+      } finally {
+        setLoading(false);
       }
-    ];
+    };
 
-    setAds(mockAds);
-    setLoading(false);
+    fetchAds();
   }, []);
 
   const getStatusBadge = (status: string) => {

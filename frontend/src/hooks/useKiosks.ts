@@ -28,56 +28,21 @@ export function useKiosks() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock data - in real app this would come from API
-    const mockKiosks: Kiosk[] = [
-      {
-        id: 'KSK-001',
-        name: 'Main Lobby Screen',
-        location: 'Hotel Lobby - Dubai',
-        status: 'online',
-        lastSeen: '2025-08-27T10:30:00Z',
-        currentAd: 'Summer Pizza Deal',
-        uptime: '99.8%'
-      },
-      {
-        id: 'KSK-002',
-        name: 'Restaurant Display',
-        location: 'Restaurant Area - Dubai',
-        status: 'online',
-        lastSeen: '2025-08-27T10:25:00Z',
-        currentAd: 'Fashion Sale',
-        uptime: '98.5%'
-      },
-      {
-        id: 'KSK-003',
-        name: 'Elevator Screen',
-        location: 'Elevator Bank - Dubai',
-        status: 'offline',
-        lastSeen: '2025-08-26T18:45:00Z',
-        currentAd: 'No Ad',
-        uptime: '95.2%'
-      },
-      {
-        id: 'KSK-004',
-        name: 'Conference Room',
-        location: 'Meeting Room A - Dubai',
-        status: 'maintenance',
-        lastSeen: '2025-08-27T09:15:00Z',
-        currentAd: 'Restaurant Special',
-        uptime: '97.1%'
+    // TODO: Replace with actual API call to fetch kiosks data
+    const fetchKiosks = async () => {
+      try {
+        // const response = await fetch('/api/kiosks');
+        // const data = await response.json();
+        // setKiosks(data.kiosks);
+        // setMetrics(data.metrics);
+      } catch (error) {
+        console.error('Failed to fetch kiosks:', error);
+      } finally {
+        setLoading(false);
       }
-    ];
-
-    const mockMetrics: KioskMetrics = {
-      totalKiosks: mockKiosks.length,
-      onlineCount: mockKiosks.filter(k => k.status === 'online').length,
-      offlineCount: mockKiosks.filter(k => k.status === 'offline').length,
-      avgUptime: '97.7%',
     };
 
-    setKiosks(mockKiosks);
-    setMetrics(mockMetrics);
-    setLoading(false);
+    fetchKiosks();
   }, []);
 
   const getStatusBadge = (status: string) => {

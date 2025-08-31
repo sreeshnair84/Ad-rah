@@ -120,12 +120,44 @@ Runs as a background service that:
 ### Health
 - `GET /health` - Service health check
 
-## Demo Users
+## Data Seeding
 
-Default users created on startup:
-- `admin@openkiosk.com` / `adminpass` (ADMIN role)
-- `host@openkiosk.com` / `hostpass` (HOST role)
-- `advertiser@openkiosk.com` / `advertiserpass` (ADVERTISER role)
+The service includes a comprehensive data seeding system for development and testing:
+
+### Running the Seed Script
+
+```pwsh
+# Run the seeding script to populate test data
+python seed_data.py
+```
+
+This creates:
+- **4 Companies** with unique organization codes (ORG-XXXXXXX format)
+- **9 Users** with proper role assignments
+- **Secure Registration Keys** for device registration
+- **Complete RBAC Setup** with permissions
+
+### Default Users
+
+After seeding, these accounts are available:
+- `admin@openkiosk.com` / `adminpass` (System Administrator)
+- `host@techcorpsolutions.com` / `hostpass` (Host Manager)
+- `operator@techcorpsolutions.com` / `hostpass` (Screen Operator)
+- `director@creativeadsinc.com` / `advertiserpass` (Advertiser Director)
+- `creator@creativeadsinc.com` / `advertiserpass` (Content Creator)
+
+### Organization Codes & Registration Keys
+
+Each company gets:
+- **Organization Code**: Unique identifier (ORG-XXXXXXX format)
+- **Registration Key**: Secure 16-character key for device registration
+
+Example:
+```
+Company: TechCorp Solutions
+Org Code: ORG-03B62223
+Reg Key: K6Z8fX7QfOnATpBv
+```
 
 ## Development Workflow
 

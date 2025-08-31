@@ -121,11 +121,23 @@ export default function SignupPage() {
               {loading ? 'Signing up...' : 'Sign Up'}
             </Button>
           </form>
-          <div className="mt-4 text-center">
+          <div className="mt-4 text-center space-y-2">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
               <Link href="/login" className="text-blue-600 hover:underline">
                 Login
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              Registering a device?{' '}
+              <Link href="/device-registration" className="text-blue-600 hover:underline">
+                Device Registration
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              Need to register your company?{' '}
+              <Link href="/company-registration" className="text-blue-600 hover:underline">
+                Company Registration
               </Link>
             </p>
           </div>

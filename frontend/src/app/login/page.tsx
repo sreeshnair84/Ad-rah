@@ -104,8 +104,15 @@ export default function LoginPage() {
   };
 
   const getCompanyDisplayName = (companyId: string) => {
-    // You could fetch company details if needed
-    return companyId;
+    // This function is kept for compatibility but should be removed
+    // Company names should come from the API
+    switch (companyId) {
+      case 'global':
+      case 'system':
+        return 'System';
+      default:
+        return companyId ? `Company ${companyId.slice(-3)}` : 'No Company';
+    }
   };
 
   // Show loading screen during initial authentication check
@@ -327,16 +334,6 @@ export default function LoginPage() {
                 Sign up
               </a>
             </p>
-          </div>
-
-          {/* Demo Credentials */}
-          <div className="mt-6 p-3 bg-blue-50 rounded-lg">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">Demo Accounts:</h4>
-            <div className="space-y-1 text-xs text-blue-700">
-              <div>Admin: admin@openkiosk.com / adminpass</div>
-              <div>Host: host@openkiosk.com / hostpass</div>
-              <div>Advertiser: advertiser@openkiosk.com / advertiserpass</div>
-            </div>
           </div>
         </CardContent>
       </Card>

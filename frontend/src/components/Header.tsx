@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompanies } from '@/hooks/useCompanies';
+import { Company } from '@/types';
 
 interface HeaderProps {
   showSidebarToggle?: boolean;
@@ -69,7 +70,7 @@ export function Header({
     
     // Fallback: try to find in user.companies array if available
     if (user?.companies) {
-      company = user.companies.find(c => c.id === currentRole.company_id);
+      company = user.companies.find(c => c.id === currentRole.company_id) as Company | undefined;
       if (company) return company;
     }
     
@@ -90,14 +91,17 @@ export function Header({
         case 'company_004':
           return 'AdVantage Media';
         default:
-          return companyId ? `Company ${companyId.slice(-3)}` : 'Unknown Company';
+          return companyId ? `Company ${companyId.slice(-3)}` : null;
       }
     };
     
     // If still not found, create a placeholder company object with meaningful names
+    const companyName = getCompanyNameById(currentRole.company_id);
+    if (!companyName) return null;
+    
     return {
       id: currentRole.company_id,
-      name: getCompanyNameById(currentRole.company_id),
+      name: companyName,
       type: currentRole.role === 'ADMIN' ? 'HOST' as const : 'HOST' as const,
       address: '',
       city: '',
@@ -175,10 +179,10 @@ export function Header({
       {/* Right side - Role/Company Info, Notifications and User Menu */}
       <div className="flex items-center space-x-4">
         {/* Current Role and Company */}
-        {currentRole && (
+        {currentRole && currentCompany && (
           <div className="hidden md:flex items-center space-x-2 text-sm">
             <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{currentCompany?.name || 'System'}</span>
+            <span className="font-medium">{currentCompany.name}</span>
             <span className="text-muted-foreground">•</span>
             <Shield className="h-4 w-4 text-muted-foreground" />
             <span>{currentRole.role_name || getRoleDisplayName(currentRole.role)}</span>
@@ -198,34 +202,20 @@ export function Header({
               <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {user.roles.map((role, index) => {
-                // Helper function to get company name by ID
-                const getCompanyNameById = (companyId: string) => {
-                  switch (companyId) {
-                    case '1-c':
-                      return 'OpenKiosk Admin';
-                    case 'global':
-                    case 'system':
-                      return 'System';
-                    case 'company_001':
-                      return 'TechCorp Solutions';
-                    case 'company_002':
-                      return 'Creative Ads Inc';
-                    case 'company_003':
-                      return 'Digital Displays LLC';
-                    case 'company_004':
-                      return 'AdVantage Media';
-                    default:
-                      return companyId ? `Company ${companyId.slice(-3)}` : 'Unknown Company';
-                  }
-                };
-                
-                // Try to find company in companies array first, then user.companies, then use fallback
+    // Helper function to get company name by ID - simplified without hardcoded data
+    const getCompanyNameById = (companyId: string) => {
+      // Return a generic name based on company ID
+      return companyId ? `Company ${companyId.slice(-3)}` : null;
+    };                // Try to find company in companies array first, then user.companies, then use fallback
                 let company = companies.find(c => c.id === role.company_id);
                 if (!company && user.companies) {
-                  company = user.companies.find(c => c.id === role.company_id);
+                  company = user.companies.find(c => c.id === role.company_id) as Company | undefined;
                 }
                 
                 const companyName = company?.name || getCompanyNameById(role.company_id);
+                
+                // Skip rendering if no company name (for admin users without company)
+                if (!companyName) return null;
                    
                 const isActive = (role.company_id === user.active_company && role.role_id === user.active_role) ||
                                  (role.is_default && !user.active_company);

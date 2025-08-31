@@ -137,7 +137,44 @@ Step 3: Success animation and redirect
 
 ## 🚀 **NEXT PHASE DEVELOPMENT ROADMAP**
 
-### **Phase 1: Content Overlay System (Week 1)**
+### **Phase 1: Flutter Digital Signage App Foundation (Week 1-2)**
+```typescript
+// Flutter Project Structure
+lib/
+├── screens/
+│   ├── setup_registration_screen.dart
+│   ├── main_display_screen.dart
+│   ├── interactive_screen.dart
+│   ├── status_diagnostics_screen.dart
+│   └── error_offline_screen.dart
+├── services/
+│   ├── api_service.dart
+│   ├── content_sync_service.dart
+│   ├── analytics_service.dart
+│   ├── nfc_service.dart
+│   └── bluetooth_service.dart
+├── models/
+│   ├── device_info.dart
+│   ├── content_item.dart
+│   └── analytics_event.dart
+├── widgets/
+│   ├── qr_scanner.dart
+│   ├── content_player.dart
+│   └── system_monitor.dart
+└── utils/
+    ├── constants.dart
+    ├── helpers.dart
+    └── storage.dart
+```
+
+**Required Components:**
+- Flutter project initialization with Android support
+- Core dependencies installation and configuration
+- Basic screen navigation framework
+- API service layer setup
+- Local storage and secure storage implementation
+
+### **Phase 2: Core Screen Implementation (Week 3-4)**
 ```typescript
 // Screen Layout Designer
 interface Screen {
@@ -182,7 +219,87 @@ interface DigitalTwin {
 - Content rendering engine
 - Performance simulation tools
 
-### **Phase 3: Advanced Content Features (Week 3)**
+### **Phase 3: Flutter Digital Signage App (Week 3-6)**
+
+#### **Flutter Project Setup (Week 3)**
+```yaml
+# pubspec.yaml dependencies
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.4.0                    # HTTP client
+  flutter_riverpod: ^2.4.9       # State management
+  flutter_secure_storage: ^9.0.0 # Secure storage
+  video_player: ^2.8.2           # Video playback
+  nfc_manager: ^3.4.0            # NFC support
+  flutter_blue_plus: ^1.32.0     # Bluetooth
+  qr_code_scanner: ^1.0.1        # QR scanning
+  cached_network_image: ^3.3.0   # Image caching
+  connectivity_plus: ^5.0.2      # Network monitoring
+```
+
+**Setup Tasks:**
+- Initialize Flutter project with Android support
+- Configure Android SDK for TV/tablet/kiosk targets
+- Implement Material Design 3 theming
+- Set up multi-language support (Arabic/English)
+- Configure state management with Riverpod
+
+#### **Core Screen Development (Week 4-5)**
+```dart
+// Screen Architecture
+abstract class BaseScreen extends StatefulWidget {
+  const BaseScreen({super.key});
+  
+  @override
+  State<BaseScreen> createState();
+}
+
+class ScreenManager {
+  static const String setup = '/setup';
+  static const String main = '/main';
+  static const String interactive = '/interactive';
+  static const String status = '/status';
+  static const String error = '/error';
+}
+```
+
+**Screen Implementation:**
+- **Setup Screen**: QR scanning, device registration, secure storage
+- **Main Display**: Full-screen content with ExoPlayer, multi-zone layout
+- **Interactive Screen**: NFC/Bluetooth detection, gamification
+- **Status Screen**: System monitoring, diagnostics, admin controls
+- **Error Screen**: Offline mode, network recovery, troubleshooting
+
+#### **Background Services (Week 6)**
+```dart
+// Background Service Architecture
+class ContentSyncService extends ChangeNotifier {
+  Timer? _syncTimer;
+  
+  void startSync() {
+    _syncTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (timer) => _performSync()
+    );
+  }
+  
+  Future<void> _performSync() async {
+    // Differential sync logic
+    // Analytics upload
+    // Digital twin updates
+  }
+}
+```
+
+**Service Components:**
+- Content synchronization (5-minute intervals)
+- Analytics collection and batch upload
+- Digital twin device mirroring
+- Network-aware bandwidth management
+- Battery optimization for extended operation
+
+### **Phase 4: Advanced Content Features & Testing (Week 7-8)**
 - **Content Scheduling**: Calendar-based content planning
 - **Multi-screen Sync**: Synchronized content across locations
 - **A/B Testing**: Content performance optimization

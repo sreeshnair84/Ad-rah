@@ -110,7 +110,57 @@
 - [ ] Role hierarchy logic
 - [ ] Audit trail for role changes
 
-### **Phase 2: Registration & Approval Workflows (Week 2-3)**
+### **Phase 2: Flutter Digital Signage App (Week 3-6)**
+
+#### 2.1 Flutter Setup & Registration Screen
+- [ ] QR code scanning with qr_code_scanner package
+- [ ] Device registration API integration
+- [ ] Secure credential storage with flutter_secure_storage
+- [ ] Network status monitoring and auto-reconnection
+- [ ] Bilingual UI (Arabic/English) support
+- [ ] Responsive layout for different screen sizes
+
+#### 2.2 Main Display Screen Implementation
+- [ ] Full-screen content rendering with Stack architecture
+- [ ] ExoPlayer integration for Android video playback
+- [ ] Dynamic layout support with multi-zone display
+- [ ] Cached network image loading
+- [ ] Smooth content transitions and animations
+- [ ] Precise timing control (millisecond accuracy)
+
+#### 2.3 Interactive & Game Screen
+- [ ] NFC proximity detection (ISO 14443 A/B support)
+- [ ] Bluetooth LE scanning with iBeacon/Eddystone
+- [ ] Privacy-compliant data anonymization
+- [ ] Gamification features with QR code generation
+- [ ] Touch-optimized controls with haptic feedback
+- [ ] Session duration and engagement tracking
+
+#### 2.4 Status & Diagnostics Screen
+- [ ] Real-time system monitoring (CPU, memory, storage)
+- [ ] Network diagnostics and connectivity tests
+- [ ] Temperature monitoring for thermal management
+- [ ] Content synchronization status display
+- [ ] Admin access with PIN/biometric authentication
+- [ ] Remote management capabilities (wake-on-LAN)
+
+#### 2.5 Error & Offline Mode Screen
+- [ ] Intelligent offline content playback
+- [ ] Network status monitoring with auto-reconnection
+- [ ] Error classification system (CRITICAL/WARNING/INFO)
+- [ ] Graceful degradation strategies
+- [ ] Emergency contact information display
+- [ ] Recovery action suggestions
+
+#### 2.6 Background Services & Synchronization
+- [ ] Content synchronization service (5-minute intervals)
+- [ ] Differential content updates with integrity verification
+- [ ] Analytics collection and batch upload
+- [ ] Digital twin integration for device mirroring
+- [ ] Network-aware synchronization with bandwidth throttling
+- [ ] Background processing with battery optimization
+
+### **Phase 3: Registration & Approval Workflows (Week 7-8)**
 
 #### 2.1 Host Registration System
 - [ ] Host company registration form
@@ -237,6 +287,92 @@ class ContentSchedule(BaseModel):
     recurring: bool
     priority: int
 ```
+
+### Flutter Digital Signage App
+
+#### Flutter Project Setup
+- [ ] Flutter 3.24+ project initialization
+- [ ] Android SDK configuration for TV/tablet support
+- [ ] Material Design 3 theme implementation
+- [ ] Multi-language support (Arabic/English) with flutter_localizations
+- [ ] State management with Provider/Riverpod
+- [ ] Dependency injection setup
+
+#### Core Dependencies
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  # Networking & API
+  dio: ^5.4.0
+  # State Management  
+  flutter_riverpod: ^2.4.9
+  # Storage
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+  # Media Playback
+  video_player: ^2.8.2
+  cached_network_image: ^3.3.0
+  # NFC & Bluetooth
+  nfc_manager: ^3.4.0
+  flutter_blue_plus: ^1.32.0
+  # QR Code
+  qr_code_scanner: ^1.0.1
+  qr_flutter: ^4.1.0
+  # Utils
+  intl: ^0.19.0
+  path_provider: ^2.1.3
+  connectivity_plus: ^5.0.2
+```
+
+#### API Integration Requirements
+- [ ] Device registration endpoints (`POST /api/device/register`)
+- [ ] Content synchronization (`GET /api/content/sync`)
+- [ ] Analytics upload (`POST /api/analytics/events`)
+- [ ] Configuration updates (`GET /api/device/config`)
+- [ ] Heartbeat reporting (`POST /api/device/heartbeat`)
+
+#### Device Management Models
+```dart
+class DeviceInfo {
+  final String deviceId;
+  final String deviceName;
+  final String organizationCode;
+  final LocationData location;
+  final DeviceCapabilities capabilities;
+  final NetworkConfig networkConfig;
+}
+
+class ContentItem {
+  final String contentId;
+  final ContentType contentType;
+  final Duration playbackDuration;
+  final String layoutZoneId;
+  final int priority;
+  final Map<String, dynamic> schedulingRules;
+}
+
+class AnalyticsEvent {
+  final String eventType;
+  final DateTime timestamp;
+  final Map<String, dynamic> data;
+  final String sessionId;
+}
+```
+
+#### Screen Architecture Implementation
+- [ ] Base screen framework with navigation management
+- [ ] Screen state persistence across app restarts
+- [ ] Error boundary implementation for crash recovery
+- [ ] Memory management for large media files
+- [ ] Battery optimization for extended operation
+
+#### Security Implementation
+- [ ] Certificate pinning for API communications
+- [ ] Data encryption for sensitive device data
+- [ ] Secure storage for authentication tokens
+- [ ] Runtime security checks and tampering detection
+- [ ] Privacy-compliant data collection with user consent
 
 ### Digital Twin Interface
 

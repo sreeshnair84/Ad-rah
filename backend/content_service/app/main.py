@@ -50,13 +50,13 @@ app = FastAPI(title="Adarah from Hebron - Content Service", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Next.js frontend (primary)
-        "http://127.0.0.1:3000",  # Next.js frontend (alternative)
-        "http://localhost:3001",  # Next.js dev server (alternative port)
-        "http://127.0.0.1:3001",  # Next.js dev server (alternative port)
+        "http://localhost:3000",  # Next.js dev server
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",  # Alternative port
+        "http://127.0.0.1:3001"
     ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_credentials=True,  # Allow credentials (Authorization headers)
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 

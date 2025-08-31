@@ -38,6 +38,7 @@ class CompanyCreate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     website: Optional[str] = None
+    organization_code: Optional[str] = None
     status: str = "active"  # active or inactive
 
 
@@ -63,6 +64,7 @@ class Company(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     website: Optional[str] = None
+    organization_code: Optional[str] = None  # Unique code for device registration
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -185,19 +187,122 @@ class PasswordResetRequest(BaseModel):
     email: str
 
 
+# Content Category and Tag Management Models
+class ContentCategory(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    parent_id: Optional[str] = None  # For hierarchical categories (e.g., Food > Fast Food)
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContentCategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parent_id: Optional[str] = None
+
+
+class ContentCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    parent_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ContentTag(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    category_id: Optional[str] = None  # Link to category
+    color: Optional[str] = None  # Hex color for UI display
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContentTagCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    color: Optional[str] = None
+
+
+class ContentTagUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    color: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+# Host Preference System for Ad Display
+class HostPreference(BaseModel):
+    id: Optional[str] = None
+    company_id: str  # Host company
+    screen_id: Optional[str] = None  # Specific screen, null = all screens
+    allowed_categories: List[str] = []  # Category IDs
+    allowed_tags: List[str] = []  # Tag IDs
+    blocked_categories: List[str] = []  # Blocked category IDs
+    blocked_tags: List[str] = []  # Blocked tag IDs
+    max_duration_seconds: Optional[int] = None  # Max ad duration
+    content_rating: Optional[str] = None  # G, PG, PG-13, R ratings
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class HostPreferenceCreate(BaseModel):
+    company_id: str
+    screen_id: Optional[str] = None
+    allowed_categories: List[str] = []
+    allowed_tags: List[str] = []
+    blocked_categories: List[str] = []
+    blocked_tags: List[str] = []
+    max_duration_seconds: Optional[int] = None
+    content_rating: Optional[str] = None
+
+
+class HostPreferenceUpdate(BaseModel):
+    allowed_categories: Optional[List[str]] = None
+    allowed_tags: Optional[List[str]] = None
+    blocked_categories: Optional[List[str]] = None
+    blocked_tags: Optional[List[str]] = None
+    max_duration_seconds: Optional[int] = None
+    content_rating: Optional[str] = None
+
+
 class PasswordReset(BaseModel):
     token: str
     new_password: str
 
 
 class ContentMeta(BaseModel):
-    id: Optional[str]
+    id: Optional[str] = None
     owner_id: str
     filename: str
     content_type: str
     size: int
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     status: str = "quarantine"  # quarantine -> pending -> approved -> rejected
+    # Enhanced fields for categorization
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration_seconds: Optional[int] = None  # For video content
+    categories: List[str] = []  # Category IDs
+    tags: List[str] = []  # Tag IDs
+    content_rating: Optional[str] = None  # G, PG, PG-13, R
+    # Scheduling
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    # Targeting
+    target_age_min: Optional[int] = None
+    target_age_max: Optional[int] = None
+    target_gender: Optional[str] = None  # male, female, all
+    # Analytics
+    view_count: int = 0
+    impression_count: int = 0
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ContentMetadata(BaseModel):
@@ -205,10 +310,29 @@ class ContentMetadata(BaseModel):
     title: str
     description: Optional[str] = None
     owner_id: str
-    categories: list[str] = []
+    categories: List[str] = []  # Category IDs
+    tags: List[str] = []  # Tag IDs
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    tags: list[str] = []
+    duration_seconds: Optional[int] = None
+    content_rating: Optional[str] = None
+    target_age_min: Optional[int] = None
+    target_age_max: Optional[int] = None
+    target_gender: Optional[str] = None
+
+
+class ContentMetadataUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    categories: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    content_rating: Optional[str] = None
+    target_age_min: Optional[int] = None
+    target_age_max: Optional[int] = None
+    target_gender: Optional[str] = None
 
 
 class UploadResponse(BaseModel):
@@ -284,6 +408,8 @@ class DigitalScreen(BaseModel):
     resolution_width: int = 1920
     resolution_height: int = 1080
     orientation: ScreenOrientation = ScreenOrientation.LANDSCAPE
+    aspect_ratio: Optional[str] = None  # e.g., "16:9", "4:3"
+    registration_key: Optional[str] = None  # Key used for registration
     status: ScreenStatus = ScreenStatus.ACTIVE
     ip_address: Optional[str] = None
     mac_address: Optional[str] = None
@@ -524,3 +650,127 @@ class CompanyApplicationUpdate(BaseModel):
     created_company_id: Optional[str] = None
     created_user_id: Optional[str] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# Device Registration Models
+class DeviceRegistrationCreate(BaseModel):
+    device_name: str = Field(..., min_length=1, max_length=100)
+    organization_code: str = Field(..., min_length=1, max_length=50)
+    aspect_ratio: Optional[str] = None  # e.g., "16:9", "4:3"
+    registration_key: str = Field(..., min_length=1, max_length=100)  # Secure key for registration
+
+
+class DeviceRegistrationKeyCreate(BaseModel):
+    company_id: str
+    expires_at: Optional[datetime] = None  # Optional expiration date
+
+
+class DeviceRegistrationKey(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    key: str  # The actual registration key
+    company_id: str
+    created_by: str  # User who generated the key
+    expires_at: datetime
+    used: bool = False
+    used_at: Optional[datetime] = None
+    used_by_device: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# Enhanced Device Authentication Models
+class DeviceType(str, Enum):
+    KIOSK = "kiosk"
+    BILLBOARD = "billboard"
+    INDOOR_SCREEN = "indoor_screen"
+    OUTDOOR_SCREEN = "outdoor_screen"
+    INTERACTIVE_DISPLAY = "interactive_display"
+
+
+class DeviceCapabilities(BaseModel):
+    """Device hardware and software capabilities"""
+    max_resolution_width: int = 1920
+    max_resolution_height: int = 1080
+    supported_formats: List[str] = ["mp4", "jpg", "png", "webp"]
+    has_touch: bool = False
+    has_audio: bool = True
+    has_camera: bool = False
+    storage_gb: Optional[int] = None
+    ram_gb: Optional[int] = None
+    cpu_info: Optional[str] = None
+    os_version: Optional[str] = None
+
+
+class DeviceFingerprint(BaseModel):
+    """Unique device identification"""
+    hardware_id: str  # CPU ID, motherboard serial, etc.
+    mac_addresses: List[str] = []  # All network interfaces
+    device_serial: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    timezone: Optional[str] = None
+    locale: Optional[str] = None
+
+
+class DeviceCredentials(BaseModel):
+    """Device authentication credentials"""
+    id: Optional[str] = None
+    device_id: str
+    certificate_pem: Optional[str] = None  # Device certificate
+    private_key_hash: Optional[str] = None  # Hashed private key
+    jwt_token: Optional[str] = None  # Current JWT token
+    jwt_expires_at: Optional[datetime] = None
+    refresh_token: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_refreshed: Optional[datetime] = None
+    revoked: bool = False
+    revoked_at: Optional[datetime] = None
+
+
+class DeviceHeartbeat(BaseModel):
+    """Device health and status reporting"""
+    id: Optional[str] = None
+    device_id: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    status: ScreenStatus
+    # System metrics
+    cpu_usage: Optional[float] = None  # Percentage
+    memory_usage: Optional[float] = None  # Percentage
+    storage_usage: Optional[float] = None  # Percentage
+    temperature: Optional[float] = None  # Celsius
+    # Network metrics
+    network_strength: Optional[int] = None  # Signal strength %
+    bandwidth_mbps: Optional[float] = None
+    # Content metrics
+    current_content_id: Optional[str] = None
+    content_errors: int = 0
+    # Location (if available)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    # Additional data
+    error_logs: List[str] = []
+    performance_score: Optional[float] = None  # Overall health score
+
+
+class DeviceRegistration(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    device_name: str
+    organization_code: str
+    registration_key: str
+    device_type: DeviceType = DeviceType.KIOSK
+    aspect_ratio: Optional[str] = None
+    # Enhanced device information
+    fingerprint: Optional[DeviceFingerprint] = None
+    capabilities: Optional[DeviceCapabilities] = None
+    location_description: Optional[str] = None
+    # Status and tracking
+    status: str = "active"
+    registered_at: datetime = Field(default_factory=datetime.utcnow)
+    last_seen: datetime = Field(default_factory=datetime.utcnow)
+    ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+    # Security
+    is_trusted: bool = False
+    security_level: str = "standard"  # standard, high, maximum
+    # Configuration
+    auto_update: bool = True
+    maintenance_window: Optional[str] = None  # "02:00-04:00"
