@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/openkiosk
+      - MONGO_URI=mongodb://admin:password@mongodb:27017/openkiosk?authSource=admin
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
       - SECRET_KEY=${SECRET_KEY:-changeme}
       - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
@@ -23,9 +23,15 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodb_data:/data/db
+      - ./data/mongodb:/data/db
+      - ./data/mongodb_config:/data/configdb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=openkiosk
     networks:
       - openkiosk
+    restart: unless-stopped
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
@@ -34,15 +40,16 @@ services:
       - "10001:10001"  # Queue service
       - "10002:10002"  # Table service
     volumes:
-      - azurite_data:/data
+      - ./data/azurite:/data
     networks:
       - openkiosk
+    restart: unless-stopped
 
   event-processor:
     build: .
     command: ["python", "-m", "app.event_processor"]
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/openkiosk
+      - MONGO_URI=mongodb://admin:password@mongodb:27017/openkiosk?authSource=admin
       - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
       - AZURE_AI_ENDPOINT=${AZURE_AI_ENDPOINT}
       - AZURE_AI_KEY=${AZURE_AI_KEY}
@@ -52,10 +59,6 @@ services:
       - ./app:/app/app
     networks:
       - openkiosk
-
-volumes:
-  mongodb_data:
-  azurite_data:
 
 networks:
   openkiosk:

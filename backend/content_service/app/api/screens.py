@@ -18,6 +18,174 @@ router = APIRouter(prefix="/screens", tags=["screens"])
 # Mock data initialization is handled by startup lifecycle in main.py
 
 
+# Layout Template endpoints
+@router.get("/templates", response_model=List[dict])
+async def get_layout_templates(
+    is_public: Optional[bool] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get layout templates"""
+    # Get user company IDs for filtering
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    # If admin, get all templates, otherwise filter by company access
+    if user_is_admin:
+        templates = await repo.list_layout_templates(is_public=is_public)
+    else:
+        # Get templates for user's companies plus public templates
+        all_templates = []
+        for company_id in user_company_ids:
+            company_templates = await repo.list_layout_templates(company_id=company_id, is_public=is_public)
+            all_templates.extend(company_templates)
+        
+        # Remove duplicates
+        seen_ids = set()
+        templates = []
+        for template in all_templates:
+            if template.get("id") not in seen_ids:
+                seen_ids.add(template.get("id"))
+                templates.append(template)
+    
+    return templates
+
+
+@router.post("/templates", response_model=dict)
+async def create_layout_template(
+    template_data: LayoutTemplateCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new layout template"""
+    # Validate user has access to the specified company
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    if not user_is_admin and template_data.company_id not in user_company_ids:
+        raise HTTPException(status_code=403, detail="Access denied to create templates for this company")
+    
+    # Create template data
+    template_dict = template_data.dict()
+    template_dict.update({
+        "id": str(uuid.uuid4()),
+        "created_by": current_user.get("id"),
+        "usage_count": 0,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    })
+    
+    # Save to repository
+    result = await repo.save_layout_template(template_dict)
+    return result
+
+
+@router.get("/templates/{template_id}", response_model=dict)
+async def get_layout_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a specific layout template"""
+    template = await repo.get_layout_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Layout template not found")
+    
+    # Check access permissions
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    if not user_is_admin:
+        if not template.get("is_public") and template.get("company_id") not in user_company_ids:
+            raise HTTPException(status_code=403, detail="Access denied to this template")
+    
+    return template
+
+
+@router.put("/templates/{template_id}", response_model=dict)
+async def update_layout_template(
+    template_id: str,
+    template_data: LayoutTemplateUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a layout template"""
+    template = await repo.get_layout_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Layout template not found")
+    
+    # Check access permissions
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    if not user_is_admin and template.get("company_id") not in user_company_ids:
+        raise HTTPException(status_code=403, detail="Access denied to modify this template")
+    
+    # Update template
+    update_data = template_data.dict(exclude_unset=True)
+    update_data["updated_at"] = datetime.utcnow()
+    
+    success = await repo.update_layout_template(template_id, update_data)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update template")
+    
+    # Return updated template
+    updated_template = await repo.get_layout_template(template_id)
+    return updated_template
+
+
+@router.delete("/templates/{template_id}")
+async def delete_layout_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a layout template"""
+    template = await repo.get_layout_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Layout template not found")
+    
+    # Check access permissions
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    if not user_is_admin and template.get("company_id") not in user_company_ids:
+        raise HTTPException(status_code=403, detail="Access denied to delete this template")
+    
+    success = await repo.delete_layout_template(template_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete template")
+    
+    return {"message": "Layout template deleted successfully"}
+
+
+@router.post("/templates/{template_id}/use")
+async def use_layout_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Increment usage count when template is used"""
+    template = await repo.get_layout_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Layout template not found")
+    
+    # Check access permissions
+    user_roles = current_user.get("roles", [])
+    user_company_ids = [role.get("company_id") for role in user_roles]
+    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
+    
+    if not user_is_admin:
+        if not template.get("is_public") and template.get("company_id") not in user_company_ids:
+            raise HTTPException(status_code=403, detail="Access denied to use this template")
+    
+    # Increment usage count
+    success = await repo.increment_template_usage(template_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update template usage")
+    
+    return {"message": "Template usage recorded"}
+
+
 # Digital Screen endpoints
 @router.get("", response_model=List[dict])
 async def get_screens(
@@ -42,6 +210,8 @@ async def get_screens(
         screens = [s for s in screens if s.get("company_id") in user_company_ids]
     
     return screens
+
+
 @router.post("", response_model=dict)
 async def create_screen(
     screen_data: ScreenCreate,
@@ -145,112 +315,3 @@ async def delete_screen(
         raise HTTPException(status_code=500, detail="Failed to delete screen")
     
     return {"message": "Screen deleted successfully"}
-
-
-# Content Overlay endpoints
-@router.get("/{screen_id}/overlays", response_model=List[dict])
-async def get_screen_overlays(
-    screen_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get all content overlays for a specific screen"""
-    screen = await repo.get_digital_screen(screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    
-    # For now, return empty list as overlays are not implemented in repository
-    # TODO: Implement overlay operations in repository
-    overlays = []
-    
-    # Role-based filtering
-    user_roles = current_user.get("roles", [])
-    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
-    
-    if not user_is_admin:
-        user_company_ids = [role.get("company_id") for role in user_roles]
-        overlays = [o for o in overlays if o.get("company_id") in user_company_ids]
-    
-    return overlays
-
-
-@router.post("/{screen_id}/overlays", response_model=dict)
-async def create_overlay(
-    screen_id: str,
-    overlay_data: ContentOverlayCreate,
-    current_user: dict = Depends(get_current_user)
-):
-    """Create a new content overlay for a screen"""
-    screen = await repo.get_digital_screen(screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    
-    # TODO: Implement overlay creation in repository
-    raise HTTPException(status_code=501, detail="Overlay operations not yet implemented")
-
-
-# Digital Twin endpoints
-@router.get("/{screen_id}/digital-twin", response_model=dict)
-async def get_digital_twin(
-    screen_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get digital twin for a screen"""
-    screen = await repo.get_digital_screen(screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    
-    # TODO: Implement digital twin operations in repository
-    raise HTTPException(status_code=501, detail="Digital twin operations not yet implemented")
-
-
-@router.post("/{screen_id}/digital-twin", response_model=dict)
-async def create_digital_twin(
-    screen_id: str,
-    twin_data: DigitalTwinCreate,
-    current_user: dict = Depends(get_current_user)
-):
-    """Create a digital twin for a screen"""
-    screen = await repo.get_digital_screen(screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    
-    # TODO: Implement digital twin creation in repository
-    raise HTTPException(status_code=501, detail="Digital twin operations not yet implemented")
-
-
-# Layout Template endpoints
-@router.get("/templates", response_model=List[dict])
-async def get_layout_templates(
-    is_public: Optional[bool] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get layout templates"""
-    # TODO: Implement layout template operations in repository
-    templates = []
-    
-    # Filter by public/private
-    if is_public is not None:
-        templates = [t for t in templates if t.get("is_public") == is_public]
-    
-    # Role-based filtering - show public templates and own company templates
-    user_roles = current_user.get("roles", [])
-    user_company_ids = [role.get("company_id") for role in user_roles]
-    user_is_admin = any(role.get("role") == "ADMIN" for role in user_roles)
-    
-    if not user_is_admin:
-        templates = [
-            t for t in templates 
-            if t.get("is_public") or t.get("company_id") in user_company_ids
-        ]
-    
-    return templates
-
-
-@router.post("/templates", response_model=dict)
-async def create_layout_template(
-    template_data: LayoutTemplateCreate,
-    current_user: dict = Depends(get_current_user)
-):
-    """Create a new layout template"""
-    # TODO: Implement layout template creation in repository
-    raise HTTPException(status_code=501, detail="Layout template operations not yet implemented")

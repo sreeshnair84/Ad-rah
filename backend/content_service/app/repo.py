@@ -48,7 +48,13 @@ class InMemoryRepo:
         return self._store.get(_id)
 
     async def list(self) -> List[Dict]:
-        return list(self._store.values())
+        # Only return items that look like ContentMetadata (have title field)
+        all_items = list(self._store.values())
+        content_metadata_items = [
+            item for item in all_items
+            if isinstance(item, dict) and "title" in item
+        ]
+        return content_metadata_items
 
     # ContentMeta operations
     async def save_content_meta(self, meta: ContentMeta) -> dict:
@@ -414,6 +420,10 @@ class InMemoryRepo:
             if k.get("key") == key:
                 return k
         return None
+    
+    async def get_device_registration_key_by_id(self, key_id: str) -> Optional[dict]:
+        keys = self._store.get("__device_registration_keys__", {})
+        return keys.get(key_id)
 
     async def list_device_registration_keys(self, company_id: Optional[str] = None) -> List[Dict]:
         keys = list(self._store.get("__device_registration_keys__", {}).values())
@@ -641,6 +651,83 @@ class InMemoryRepo:
             devices = [d for d in devices if d.get("status") == status]
         return devices
 
+    # Content Distribution operations
+    async def save_content_distribution(self, distribution: dict) -> dict:
+        async with self._lock:
+            distributions = self._store.setdefault("__content_distributions__", {})
+            distribution["id"] = distribution.get("id") or str(len(distributions) + 1) + "-dist"
+            distributions[distribution["id"]] = distribution
+            return distributions[distribution["id"]]
+
+    async def get_content_distribution(self, distribution_id: str) -> Optional[dict]:
+        return self._store.get("__content_distributions__", {}).get(distribution_id)
+
+    async def list_content_distributions(self, content_id: Optional[str] = None, device_id: Optional[str] = None) -> List[Dict]:
+        distributions = list(self._store.get("__content_distributions__", {}).values())
+        if content_id:
+            distributions = [d for d in distributions if d.get("content_id") == content_id]
+        if device_id:
+            distributions = [d for d in distributions if d.get("device_id") == device_id]
+        return distributions
+
+    async def update_content_distribution_status(self, distribution_id: str, status: str) -> bool:
+        async with self._lock:
+            distributions = self._store.get("__content_distributions__", {})
+            if distribution_id in distributions:
+                distributions[distribution_id]["status"] = status
+                distributions[distribution_id]["updated_at"] = datetime.utcnow().isoformat()
+                return True
+            return False
+
+    # Layout Template operations
+    async def save_layout_template(self, template: dict) -> dict:
+        async with self._lock:
+            templates = self._store.setdefault("__layout_templates__", {})
+            template["id"] = template.get("id") or str(len(templates) + 1) + "-lt"
+            templates[template["id"]] = template
+            return templates[template["id"]]
+
+    async def get_layout_template(self, template_id: str) -> Optional[dict]:
+        return self._store.get("__layout_templates__", {}).get(template_id)
+
+    async def list_layout_templates(self, company_id: Optional[str] = None, is_public: Optional[bool] = None) -> List[Dict]:
+        templates = list(self._store.get("__layout_templates__", {}).values())
+        
+        if company_id:
+            templates = [
+                t for t in templates 
+                if t.get("company_id") == company_id or t.get("is_public")
+            ]
+        if is_public is not None:
+            templates = [t for t in templates if t.get("is_public") == is_public]
+        
+        return templates
+
+    async def update_layout_template(self, template_id: str, updates: dict) -> bool:
+        async with self._lock:
+            templates = self._store.get("__layout_templates__", {})
+            if template_id in templates:
+                templates[template_id].update(updates)
+                templates[template_id]["updated_at"] = datetime.utcnow().isoformat()
+                return True
+            return False
+
+    async def delete_layout_template(self, template_id: str) -> bool:
+        async with self._lock:
+            templates = self._store.get("__layout_templates__", {})
+            if template_id in templates:
+                del templates[template_id]
+                return True
+            return False
+
+    async def increment_template_usage(self, template_id: str) -> bool:
+        async with self._lock:
+            templates = self._store.get("__layout_templates__", {})
+            if template_id in templates:
+                templates[template_id]["usage_count"] = templates[template_id].get("usage_count", 0) + 1
+                return True
+            return False
+
 
 class MongoRepo:
     def __init__(self, uri: str):
@@ -772,7 +859,13 @@ class MongoRepo:
 
     async def list_companies(self) -> List[Dict]:
         cursor = self._company_col.find({})
-        return [d async for d in cursor]
+        companies = []
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            companies.append(doc)
+        return companies
 
     async def delete_company(self, _id: str) -> bool:
         result = await self._company_col.delete_one({"id": _id})
@@ -1050,7 +1143,13 @@ class MongoRepo:
         if company_id:
             query["company_id"] = company_id
         cursor = self._digital_screen_col.find(query)
-        return [d async for d in cursor]
+        screens = []
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            screens.append(doc)
+        return screens
 
     async def update_digital_screen(self, _id: str, updates: dict) -> bool:
         updates["updated_at"] = datetime.utcnow()
@@ -1078,14 +1177,49 @@ class MongoRepo:
         return data
 
     async def get_device_registration_key(self, key: str) -> Optional[dict]:
-        return await self._device_registration_key_col.find_one({"key": key})
+        result = await self._device_registration_key_col.find_one({"key": key})
+        if result and _OBJECTID_AVAILABLE and ObjectId is not None:
+            # Convert ObjectIds to strings
+            result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+        return result
+    
+    async def get_device_registration_key_by_id(self, key_id: str) -> Optional[dict]:
+        try:
+            # Try to find by string ID first
+            result = await self._device_registration_key_col.find_one({"id": key_id})
+            if result:
+                # Convert ObjectIds to strings
+                if _OBJECTID_AVAILABLE and ObjectId is not None:
+                    result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+                return result
+            
+            # If not found and ObjectId is available, try ObjectId format
+            if _OBJECTID_AVAILABLE and ObjectId is not None and hasattr(ObjectId, 'is_valid') and ObjectId.is_valid(key_id):
+                result = await self._device_registration_key_col.find_one({"_id": ObjectId(key_id)})
+                if result:
+                    result["id"] = str(result["_id"])
+                    # Convert ObjectIds to strings
+                    if _OBJECTID_AVAILABLE and ObjectId is not None:
+                        result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+                    return result
+                    
+            return None
+        except Exception as e:
+            logger.error(f"Error getting device registration key by ID {key_id}: {e}")
+            return None
 
     async def list_device_registration_keys(self, company_id: Optional[str] = None) -> List[Dict]:
         query = {}
         if company_id:
             query["company_id"] = company_id
         cursor = self._device_registration_key_col.find(query)
-        return [d async for d in cursor]
+        keys = []
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            keys.append(doc)
+        return keys
 
     async def mark_key_used(self, key_id: str, device_id: str) -> bool:
         result = await self._device_registration_key_col.update_one(
@@ -1101,6 +1235,87 @@ class MongoRepo:
     async def delete_device_registration_key(self, key_id: str) -> bool:
         result = await self._device_registration_key_col.delete_one({"id": key_id})
         return result.deleted_count > 0
+
+    # Content Distribution operations
+    @property
+    def _content_distribution_col(self):
+        return self._db["content_distributions"]
+
+    async def save_content_distribution(self, distribution: dict) -> dict:
+        if not distribution.get("id"):
+            import uuid
+            distribution["id"] = str(uuid.uuid4())
+        await self._content_distribution_col.replace_one({"id": distribution["id"]}, distribution, upsert=True)
+        return distribution
+
+    async def get_content_distribution(self, distribution_id: str) -> Optional[dict]:
+        return await self._content_distribution_col.find_one({"id": distribution_id})
+
+    async def list_content_distributions(self, content_id: Optional[str] = None, device_id: Optional[str] = None) -> List[Dict]:
+        query = {}
+        if content_id:
+            query["content_id"] = content_id
+        if device_id:
+            query["device_id"] = device_id
+        cursor = self._content_distribution_col.find(query)
+        return [d async for d in cursor]
+
+    async def update_content_distribution_status(self, distribution_id: str, status: str) -> bool:
+        result = await self._content_distribution_col.update_one(
+            {"id": distribution_id},
+            {"$set": {
+                "status": status,
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        return result.modified_count > 0
+
+    # Layout Template operations
+    @property
+    def _layout_template_col(self):
+        return self._db["layout_templates"]
+
+    async def save_layout_template(self, template: dict) -> dict:
+        if not template.get("id"):
+            import uuid
+            template["id"] = str(uuid.uuid4())
+        await self._layout_template_col.replace_one({"id": template["id"]}, template, upsert=True)
+        return template
+
+    async def get_layout_template(self, template_id: str) -> Optional[dict]:
+        return await self._layout_template_col.find_one({"id": template_id})
+
+    async def list_layout_templates(self, company_id: Optional[str] = None, is_public: Optional[bool] = None) -> List[Dict]:
+        query = {}
+        if company_id:
+            query["$or"] = [
+                {"company_id": company_id},
+                {"is_public": True}
+            ]
+        if is_public is not None:
+            query["is_public"] = is_public
+        
+        cursor = self._layout_template_col.find(query)
+        return [d async for d in cursor]
+
+    async def update_layout_template(self, template_id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._layout_template_col.update_one(
+            {"id": template_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_layout_template(self, template_id: str) -> bool:
+        result = await self._layout_template_col.delete_one({"id": template_id})
+        return result.deleted_count > 0
+
+    async def increment_template_usage(self, template_id: str) -> bool:
+        result = await self._layout_template_col.update_one(
+            {"id": template_id},
+            {"$inc": {"usage_count": 1}}
+        )
+        return result.modified_count > 0
 
 
 # choose repo implementation

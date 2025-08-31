@@ -160,3 +160,7 @@ start_local.sh
 
 # Docker
 .dockerignore
+
+# Data directories
+data/
+storage/

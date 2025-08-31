@@ -114,22 +114,86 @@ class DeviceWebSocketManager:
         logger.info(f"Queued message for offline device {device_id}")
         return False
     
-    async def broadcast_to_devices(self, company_id: str, message: Dict):
-        """Broadcast a message to all devices of a company"""
+    async def notify_content_distribution(self, device_id: str, content_id: str, distribution_id: str):
+        """Notify a device about new content distribution"""
+        try:
+            # Get content metadata
+            content = await repo.get_content_meta(content_id)
+            if not content:
+                logger.error(f"Content {content_id} not found for distribution to device {device_id}")
+                return
+            
+            message = {
+                "type": "content_distributed",
+                "data": {
+                    "content_id": content_id,
+                    "distribution_id": distribution_id,
+                    "filename": content.get("filename"),
+                    "content_type": content.get("content_type"),
+                    "size": content.get("size"),
+                    "download_url": f"/api/content/download/{content_id}"  # TODO: Implement actual download endpoint
+                }
+            }
+            
+            success = await self.send_to_device(device_id, message)
+            
+            if success:
+                logger.info(f"Successfully notified device {device_id} about content {content_id}")
+            else:
+                logger.warning(f"Failed to notify device {device_id} about content {content_id} (queued)")
+            
+        except Exception as e:
+            logger.error(f"Failed to notify device {device_id} about content distribution: {e}")
+    
+    async def notify_content_update(self, device_id: str, content_id: str, update_type: str):
+        """Notify a device about content updates (e.g., revocation, priority change)"""
+        try:
+            message = {
+                "type": "content_update",
+                "data": {
+                    "content_id": content_id,
+                    "update_type": update_type,  # "revoked", "priority_changed", etc.
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            }
+            
+            success = await self.send_to_device(device_id, message)
+            
+            if success:
+                logger.info(f"Successfully notified device {device_id} about content update: {update_type}")
+            else:
+                logger.warning(f"Failed to notify device {device_id} about content update (queued)")
+            
+        except Exception as e:
+            logger.error(f"Failed to notify device {device_id} about content update: {e}")
+    
+    async def broadcast_content_distribution(self, company_id: str, content_id: str, distribution_records: List[Dict]):
+        """Broadcast content distribution to all devices in a company"""
         try:
             devices = await repo.list_digital_screens(company_id)
-            sent_count = 0
             
             for device in devices:
                 device_id = device.get("id")
                 if device_id:
-                    success = await self.send_to_device(device_id, message)
-                    if success:
-                        sent_count += 1
+                    # Find the distribution record for this device
+                    device_distribution = next(
+                        (dist for dist in distribution_records if dist.get("device_id") == device_id),
+                        None
+                    )
+                    
+                    if device_distribution:
+                        distribution_id = device_distribution.get("id")
+                        if distribution_id:
+                            await self.notify_content_distribution(
+                                device_id, 
+                                content_id, 
+                                distribution_id
+                            )
             
-            logger.info(f"Broadcasted message to {sent_count} devices in company {company_id}")
+            logger.info(f"Broadcasted content {content_id} distribution to {len(devices)} devices in company {company_id}")
+            
         except Exception as e:
-            logger.error(f"Failed to broadcast to company {company_id}: {e}")
+            logger.error(f"Failed to broadcast content distribution: {e}")
     
     async def handle_device_message(self, device_id: str, message: Dict):
         """Handle incoming message from device"""
@@ -141,6 +205,12 @@ class DeviceWebSocketManager:
         elif message_type == "content_status":
             # Handle content playback status updates
             await self._handle_content_status(device_id, message.get("data", {}))
+        elif message_type == "content_acknowledgment":
+            # Handle content download/acknowledgment
+            await self._handle_content_acknowledgment(device_id, message.get("data", {}))
+        elif message_type == "content_download_complete":
+            # Handle content download completion
+            await self._handle_content_download_complete(device_id, message.get("data", {}))
         elif message_type == "error":
             # Handle error reports
             await self._handle_device_error(device_id, message.get("data", {}))
@@ -180,6 +250,58 @@ class DeviceWebSocketManager:
             logger.info(f"Content status update from device {device_id}: {status_data.get('status')}")
         except Exception as e:
             logger.error(f"Failed to handle content status from device {device_id}: {e}")
+    
+    async def _handle_content_acknowledgment(self, device_id: str, ack_data: Dict):
+        """Handle content acknowledgment from device"""
+        try:
+            content_id = ack_data.get("content_id")
+            distribution_id = ack_data.get("distribution_id")
+            
+            if not content_id or not distribution_id:
+                logger.warning(f"Invalid content acknowledgment from device {device_id}: missing content_id or distribution_id")
+                return
+            
+            # Update distribution status to downloading
+            await repo.update_content_distribution_status(distribution_id, "downloading")
+            
+            # Broadcast to admins
+            await self._broadcast_to_admins({
+                "type": "content_acknowledged",
+                "device_id": device_id,
+                "content_id": content_id,
+                "distribution_id": distribution_id,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            logger.info(f"Content {content_id} acknowledged by device {device_id}")
+        except Exception as e:
+            logger.error(f"Failed to handle content acknowledgment from device {device_id}: {e}")
+    
+    async def _handle_content_download_complete(self, device_id: str, download_data: Dict):
+        """Handle content download completion from device"""
+        try:
+            content_id = download_data.get("content_id")
+            distribution_id = download_data.get("distribution_id")
+            
+            if not content_id or not distribution_id:
+                logger.warning(f"Invalid download completion from device {device_id}: missing content_id or distribution_id")
+                return
+            
+            # Update distribution status to downloaded
+            await repo.update_content_distribution_status(distribution_id, "downloaded")
+            
+            # Broadcast to admins
+            await self._broadcast_to_admins({
+                "type": "content_downloaded",
+                "device_id": device_id,
+                "content_id": content_id,
+                "distribution_id": distribution_id,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            logger.info(f"Content {content_id} downloaded by device {device_id}")
+        except Exception as e:
+            logger.error(f"Failed to handle download completion from device {device_id}: {e}")
     
     async def _handle_device_error(self, device_id: str, error_data: Dict):
         """Handle device error reports"""
@@ -231,9 +353,9 @@ class DeviceWebSocketManager:
                 
                 for device in devices:
                     device_id = device.get("id")
-                    
-                    # Get latest heartbeat
-                    latest_heartbeat = await repo.get_latest_heartbeat(device_id)
+                    if device_id:
+                        # Get latest heartbeat
+                        latest_heartbeat = await repo.get_latest_heartbeat(device_id)
                     
                     # Check online status
                     is_online = device_id in self.device_connections
@@ -301,12 +423,12 @@ class DeviceWebSocketManager:
                     
                     for device in devices:
                         device_id = device.get("id")
-                        
-                        # Check if device is connected
-                        is_connected = device_id in self.device_connections
-                        
-                        # Check last heartbeat time
-                        latest_heartbeat = await repo.get_latest_heartbeat(device_id)
+                        if device_id:
+                            # Check if device is connected
+                            is_connected = device_id in self.device_connections
+                            
+                            # Check last heartbeat time
+                            latest_heartbeat = await repo.get_latest_heartbeat(device_id)
                         
                         if not is_connected or not latest_heartbeat:
                             offline_devices.append({

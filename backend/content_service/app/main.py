@@ -3,46 +3,49 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api import api_router
 from app.auth import init_default_data
+import logging
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("[STARTUP] Initializing Adarah Kiosk Service...")
+    logger.info("Initializing Adarah Kiosk Service...")
     
     # Initialize authentication data - THIS IS CRITICAL
     try:
         from app.repo import repo
-        print("[STARTUP] Checking authentication data...")
+        logger.info("Checking authentication data...")
         
         if hasattr(repo, '_store'):
             existing_users = len(repo._store.get("__users__", {}))
-            print(f"[STARTUP] Found {existing_users} existing users")
+            logger.info(f"Found {existing_users} existing users")
             
             if existing_users == 0:
-                print("[STARTUP] No users found, initializing default data...")
+                logger.info("No users found, initializing default data...")
                 await init_default_data()
                 new_users = len(repo._store.get("__users__", {}))
-                print(f"[STARTUP] SUCCESS: {new_users} users initialized")
+                logger.info(f"SUCCESS: {new_users} users initialized")
                 
                 # Show created users for verification
                 users = repo._store.get("__users__", {})
                 for uid, user in users.items():
-                    print(f"[STARTUP]   User: {user.get('email')}")
+                    logger.info(f"User: {user.get('email')}")
             else:
-                print(f"[STARTUP] Using existing {existing_users} users")
+                logger.info(f"Using existing {existing_users} users")
         else:
-            print("[STARTUP] Using MongoDB - initializing data...")
+            logger.info("Using MongoDB - initializing data...")
             await init_default_data()
-            print("[STARTUP] MongoDB data initialized")
+            logger.info("MongoDB data initialized")
             
     except Exception as e:
-        print(f"[STARTUP] CRITICAL ERROR: {e}")
+        logger.error(f"CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         # Continue anyway to allow debugging
     
-    print("[STARTUP] Adarah Kiosk Service ready for requests!")
+    logger.info("Adarah Kiosk Service ready for requests!")
     yield
-    print("[SHUTDOWN] Service stopping...")
+    logger.info("Service stopping...")
 
 app = FastAPI(title="Adarah from Hebron - Content Service", lifespan=lifespan)
 
@@ -53,7 +56,12 @@ app.add_middleware(
         "http://localhost:3000",  # Next.js dev server
         "http://127.0.0.1:3000",
         "http://localhost:3001",  # Alternative port
-        "http://127.0.0.1:3001"
+        "http://127.0.0.1:3001",
+        "http://localhost:8080",  # Flutter web dev server
+        "http://127.0.0.1:8080",
+        "http://localhost:5000",  # Flutter web alternative
+        "http://127.0.0.1:5000",
+        "*",  # Allow all origins for development (be careful in production!)
     ],
     allow_credentials=True,  # Allow credentials (Authorization headers)
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

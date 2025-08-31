@@ -42,13 +42,13 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
         has_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
-            (role.get("role_details", {}).get("role_group") == "ADMIN")
-            for role in user_roles
+            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
+            for role in user_roles if role
         )
         if not has_admin:
             role_list = [role.get("role") for role in user_roles]
             role_group_list = [role.get("role_group") for role in user_roles] 
-            role_details_list = [role.get("role_details", {}).get("role_group") for role in user_roles]
+            role_details_list = [((role.get("role_details") or {}) if role else {}).get("role_group") for role in user_roles]
             raise HTTPException(status_code=403, detail="Only admins can list users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods

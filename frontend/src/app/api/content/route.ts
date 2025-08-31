@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+
+export async function GET(request: NextRequest) {
+  try {
+    const backendResponse = await fetch(`${BACKEND_URL}/api/content/`);
+
+    const responseData = await backendResponse.json();
+
+    return NextResponse.json(responseData, {
+      status: backendResponse.status,
+    });
+  } catch (error) {
+    console.error('Content list proxy error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

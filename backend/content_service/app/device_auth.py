@@ -92,7 +92,9 @@ class DeviceAuthService:
             "capabilities": capabilities or {}
         }
         
-        return jwt.encode(payload, settings.SECRET_KEY, algorithm=self.jwt_algorithm)
+        # Use the correct PyJWT API for newer versions
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm=self.jwt_algorithm)
+        return token
     
     def verify_device_jwt(self, token: str) -> Optional[Dict]:
         """Verify and decode device JWT token"""

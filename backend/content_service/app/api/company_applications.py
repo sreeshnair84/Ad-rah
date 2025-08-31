@@ -95,12 +95,12 @@ async def list_company_applications(
         is_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
-            (role.get("role_details", {}).get("role_group") == "ADMIN")
-            for role in user_roles
+            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
+            for role in user_roles if role
         )
         
         print(f"[COMPANY_APPS] DEBUG: Is admin: {is_admin}")
-        print(f"[COMPANY_APPS] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': r.get('role_details', {}).get('role_group')} for r in user_roles]}")
+        print(f"[COMPANY_APPS] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': ((r.get('role_details') or {}) if r else {}).get('role_group')} for r in user_roles]}")
         
         if not is_admin:
             print(f"[COMPANY_APPS] WARNING: User {current_user.get('email')} denied company applications access - insufficient permissions")
@@ -141,8 +141,8 @@ async def get_company_application(
         is_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
-            (role.get("role_details", {}).get("role_group") == "ADMIN")
-            for role in user_roles
+            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
+            for role in user_roles if role
         )
         
         if not is_admin:
@@ -182,8 +182,8 @@ async def review_company_application(
         is_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
-            (role.get("role_details", {}).get("role_group") == "ADMIN")
-            for role in user_roles
+            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
+            for role in user_roles if role
         )
         
         if not is_admin:
@@ -324,8 +324,8 @@ async def get_application_stats(current_user: dict = Depends(get_current_user_wi
         is_admin = any(
             role.get("role") == "ADMIN" or 
             role.get("role_group") == "ADMIN" or
-            (role.get("role_details", {}).get("role_group") == "ADMIN")
-            for role in user_roles
+            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
+            for role in user_roles if role
         )
         
         if not is_admin:

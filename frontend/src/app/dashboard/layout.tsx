@@ -67,6 +67,7 @@ export default function DashboardLayout({
     'users': { label: 'Users', group: 'User Management' },
     'roles': { label: 'Roles & Permissions', group: 'User Management' },
     'registration': { label: 'Registration Requests', group: 'User Management' },
+    'device-keys': { label: 'Device Keys', group: 'User Management' },
     'master-data': { label: 'Companies', group: 'Company Management' },
     'my-ads': { label: 'My Content', group: 'Content Management' },
     'my-content': { label: 'My Content', group: 'Content Management' },

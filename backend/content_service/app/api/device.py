@@ -7,6 +7,7 @@ import qrcode
 import io
 import base64
 from PIL import Image
+import logging
 
 from app.models import (
     DeviceRegistrationCreate, DigitalScreen, ScreenOrientation, ScreenStatus, 
@@ -18,6 +19,25 @@ from app.device_auth import device_auth_service
 import secrets
 import string
 from datetime import timedelta
+
+# Configure logger
+logger = logging.getLogger(__name__)
+
+def convert_objectid_to_str(data):
+    """Recursively convert ObjectId instances to strings in a data structure"""
+    if isinstance(data, dict):
+        return {key: convert_objectid_to_str(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [convert_objectid_to_str(item) for item in data]
+    else:
+        # Try to convert ObjectId to string, fallback to original data
+        try:
+            from bson import ObjectId
+            if isinstance(data, ObjectId):
+                return str(data)
+        except ImportError:
+            pass
+        return data
 
 router = APIRouter(prefix="/device", tags=["device"])
 security = HTTPBearer(auto_error=False)
@@ -53,18 +73,20 @@ def get_client_mac() -> Optional[str]:
 
 
 
-@router.post("/generate-key", response_model=Dict)
-async def generate_registration_key(
+@router.post("/keys", response_model=Dict)
+async def create_registration_key(
     key_request: DeviceRegistrationKeyCreate,
     request: Request
 ):
-    """Generate a new registration key for a company"""
+    """Create a new registration key for a company"""
+    logger.info(f"Creating registration key for company: {key_request.company_id}")
     try:
         # Verify the company exists
         companies = await repo.list_companies()
         company = next((c for c in companies if c.get("id") == key_request.company_id), None)
         
         if not company:
+            logger.warning(f"Company not found: {key_request.company_id}")
             raise HTTPException(
                 status_code=400,
                 detail="Company not found"
@@ -87,7 +109,7 @@ async def generate_registration_key(
         # Save to database
         await repo.save_device_registration_key(key_record)
         
-        print(f"[DEVICE] Generated registration key {key} for company {key_request.company_id}")
+        logger.info(f"Generated registration key {key} for company {key_request.company_id}")
 
         return {
             "success": True,
@@ -101,10 +123,20 @@ async def generate_registration_key(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to generate registration key: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate registration key: {str(e)}"
         )
+
+
+@router.post("/generate-key", response_model=Dict)
+async def generate_registration_key(
+    key_request: DeviceRegistrationKeyCreate,
+    request: Request
+):
+    """Generate a new registration key for a company (legacy endpoint)"""
+    return await create_registration_key(key_request, request)
 
 
 @router.post("/register", response_model=Dict)
@@ -226,7 +258,7 @@ async def register_device(
         # Mark the registration key as used
         await repo.mark_key_used(registration_key_data["id"], device_id)
         
-        print(f"[DEVICE] Registered device {device_id} with authentication for company {company_id}")
+        logger.info(f"Registered device {device_id} with authentication for company {company_id}")
 
         return {
             "success": True,
@@ -247,7 +279,7 @@ async def register_device(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[DEVICE] Registration error: {str(e)}")
+        logger.error(f"Registration error: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to register device: {str(e)}"
@@ -320,11 +352,11 @@ async def get_device_heartbeat_history(
     
     try:
         heartbeats = await repo.get_device_heartbeats(device_id, limit)
-        return {
+        return convert_objectid_to_str({
             "device_id": device_id,
             "heartbeats": heartbeats,
             "total": len(heartbeats)
-        }
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get heartbeat history: {str(e)}")
 
@@ -351,14 +383,14 @@ async def get_device_status(device_id: str):
             if heartbeat_time and (datetime.utcnow() - heartbeat_time).seconds < 300:
                 is_online = True
         
-        return {
+        return convert_objectid_to_str({
             **device,
             "is_online": is_online,
             "latest_heartbeat": latest_heartbeat,
             "has_valid_credentials": credentials is not None and not credentials.get("revoked", False),
             "credentials_expires_at": credentials.get("jwt_expires_at") if credentials else None,
             "performance_score": latest_heartbeat.get("performance_score") if latest_heartbeat else None
-        }
+        })
         
     except HTTPException:
         raise
@@ -463,7 +495,71 @@ async def generate_registration_qr(company_id: str, key_id: Optional[str] = None
         )
 
 
-@router.get("/organization/{org_code}/devices", response_model=Dict)
+@router.get("/keys", response_model=List[Dict])
+async def get_registration_keys():
+    """Get all registration keys with company information"""
+    try:
+        # Get all registration keys
+        keys = await repo.list_device_registration_keys()
+        
+        # Get all companies for lookup
+        companies = await repo.list_companies()
+        company_lookup = {c.get("id"): c for c in companies}
+        
+        # Enhance keys with company information
+        enhanced_keys = []
+        for key in keys:
+            company = company_lookup.get(key.get("company_id"))
+            enhanced_key = {
+                **key,
+                "company_name": company.get("name") if company else "Unknown Company",
+                "organization_code": company.get("organization_code") if company else None,
+            }
+            enhanced_keys.append(convert_objectid_to_str(enhanced_key))
+        
+        return enhanced_keys
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get registration keys: {str(e)}"
+        )
+
+
+@router.get("/keys/{key_id}", response_model=Dict)
+async def get_registration_key_by_id(key_id: str):
+    """Get a specific registration key by ID with company information"""
+    try:
+        # Get the specific registration key
+        key = await repo.get_device_registration_key_by_id(key_id)
+        
+        if not key:
+            raise HTTPException(
+                status_code=404,
+                detail="Registration key not found"
+            )
+        
+        # Get company information
+        companies = await repo.list_companies()
+        company = next((c for c in companies if c.get("id") == key.get("company_id")), None)
+        
+        # Enhance key with company information
+        enhanced_key = {
+            **key,
+            "company_name": company.get("name") if company else "Unknown Company",
+            "organization_code": company.get("organization_code") if company else None,
+        }
+        
+        return convert_objectid_to_str(enhanced_key)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get registration key: {str(e)}"
+        )
+@router.get("/organization/{org_code}", response_model=Dict)
 async def get_devices_by_organization(org_code: str):
     """Get all devices for an organization with enhanced status info"""
     try:
@@ -489,6 +585,8 @@ async def get_devices_by_organization(org_code: str):
         
         for device in devices:
             device_id = device.get("id")
+            if not device_id:
+                continue  # Skip devices without IDs
             
             # Get latest heartbeat
             latest_heartbeat = await repo.get_latest_heartbeat(device_id)
@@ -506,23 +604,23 @@ async def get_devices_by_organization(org_code: str):
             # Get credentials status
             credentials = await repo.get_device_credentials(device_id)
             
-            enhanced_device = {
+            enhanced_device = convert_objectid_to_str({
                 **device,
                 "is_online": is_online,
                 "latest_heartbeat": latest_heartbeat,
                 "has_valid_credentials": credentials is not None and not credentials.get("revoked", False),
                 "performance_score": latest_heartbeat.get("performance_score") if latest_heartbeat else None
-            }
+            })
             enhanced_devices.append(enhanced_device)
         
-        return {
+        return convert_objectid_to_str({
             "organization_code": org_code,
             "company_name": company.get("name"),
             "devices": enhanced_devices,
             "total": len(devices),
             "online": online_count,
             "offline": len(devices) - online_count
-        }
+        })
         
     except Exception as e:
         raise HTTPException(

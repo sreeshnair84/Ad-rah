@@ -13,6 +13,7 @@ import {
   FileCheck2,
   Layers,
   Monitor,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,6 +55,13 @@ const navigationGroups = [
         icon: <ClipboardList className="h-4 w-4" />,
         roles: ["ADMIN"],
         description: "Review host/advertiser applications"
+      },
+      { 
+        key: "device-keys", 
+        label: "Device Keys", 
+        icon: <Key className="h-4 w-4" />,
+        roles: ["ADMIN"],
+        description: "Manage registration keys"
       },
     ]
   },

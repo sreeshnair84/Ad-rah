@@ -437,9 +437,9 @@ async def init_default_data():
                     company = Company(**company_data)
                     saved = await repo.save_company(company)
                     created_companies.append(saved)
-                    print(f"  ✓ Created company: {company.name} (Org Code: {company.organization_code})")
+                    print(f"  [OK] Created company: {company.name} (Org Code: {company.organization_code})")
                 except Exception as e:
-                    print(f"  ✗ Failed to create company {company_data['name']}: {e}")
+                    print(f"  [ERROR] Failed to create company {company_data['name']}: {e}")
 
             # Create roles
             roles_data = [
@@ -476,9 +476,9 @@ async def init_default_data():
                 try:
                     role = Role(**role_data)
                     await repo.save_role(role)
-                    print(f"  ✓ Created role: {role.name}")
+                    print(f"  [OK] Created role: {role.name}")
                 except Exception as e:
-                    print(f"  ✗ Failed to create role {role_data['name']}: {e}")
+                    print(f"  [ERROR] Failed to create role {role_data['name']}: {e}")
 
             # Create users
             users_data = [
@@ -517,9 +517,9 @@ async def init_default_data():
                     user = User(**user_data)
                     saved = await repo.save_user(user)
                     created_users.append(saved)
-                    print(f"  ✓ Created user: {user.email}")
+                    print(f"  [OK] Created user: {user.email}")
                 except Exception as e:
-                    print(f"  ✗ Failed to create user {user_data['email']}: {e}")
+                    print(f"  [ERROR] Failed to create user {user_data['email']}: {e}")
 
             # Create user roles
             user_roles_data = [
@@ -550,9 +550,9 @@ async def init_default_data():
                 try:
                     user_role = UserRole(**user_role_data)
                     await repo.save_user_role(user_role)
-                    print(f"  ✓ Created user role assignment")
+                    print(f"  [OK] Created user role assignment")
                 except Exception as e:
-                    print(f"  ✗ Failed to create user role: {e}")
+                    print(f"  [ERROR] Failed to create user role: {e}")
 
             # Create registration keys
             for company in created_companies:
@@ -569,9 +569,9 @@ async def init_default_data():
 
                     key = DeviceRegistrationKey(**key_data)
                     await repo.save_device_registration_key(key)
-                    print(f"  ✓ Created registration key for {company['name']}: {key_data['key']}")
+                    print(f"  [OK] Created registration key for {company['name']}: {key_data['key']}")
                 except Exception as e:
-                    print(f"  ✗ Failed to create registration key for {company['name']}: {e}")
+                    print(f"  [ERROR] Failed to create registration key for {company['name']}: {e}")
 
             print(f"✅ Default data initialization completed!")
             print(f"   Companies: {len(created_companies)}")
