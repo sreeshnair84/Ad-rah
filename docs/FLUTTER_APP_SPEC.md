@@ -102,7 +102,7 @@ dev_dependencies:
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
     <application
-        android:label="Adārah Digital Signage"
+        android:label="Adara Digital Signage"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

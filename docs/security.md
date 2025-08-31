@@ -1,4 +1,4 @@
-# Security Architecture - Adārah from Hebron™
+# Security Architecture - Adara from Hebron™
 
 ## Current Security Status
 

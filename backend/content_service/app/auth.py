@@ -229,20 +229,52 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                     expanded_roles.append(expanded_role)
                     print(f"[AUTH] DEBUG: Expanded role: {role.get('name')}")
                 else:
-                    # Role not found, keep original but add default role info
+                    # Role not found, determine fallback based on company context and user
                     print(f"[AUTH] WARNING: Role not found for ID: {role_id}, using fallback")
+                    company_id = user_role.get("company_id")
+                    user_email = user_data.get("email", "").lower()
+                    
+                    # Special handling for admin users
+                    if "admin" in user_email and company_id == "global":
+                        fallback_role = "ADMIN"
+                        fallback_name = "System Administrator"
+                        print(f"[AUTH] INFO: Applied admin fallback for {user_email}")
+                    elif company_id and company_id != "global":
+                        # For company-specific roles, default to HOST (safer fallback)
+                        fallback_role = "HOST"
+                        fallback_name = "Host Manager"
+                    else:
+                        # For global roles, default to minimal permissions
+                        fallback_role = "USER"
+                        fallback_name = "User"
+                    
                     expanded_roles.append({
                         **user_role,
-                        "role": "ADMIN",  # Default to ADMIN for missing roles
-                        "role_name": "Administrator"
+                        "role": fallback_role,
+                        "role_name": fallback_name
                     })
             except Exception as e:
                 print(f"[AUTH] ERROR: Error getting role {role_id}: {e}")
-                # Continue with default role
+                # Continue with safe fallback role
+                company_id = user_role.get("company_id")
+                user_email = user_data.get("email", "").lower()
+                
+                # Special handling for admin users
+                if "admin" in user_email and company_id == "global":
+                    fallback_role = "ADMIN"
+                    fallback_name = "System Administrator"
+                    print(f"[AUTH] INFO: Applied admin fallback for {user_email} (exception case)")
+                elif company_id and company_id != "global":
+                    fallback_role = "HOST"
+                    fallback_name = "Host Manager"
+                else:
+                    fallback_role = "USER"
+                    fallback_name = "User"
+                
                 expanded_roles.append({
                     **user_role,
-                    "role": "ADMIN",
-                    "role_name": "Administrator"
+                    "role": fallback_role,
+                    "role_name": fallback_name
                 })
         else:
             # No role_id, this might be an old format or corrupted data
@@ -264,27 +296,54 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
                         expanded_roles.append(expanded_role)
                         print(f"[AUTH] DEBUG: Used default role for company: {default_role.get('name')}")
                     else:
-                        # No default role found, use fallback
-                        print(f"[AUTH] WARNING: No default role found for company {company_id}, using fallback")
+                        # No default role found, use safe fallback
+                        user_email = user_data.get("email", "").lower()
+                        if "admin" in user_email:
+                            fallback_role = "ADMIN"
+                            fallback_name = "System Administrator"
+                            print(f"[AUTH] WARNING: No default role found, using ADMIN fallback for {user_email}")
+                        else:
+                            fallback_role = "HOST"
+                            fallback_name = "Host Manager"
+                            print(f"[AUTH] WARNING: No default role found for company {company_id}, using HOST fallback")
+                        
                         expanded_roles.append({
                             **user_role,
-                            "role": "ADMIN",
-                            "role_name": "Administrator"
+                            "role": fallback_role,
+                            "role_name": fallback_name
                         })
                 except Exception as e:
                     print(f"[AUTH] ERROR: Error getting default roles for company {company_id}: {e}")
+                    user_email = user_data.get("email", "").lower()
+                    if "admin" in user_email:
+                        fallback_role = "ADMIN"
+                        fallback_name = "System Administrator"
+                        print(f"[AUTH] ERROR: Using ADMIN fallback for {user_email}")
+                    else:
+                        fallback_role = "HOST"
+                        fallback_name = "Host Manager"
+                    
                     expanded_roles.append({
                         **user_role,
-                        "role": "ADMIN",
-                        "role_name": "Administrator"
+                        "role": fallback_role,
+                        "role_name": fallback_name
                     })
             else:
-                # No company_id either, use fallback
-                print(f"[AUTH] WARNING: No company_id found, using fallback role")
+                # No company_id either, check if admin user
+                user_email = user_data.get("email", "").lower()
+                if "admin" in user_email:
+                    fallback_role = "ADMIN"
+                    fallback_name = "System Administrator"
+                    print(f"[AUTH] WARNING: No company_id found, using ADMIN fallback for {user_email}")
+                else:
+                    fallback_role = "USER"
+                    fallback_name = "User"
+                    print(f"[AUTH] WARNING: No company_id found, using minimal fallback role")
+                
                 expanded_roles.append({
                     **user_role,
-                    "role": "ADMIN",
-                    "role_name": "Administrator"
+                    "role": fallback_role,
+                    "role_name": fallback_name
                 })
 
     user_data["roles"] = expanded_roles
@@ -472,11 +531,13 @@ async def init_default_data():
                 }
             ]
 
+            created_roles = []
             for role_data in roles_data:
                 try:
                     role = Role(**role_data)
-                    await repo.save_role(role)
-                    print(f"  [OK] Created role: {role.name}")
+                    saved_role = await repo.save_role(role)
+                    created_roles.append(saved_role)
+                    print(f"  [OK] Created role: {role.name} (ID: {saved_role['id']})")
                 except Exception as e:
                     print(f"  [ERROR] Failed to create role {role_data['name']}: {e}")
 
@@ -521,26 +582,26 @@ async def init_default_data():
                 except Exception as e:
                     print(f"  [ERROR] Failed to create user {user_data['email']}: {e}")
 
-            # Create user roles
+            # Create user roles - use actual role IDs
             user_roles_data = [
                 {
                     "user_id": created_users[0]["id"] if created_users else "1-u",
                     "company_id": "global",
-                    "role_id": "1-r",
+                    "role_id": created_roles[0]["id"] if len(created_roles) > 0 else "1-r",
                     "is_default": True,
                     "status": "active"
                 },
                 {
                     "user_id": created_users[1]["id"] if len(created_users) > 1 else "2-u",
                     "company_id": created_companies[0]["id"] if created_companies else "1-c",
-                    "role_id": "2-r",
+                    "role_id": created_roles[1]["id"] if len(created_roles) > 1 else "2-r",
                     "is_default": True,
                     "status": "active"
                 },
                 {
                     "user_id": created_users[2]["id"] if len(created_users) > 2 else "3-u",
                     "company_id": created_companies[1]["id"] if len(created_companies) > 1 else "2-c",
-                    "role_id": "3-r",
+                    "role_id": created_roles[2]["id"] if len(created_roles) > 2 else "3-r",
                     "is_default": True,
                     "status": "active"
                 }

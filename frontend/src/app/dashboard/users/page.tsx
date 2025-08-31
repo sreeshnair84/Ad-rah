@@ -242,7 +242,7 @@ export default function UsersPage() {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users-api/${selectedUser.id}`, {
+      const response = await fetch(`/api/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -272,7 +272,7 @@ export default function UsersPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users-api/${userId}`, {
+      const response = await fetch(`/api/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

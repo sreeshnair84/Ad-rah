@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.repo import repo
 from app.device_auth import device_auth_service
+from app.enhanced_device_registration import enhanced_device_registration
 import secrets
 import string
 from datetime import timedelta
@@ -139,12 +140,22 @@ async def generate_registration_key(
     return await create_registration_key(key_request, request)
 
 
+@router.post("/register/enhanced", response_model=Dict)
+async def register_device_enhanced(
+    device_data: DeviceRegistrationCreate,
+    request: Request
+):
+    """Register a new device with enhanced security, rate limiting, and comprehensive validation"""
+    return await enhanced_device_registration.register_device_enhanced(device_data, request)
+
+
 @router.post("/register", response_model=Dict)
 async def register_device(
     device_data: DeviceRegistrationCreate,
     request: Request
 ):
-    """Register a new device with enhanced security and authentication"""
+    """Register a new device with enhanced security and authentication (Legacy endpoint - use /register/enhanced instead)"""
+    logger.warning("Legacy device registration endpoint used. Consider migrating to /register/enhanced")
     try:
         # Validate registration key
         registration_key_data = await repo.get_device_registration_key(device_data.registration_key)
@@ -627,3 +638,95 @@ async def get_devices_by_organization(org_code: str):
             status_code=500,
             detail=f"Failed to get organization devices: {str(e)}"
         )
+
+
+@router.get("/registration/stats", response_model=Dict)
+async def get_registration_statistics():
+    """Get device registration statistics and security metrics"""
+    try:
+        stats = await enhanced_device_registration.get_registration_stats()
+        
+        # Add additional database stats
+        total_devices = len(await repo.list_digital_screens())
+        total_registration_keys = len(await repo.list_device_registration_keys())
+        
+        stats.update({
+            "total_registered_devices": total_devices,
+            "total_registration_keys_issued": total_registration_keys
+        })
+        
+        return {
+            "success": True,
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting registration stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
+
+
+@router.get("/security/status", response_model=Dict)
+async def get_device_security_status():
+    """Get device security status and monitoring information"""
+    try:
+        # Get registration stats
+        registration_stats = await enhanced_device_registration.get_registration_stats()
+        
+        # Get device status breakdown
+        all_devices = await repo.list_digital_screens()
+        device_status_counts = {}
+        for device in all_devices:
+            status = device.get("status", "unknown")
+            device_status_counts[status] = device_status_counts.get(status, 0) + 1
+        
+        # Check for suspicious activity
+        recent_failures = registration_stats["failed_registrations"]
+        blocked_ips = registration_stats["blocked_ip_addresses"]
+        
+        security_level = "normal"
+        if blocked_ips > 0 or recent_failures > 10:
+            security_level = "elevated"
+        if blocked_ips > 5 or recent_failures > 50:
+            security_level = "high"
+        
+        return {
+            "success": True,
+            "security_status": {
+                "level": security_level,
+                "blocked_ip_count": blocked_ips,
+                "recent_failed_attempts": recent_failures,
+                "device_status_breakdown": device_status_counts,
+                "total_monitored_ips": registration_stats["active_monitoring_ips"],
+                "last_updated": registration_stats["timestamp"]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting security status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get security status: {str(e)}")
+
+
+@router.post("/registration/unblock-ip", response_model=Dict)
+async def unblock_ip_address(request_data: Dict):
+    """Unblock an IP address that was blocked for suspicious activity"""
+    try:
+        ip_address = request_data.get("ip_address")
+        if not ip_address:
+            raise HTTPException(status_code=400, detail="IP address is required")
+        
+        # Remove from blocked IPs
+        enhanced_device_registration.blocked_ips.discard(ip_address)
+        
+        # Reset failed attempts count
+        enhanced_device_registration.failed_attempts[ip_address] = 0
+        
+        logger.info(f"Manually unblocked IP address: {ip_address}")
+        
+        return {
+            "success": True,
+            "message": f"IP address {ip_address} has been unblocked",
+            "ip_address": ip_address
+        }
+        
+    except Exception as e:
+        logger.error(f"Error unblocking IP: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to unblock IP: {str(e)}")

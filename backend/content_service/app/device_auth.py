@@ -99,9 +99,15 @@ class DeviceAuthService:
     def verify_device_jwt(self, token: str) -> Optional[Dict]:
         """Verify and decode device JWT token"""
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[self.jwt_algorithm])
+            # Decode with explicit audience verification
+            payload = jwt.decode(
+                token, 
+                settings.SECRET_KEY, 
+                algorithms=[self.jwt_algorithm],
+                audience="openkiosk-device"
+            )
             
-            # Verify audience
+            # Additional manual verification (belt and suspenders)
             if payload.get("aud") != "openkiosk-device":
                 logger.warning(f"Invalid audience in device token: {payload.get('aud')}")
                 return None
@@ -195,6 +201,10 @@ class DeviceAuthService:
             
             # Create new JWT
             company_id = device.get("company_id")
+            if not company_id:
+                logger.warning(f"Device {device_id} has no company_id")
+                return None
+                
             new_jwt_token = self.create_device_jwt(device_id, company_id)
             new_refresh_token = self.generate_refresh_token()
             

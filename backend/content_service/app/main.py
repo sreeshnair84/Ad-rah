@@ -1,3 +1,12 @@
+# Load environment variables FIRST - before any other imports
+import os
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("[OK] Environment variables loaded from .env file")
+except ImportError:
+    print("[WARNING] python-dotenv not installed, using system environment variables only")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -11,9 +20,27 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Initializing Adarah Kiosk Service...")
     
+    # Debug: Check environment variables
+    mongo_uri = os.getenv("MONGO_URI")
+    secret_key = os.getenv("SECRET_KEY")
+    logger.info(f"MONGO_URI loaded: {mongo_uri is not None}")
+    logger.info(f"SECRET_KEY loaded: {secret_key is not None}")
+    if mongo_uri:
+        logger.info(f"MONGO_URI value: {mongo_uri}")
+    
     # Initialize authentication data - THIS IS CRITICAL
     try:
-        from app.repo import repo
+        from app.repo import repo, persistence_enabled
+        
+        # Show clear status about data persistence
+        if persistence_enabled:
+            logger.info("✅ PERSISTENT STORAGE ENABLED - Data will survive restarts!")
+            logger.info(f"📊 Repository type: {type(repo).__name__}")
+        else:
+            logger.warning("⚠️ TEMPORARY STORAGE - Data will be LOST on restart!")
+            logger.warning(f"💾 Repository type: {type(repo).__name__}")
+            logger.warning("🔧 To enable persistence, run: setup-mongodb.bat (Windows) or setup-mongodb.sh (Linux/Mac)")
+        
         logger.info("Checking authentication data...")
         
         if hasattr(repo, '_store'):
@@ -33,9 +60,25 @@ async def lifespan(app: FastAPI):
             else:
                 logger.info(f"Using existing {existing_users} users")
         else:
-            logger.info("Using MongoDB - initializing data...")
-            await init_default_data()
-            logger.info("MongoDB data initialized")
+            logger.info("Using MongoDB - checking existing data...")
+            # Check if data already exists before initializing
+            try:
+                existing_companies = await repo.list_companies()
+                existing_users = await repo.list_users()
+                
+                if existing_companies or existing_users:
+                    logger.info(f"Found existing data: {len(existing_companies)} companies, {len(existing_users)} users")
+                    logger.info("Skipping initialization to preserve existing data")
+                else:
+                    logger.info("No existing data found, initializing default data...")
+                    await init_default_data()
+                    logger.info("MongoDB data initialized")
+            except Exception as e:
+                logger.error(f"Error checking existing data: {e}")
+                # If we can't check, assume no data exists and initialize
+                logger.info("Unable to check existing data, initializing default data...")
+                await init_default_data()
+                logger.info("MongoDB data initialized")
             
     except Exception as e:
         logger.error(f"CRITICAL ERROR: {e}")

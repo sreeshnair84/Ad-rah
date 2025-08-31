@@ -61,7 +61,7 @@ export default function SignupPage() {
           <CardTitle>
             Sign Up for <span className="inline-block">
               <span className="flex items-baseline gap-1">
-                <span className="text-lg font-semibold">Adārah</span>
+                <span className="text-lg font-semibold">Adara</span>
                 <span className="text-xs text-muted-foreground">from Hebron™</span>
               </span>
             </span>

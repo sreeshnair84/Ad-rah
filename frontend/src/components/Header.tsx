@@ -156,7 +156,7 @@ export function Header({
         <div className="flex items-center">
           <img 
             src="/images/logo.png" 
-            alt="Adārah from Hebron™" 
+            alt="Adara from Hebron™" 
             className="h-8 w-auto"
           />
         </div>

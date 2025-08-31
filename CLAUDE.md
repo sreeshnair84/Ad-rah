@@ -1,4 +1,4 @@
-# Adārah from Hebron™ - Digital Kiosk Content Management Platform
+# Adara from Hebron™ - Digital Kiosk Content Management Platform
 
 ## Overview
 A Next.js 15 + React 19 frontend with FastAPI backend for managing digital advertising content on kiosks across UAE. Supports multi-tenant operations for Host Companies (venue owners) and Advertiser Companies with AI-powered content moderation.

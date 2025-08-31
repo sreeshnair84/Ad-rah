@@ -241,12 +241,26 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-            <User className="w-6 h-6 text-blue-600" />
+          <div className="mx-auto w-16 h-16 bg-white rounded-xl flex items-center justify-center mb-4 shadow-lg">
+            <img
+              src="/images/logo.png"
+              alt="Adara Logo"
+              className="w-12 h-12 object-contain"
+              onError={(e) => {
+                // Fallback to icon if logo fails to load
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.classList.remove('hidden');
+              }}
+            />
+            <div className="hidden w-12 h-12 flex items-center justify-center text-blue-600">
+              <User className="w-8 h-8" />
+            </div>
           </div>
           <CardTitle className="text-2xl">
             Welcome to{' '}
-            <span className="text-blue-600">Adārah</span>
+            <span className="text-blue-600">Adara</span>
             <span className="text-xs text-muted-foreground block mt-1">from Hebron™</span>
           </CardTitle>
           <CardDescription>

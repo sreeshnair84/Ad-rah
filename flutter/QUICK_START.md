@@ -1,4 +1,4 @@
-# 🚀 Quick Start Guide - Adārah Digital Signage Flutter App
+# 🚀 Quick Start Guide - Adara Digital Signage Flutter App
 
 ## Prerequisites Checklist
 - [ ] Flutter SDK 3.35.2 installed (`flutter --version`)

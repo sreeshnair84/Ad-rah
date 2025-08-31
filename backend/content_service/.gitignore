@@ -163,4 +163,5 @@ start_local.sh
 
 # Data directories
 data/
+!data/media/default/
 storage/

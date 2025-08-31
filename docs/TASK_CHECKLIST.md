@@ -1,4 +1,4 @@
-# 📋 Task Checklist - Adārah from Hebron™
+# 📋 Task Checklist - Adara from Hebron™
 
 ## 🎯 **Project Status Dashboard**
 

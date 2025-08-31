@@ -106,6 +106,41 @@ export function useModeration() {
     }
   }, []);
 
+  const postDecisionByContentId = useCallback(async (
+    contentId: string,
+    decision: string,
+    reviewerId?: string,
+    notes?: string
+  ): Promise<Review> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('decision', decision);
+      if (reviewerId) formData.append('reviewer_id', reviewerId);
+      if (notes) formData.append('notes', notes);
+
+      const response = await fetch(`/api/moderation/content/${contentId}/decision`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to post decision with status ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to post decision';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const simulateModeration = useCallback(async (contentId: string): Promise<ModerationResult> => {
     setLoading(true);
     setError(null);
@@ -162,6 +197,7 @@ export function useModeration() {
     enqueueForModeration,
     listQueue,
     postDecision,
+    postDecisionByContentId,
     simulateModeration,
     getPendingReviews,
   };

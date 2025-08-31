@@ -1,4 +1,4 @@
-# Adārah Platform
+# Adara Platform
 
 A comprehensive content management and digital signage platform built with modern technologies.
 

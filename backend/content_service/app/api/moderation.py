@@ -3,7 +3,7 @@ from app.models import ModerationResult, Review
 from app.repo import repo
 import uuid
 from app.moderation_worker import worker
-from fastapi import HTTPException
+from app.utils.serialization import safe_json_response
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
 
@@ -28,7 +28,8 @@ async def enqueue_for_moderation(content_id: str = Form(...)):
 
 @router.get("/queue")
 async def list_queue():
-    return await repo.list_reviews()
+    reviews = await repo.list_reviews()
+    return safe_json_response(reviews)
 
 
 @router.post("/job/enqueue")
@@ -67,6 +68,50 @@ async def post_decision(review_id: str, decision: str = Form(...), reviewer_id: 
     item["notes"] = notes
     saved = await repo.save_review(item)
     return saved
+
+
+@router.post("/content/{content_id}/decision")
+async def post_decision_by_content_id(content_id: str, decision: str = Form(...), reviewer_id: str = Form(None), notes: str = Form(None)):
+    """Post moderation decision using content_id instead of review_id"""
+    try:
+        print(f"[MODERATION] Processing decision for content_id: {content_id}, decision: {decision}")
+        
+        # Find the review record for this content
+        reviews = await repo.list_reviews()
+        print(f"[MODERATION] Found {len(reviews)} total reviews")
+        
+        item = next((r for r in reviews if r.get("content_id") == content_id), None)
+        print(f"[MODERATION] Found existing review: {item is not None}")
+        
+        if not item:
+            # If no review exists, create one
+            import uuid
+            item = {
+                "id": str(uuid.uuid4()),
+                "content_id": content_id,
+                "action": "needs_review",
+                "ai_confidence": None,
+                "reviewer_id": None,
+                "notes": None
+            }
+            print(f"[MODERATION] Created new review with id: {item['id']}")
+        
+        # Update the review with the decision
+        item["action"] = "manual_approve" if decision == "approve" else "manual_reject"
+        item["reviewer_id"] = reviewer_id
+        item["notes"] = notes
+        print(f"[MODERATION] Updated review action to: {item['action']}")
+        
+        # Save the review
+        saved = await repo.save_review(item)
+        print(f"[MODERATION] Successfully saved review")
+        return saved
+        
+    except Exception as e:
+        print(f"[MODERATION] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error processing decision: {e}")
 
 
 @router.get("/pending")

@@ -128,7 +128,7 @@ export default function CompanyRegistrationPage() {
           <Building2 className="h-12 w-12 text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900">Company Registration</h1>
           <p className="text-gray-600 mt-2">
-            Register your company to join the Adārah Digital Signage platform
+            Register your company to join the Adara Digital Signage platform
           </p>
         </div>
 

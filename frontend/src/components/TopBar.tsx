@@ -95,7 +95,7 @@ export function TopBar({ role, setRole, rtl, setRtl, pathname, setPathname, user
             <Building2 className="h-5 w-5" />
             <span className="inline-block">
               <span className="flex items-baseline gap-1">
-                <span className="font-semibold tracking-tight">Adārah</span>
+                <span className="font-semibold tracking-tight">Adara</span>
                 <span className="text-xs text-muted-foreground">from Hebron™</span>
               </span>
             </span>

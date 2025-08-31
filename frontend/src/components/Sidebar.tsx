@@ -245,7 +245,7 @@ export function Sidebar({ pathname, setPathname, isCollapsed = false }: SidebarP
             <div className="h-2 w-2 rounded-full bg-green-500"></div>
             <p className="text-xs font-medium text-gray-700">
               <span className="flex items-baseline gap-1">
-                <span className="font-semibold">Adārah</span>
+                <span className="font-semibold">Adara</span>
                 <span className="text-[10px] opacity-75">from Hebron™</span>
               </span>
             </p>

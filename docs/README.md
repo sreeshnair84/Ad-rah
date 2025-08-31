@@ -6,7 +6,7 @@ Project overview & mission statement.
 
 ## Core features.
 
-This repo contains a multi-service scaffold for the **Adārah**<sup>from Hebron™</sup> platform. A runnable `content-service` FastAPI microservice exists under `backend/content_service` which demonstrates the upload, metadata, simple auth, and moderation-simulation flow.
+This repo contains a multi-service scaffold for the **Adara**<sup>from Hebron™</sup> platform. A runnable `content-service` FastAPI microservice exists under `backend/content_service` which demonstrates the upload, metadata, simple auth, and moderation-simulation flow.
 
 ## Quick Start with Docker Compose (Recommended)
 

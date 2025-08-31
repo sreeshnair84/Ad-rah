@@ -1,7 +1,7 @@
-# API Documentation - Adārah from Hebron™
+# API Documentation - Adara from Hebron™
 
 ## Overview
-RESTful API for the Adārah digital kiosk content management platform. All endpoints require authentication unless specified otherwise.
+RESTful API for the Adara digital kiosk content management platform. All endpoints require authentication unless specified otherwise.
 
 **Current Status**: Development phase with core authentication and content management endpoints implemented.
 

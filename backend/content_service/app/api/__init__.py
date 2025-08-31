@@ -15,6 +15,7 @@ from .company_applications import router as company_applications_router
 from .device import router as device_router
 from .categories import router as categories_router
 from .websocket import router as websocket_router
+from .debug_roles import router as debug_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -31,3 +32,4 @@ api_router.include_router(company_applications_router)
 api_router.include_router(device_router)
 api_router.include_router(categories_router)
 api_router.include_router(websocket_router)
+api_router.include_router(debug_router)

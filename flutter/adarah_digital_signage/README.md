@@ -1,4 +1,4 @@
-# Adārah Digital Signage - Flutter App
+# Adara Digital Signage - Flutter App
 
 A Flutter-based digital signage application for Android devices (TVs, tablets, kiosks) that displays CSM content with interactive features and robust offline capabilities. This app implements a complete five-screen architecture with Material Design 3 theming and responsive layouts.
 

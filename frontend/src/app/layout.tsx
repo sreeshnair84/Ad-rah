@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Adārah from Hebron",
+  title: "Adara from Hebron",
   description: "Digital signage management system",
 };
 

@@ -1317,9 +1317,135 @@ class MongoRepo:
         )
         return result.modified_count > 0
 
+    # DeviceCredentials operations
+    @property
+    def _device_credentials_col(self):
+        return self._db["device_credentials"]
 
-# choose repo implementation
-if _MONGO_AVAILABLE:
-    repo = MongoRepo(settings.MONGO_URI)
-else:
-    repo = InMemoryRepo()
+    async def save_device_credentials(self, credentials: DeviceCredentials) -> dict:
+        data = credentials.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._device_credentials_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_device_credentials(self, device_id: str) -> Optional[dict]:
+        result = await self._device_credentials_col.find_one({"device_id": device_id, "revoked": False})
+        if result and _OBJECTID_AVAILABLE and ObjectId is not None:
+            # Convert ObjectIds to strings
+            result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+        return result
+
+    async def revoke_device_credentials(self, device_id: str) -> bool:
+        result = await self._device_credentials_col.update_one(
+            {"device_id": device_id, "revoked": False},
+            {"$set": {"revoked": True, "revoked_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+
+    async def update_device_credentials(self, device_id: str, updates: dict) -> bool:
+        updates["last_refreshed"] = datetime.utcnow()
+        result = await self._device_credentials_col.update_one(
+            {"device_id": device_id, "revoked": False},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    # DeviceHeartbeat operations
+    @property
+    def _device_heartbeat_col(self):
+        return self._db["device_heartbeats"]
+
+    async def save_device_heartbeat(self, heartbeat: DeviceHeartbeat) -> dict:
+        data = heartbeat.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._device_heartbeat_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_latest_heartbeat(self, device_id: str) -> Optional[dict]:
+        cursor = self._device_heartbeat_col.find({"device_id": device_id}).sort("timestamp", -1).limit(1)
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            return doc
+        return None
+
+    async def get_device_heartbeats(self, device_id: str, limit: int = 100) -> List[Dict]:
+        cursor = self._device_heartbeat_col.find({"device_id": device_id}).sort("timestamp", -1).limit(limit)
+        heartbeats = []
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            heartbeats.append(doc)
+        return heartbeats
+
+    async def cleanup_old_heartbeats(self, older_than_hours: int = 24) -> int:
+        """Clean up heartbeats older than specified hours"""
+        cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
+        
+        result = await self._device_heartbeat_col.delete_many({
+            "timestamp": {"$lt": cutoff_time}
+        })
+        return result.deleted_count
+
+    # Enhanced device operations
+    async def get_device_with_credentials(self, device_id: str) -> Optional[Dict]:
+        """Get device with its credentials and latest heartbeat"""
+        device = await self.get_digital_screen(device_id)
+        if not device:
+            return None
+            
+        credentials = await self.get_device_credentials(device_id)
+        latest_heartbeat = await self.get_latest_heartbeat(device_id)
+        
+        return {
+            "device": device,
+            "credentials": credentials,
+            "latest_heartbeat": latest_heartbeat
+        }
+
+    async def get_devices_by_status(self, status: Optional[str] = None, company_id: Optional[str] = None) -> List[Dict]:
+        """Get devices filtered by status and/or company"""
+        devices = await self.list_digital_screens(company_id)
+        if status:
+            devices = [d for d in devices if d.get("status") == status]
+        return devices
+
+
+# Global repository instance
+repo = None
+
+def initialize_repository():
+    """Initialize the repository with proper error handling and logging"""
+    global repo
+    
+    mongo_uri = getattr(settings, "MONGO_URI", None)
+    logger.info(f"MONGO_URI configured: {mongo_uri is not None}")
+    
+    if mongo_uri and _MONGO_AVAILABLE and motor is not None:
+        try:
+            logger.info(f"Attempting to connect to MongoDB: {mongo_uri}")
+            repo = MongoRepo(mongo_uri)
+            logger.info("✅ Successfully initialized MongoDB repository - DATA WILL PERSIST")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize MongoDB repository: {e}")
+            logger.warning("⚠️  Falling back to in-memory storage - DATA WILL BE LOST ON RESTART")
+            repo = InMemoryRepo()
+            return False
+    else:
+        if not mongo_uri:
+            logger.warning("⚠️  MONGO_URI not configured")
+        if not _MONGO_AVAILABLE:
+            logger.warning("⚠️  Motor (MongoDB driver) not available")
+        logger.warning("⚠️  Using in-memory repository - DATA WILL BE LOST ON RESTART")
+        repo = InMemoryRepo()
+        return False
+
+# Initialize repository on import
+persistence_enabled = initialize_repository()

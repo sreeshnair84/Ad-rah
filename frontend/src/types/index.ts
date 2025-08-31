@@ -17,10 +17,14 @@ export interface UserRole {
   id: string;
   user_id: string;
   company_id: string;
+  role_id: string;
   role: 'ADMIN' | 'HOST' | 'ADVERTISER';
+  role_name: string;
+  company_name: string;
   is_default: boolean;
   status: 'active' | 'inactive';
   created_at: string;
+  updated_at: string;
 }
 
 export interface User {

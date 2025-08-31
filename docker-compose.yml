@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: openkiosk-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=openkiosk123
+      - MONGO_INITDB_DATABASE=openkiosk
+    volumes:
+      - mongodb_data:/data/db
+      - ./backend/content_service/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - openkiosk-network
+
+  backend:
+    build:
+      context: ./backend/content_service
+      dockerfile: Dockerfile
+    container_name: openkiosk-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://admin:openkiosk123@mongodb:27017/openkiosk?authSource=admin
+      - SECRET_KEY=${SECRET_KEY:-your-secure-secret-key-here}
+      - ENVIRONMENT=production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+    depends_on:
+      - mongodb
+    volumes:
+      - backend_storage:/app/storage
+    networks:
+      - openkiosk-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: openkiosk-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - openkiosk-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  backend_storage:
+    driver: local
+
+networks:
+  openkiosk-network:
+    driver: bridge

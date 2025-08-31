@@ -1,4 +1,4 @@
-# Adārah<sup>from Hebron™</sup> - Content Service
+# Adara<sup>from Hebron™</sup> - Content Service
 
 FastAPI content microservice with event-driven architecture and Docker support.
 

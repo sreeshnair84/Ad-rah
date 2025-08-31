@@ -1,8 +1,8 @@
-# Enterprise Architecture - Adārah from Hebron™
+# Enterprise Architecture - Adara from Hebron™
 
 ## Executive Summary
 
-This document outlines the enterprise architecture standards, governance, and implementation roadmap for the Adārah digital kiosk content management platform. The architecture supports multi-tenant operations across UAE with enterprise-grade security, scalability, and compliance requirements.
+This document outlines the enterprise architecture standards, governance, and implementation roadmap for the Adara digital kiosk content management platform. The architecture supports multi-tenant operations across UAE with enterprise-grade security, scalability, and compliance requirements.
 
 ## Architecture Principles
 

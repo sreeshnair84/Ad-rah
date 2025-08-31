@@ -422,6 +422,133 @@ async def seed_sample_content():
             print(f"  ✗ Failed to create content {content_item['filename']}: {e}")
 
 
+async def seed_default_content():
+    """Seed default content that ships with the system"""
+    print("🌱 Seeding default content...")
+
+    # Get admin user for default content ownership
+    users = await repo.list_users()
+    admin_users = [u for u in users if "admin" in u.get("email", "")]
+
+    if not admin_users:
+        print("  ⚠ No admin user found, skipping default content seeding")
+        return
+
+    admin_user = admin_users[0]
+
+    # Get default categories
+    categories = await repo.list_content_categories()
+    welcome_category = next((c for c in categories if c.get("name") == "Public Service"), None)
+
+    default_content_data = [
+        {
+            "owner_id": admin_user["id"],
+            "filename": "logo.png",
+            "content_type": "image/png",
+            "size": 80582,
+            "title": "Adara Logo",
+            "description": "Official Adara Digital Signage logo",
+            "status": "approved",
+            "categories": [welcome_category["id"]] if welcome_category else [],
+            "tags": [],
+            "duration_seconds": 10,
+            "content_rating": "G"
+        },
+        {
+            "owner_id": admin_user["id"],
+            "filename": "welcome.txt",
+            "content_type": "text/plain",
+            "size": 200,
+            "title": "Welcome Message",
+            "description": "Default welcome message for new displays",
+            "status": "approved",
+            "categories": [welcome_category["id"]] if welcome_category else [],
+            "tags": [],
+            "duration_seconds": 15,
+            "content_rating": "G"
+        },
+        {
+            "owner_id": admin_user["id"],
+            "filename": "thank_you.txt",
+            "content_type": "text/plain",
+            "size": 150,
+            "title": "Thank You Message",
+            "description": "Thank you message for display viewers",
+            "status": "approved",
+            "categories": [welcome_category["id"]] if welcome_category else [],
+            "tags": [],
+            "duration_seconds": 10,
+            "content_rating": "G"
+        },
+        {
+            "owner_id": admin_user["id"],
+            "filename": "promotion.txt",
+            "content_type": "text/plain",
+            "size": 300,
+            "title": "Service Promotion",
+            "description": "Promotional content about Adara services",
+            "status": "approved",
+            "categories": [welcome_category["id"]] if welcome_category else [],
+            "tags": [],
+            "duration_seconds": 20,
+            "content_rating": "G"
+        },
+        {
+            "owner_id": admin_user["id"],
+            "filename": "ad1.jpg",
+            "content_type": "image/jpeg",
+            "size": 136,
+            "title": "Sample Advertisement 1",
+            "description": "Sample advertisement image",
+            "status": "approved",
+            "categories": [],
+            "tags": [],
+            "duration_seconds": 8,
+            "content_rating": "G"
+        },
+        {
+            "owner_id": admin_user["id"],
+            "filename": "ad2.jpg",
+            "content_type": "image/jpeg",
+            "size": 136,
+            "title": "Sample Advertisement 2",
+            "description": "Sample advertisement image",
+            "status": "approved",
+            "categories": [],
+            "tags": [],
+            "duration_seconds": 8,
+            "content_rating": "G"
+        }
+    ]
+
+    created_content = []
+    for content_item in default_content_data:
+        try:
+            # Create ContentMeta
+            content_meta = ContentMeta(**content_item)
+            saved_meta = await repo.save_content_meta(content_meta)
+
+            # Create ContentMetadata for additional details
+            metadata = ContentMetadata(
+                id=saved_meta["id"],
+                title=content_item["title"],
+                description=content_item["description"],
+                owner_id=content_item["owner_id"],
+                categories=content_item["categories"],
+                tags=content_item["tags"],
+                duration_seconds=content_item["duration_seconds"],
+                content_rating=content_item["content_rating"]
+            )
+            await repo.save(metadata)
+
+            created_content.append(saved_meta)
+            print(f"  ✓ Created default content: {content_item['title']}")
+        except Exception as e:
+            print(f"  ✗ Failed to create default content {content_item['title']}: {e}")
+
+    return created_content
+
+
 async def seed_registration_keys():
     """Seed sample registration keys for testing"""
     print("🌱 Seeding sample registration keys...")
@@ -481,6 +608,9 @@ async def main():
         # Only create registration keys for demo companies
         if companies:
             await seed_registration_keys()
+
+        # Seed default content that ships with the system
+        await seed_default_content()
 
         print("=" * 50)
         print("✅ Database seeding completed successfully!")

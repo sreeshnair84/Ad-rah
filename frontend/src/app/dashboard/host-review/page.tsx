@@ -41,7 +41,7 @@ export default function HostReviewPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const { enqueueForModeration, listQueue, postDecision } = useModeration();
+  const { enqueueForModeration, listQueue, postDecisionByContentId } = useModeration();
   const { listMetadata, updateContentStatus } = useContent();
   const { user } = useAuth();
 
@@ -83,7 +83,7 @@ export default function HostReviewPage() {
       await updateContentStatus(contentId, 'approved');
 
       // Post review decision
-      await postDecision(contentId, 'approve', user.id, reviewNotes || 'Approved by Host');
+      await postDecisionByContentId(contentId, 'approve', user.id, reviewNotes || 'Approved by Host');
 
       setMessage({ type: 'success', text: 'Content approved successfully' });
       setReviewNotes('');
@@ -111,7 +111,7 @@ export default function HostReviewPage() {
       await updateContentStatus(contentId, 'rejected');
 
       // Post review decision
-      await postDecision(contentId, 'reject', user.id, reviewNotes || 'Rejected by Host');
+      await postDecisionByContentId(contentId, 'reject', user.id, reviewNotes || 'Rejected by Host');
 
       setMessage({ type: 'success', text: 'Content rejected' });
       setReviewNotes('');

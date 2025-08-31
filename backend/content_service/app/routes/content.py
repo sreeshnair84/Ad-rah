@@ -14,6 +14,11 @@ import os
 import random
 from typing import List, Optional
 from app.websocket_manager import websocket_manager
+from app.default_content_manager import default_content_manager
+from app.utils.serialization import safe_json_response, ensure_string_id
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -90,20 +95,30 @@ async def get_metadata(content_id: str):
 @router.get("/")
 async def list_metadata():
     # Get both regular metadata and content meta
-    regular_content = await repo.list()
-    uploaded_content = await repo.list_content_meta()
+    try:
+        regular_content = await repo.list()
+    except Exception:
+        regular_content = []
+    
+    try:
+        uploaded_content = await repo.list_content_meta()
+    except Exception:
+        uploaded_content = []
 
-    # Convert uploaded content to match the expected format
+    # Convert uploaded content to match the expected format and handle ObjectId
     formatted_uploaded_content = []
     for content in uploaded_content:
+        # Convert ObjectId to string if present
+        content_id = str(content.get("_id", content.get("id", ""))) if content.get("_id") else content.get("id", "")
+        
         # Create a formatted version that matches ContentMetadata structure
         formatted_content = {
-            "id": content.get("id"),
-            "title": content.get("filename", "Untitled"),  # Use filename as title if no title
-            "description": f"File: {content.get('filename', '')}",
+            "id": content_id,
+            "title": content.get("title", content.get("filename", "Untitled")),  # Use title if available, otherwise filename
+            "description": content.get("description", f"File: {content.get('filename', '')}"),
             "owner_id": content.get("owner_id", ""),
-            "categories": ["uploaded"],  # Default category for uploaded content
-            "tags": [],
+            "categories": content.get("categories", ["uploaded"]),  # Use existing categories or default
+            "tags": content.get("tags", []),
             "status": content.get("status", "unknown"),
             "created_at": content.get("created_at"),
             "updated_at": content.get("updated_at"),
@@ -113,9 +128,22 @@ async def list_metadata():
         }
         formatted_uploaded_content.append(formatted_content)
 
+    # Handle regular content ObjectId conversion too
+    formatted_regular_content = []
+    for content in regular_content:
+        if isinstance(content, dict):
+            content_id = str(content.get("_id", content.get("id", ""))) if content.get("_id") else content.get("id", "")
+            formatted_content = dict(content)
+            formatted_content["id"] = content_id
+            if "_id" in formatted_content:
+                del formatted_content["_id"]
+            formatted_regular_content.append(formatted_content)
+        else:
+            formatted_regular_content.append(content)
+
     # Combine both lists
-    all_content = regular_content + formatted_uploaded_content
-    return all_content
+    all_content = formatted_regular_content + formatted_uploaded_content
+    return safe_json_response(all_content)
 
 
 @router.post("/moderation/simulate", response_model=ModerationResult)
@@ -140,18 +168,53 @@ async def simulate_moderation(content_id: str = Form(...)):
 async def update_content_status(content_id: str, status: str = Form(...)):
     # Update content status (for Host approval workflow)
     try:
-        # Get existing metadata
-        item = await repo.get(content_id)
+        # Try to get from content meta first
+        item = await repo.get_content_meta(content_id)
+        use_content_meta = True
+        
+        # If not found in content meta, try main collection
+        if not item:
+            item = await repo.get(content_id)
+            use_content_meta = False
+            
         if not item:
             raise HTTPException(status_code=404, detail="content not found")
 
         # Update status
         item["status"] = status
-        # Convert dict to ContentMetadata for type safety
-        from app.models import ContentMetadata
-        metadata = ContentMetadata(**item)
-        saved = await repo.save(metadata)
-        return saved
+        
+        # Clean the item for safe model creation
+        clean_item = ensure_string_id(item)
+        
+        # Save back to the appropriate collection
+        if use_content_meta:
+            # Convert dict to ContentMeta for type safety
+            from app.models import ContentMeta
+            # Remove any fields that can't be handled by the model
+            model_fields = ContentMeta.model_fields.keys()
+            filtered_item = {k: v for k, v in clean_item.items() if k in model_fields}
+            
+            metadata = ContentMeta(**filtered_item)
+            saved = await repo.save_content_meta(metadata)
+        else:
+            # Save to main collection (this might be ContentMetadata format)
+            # Try to determine the right model based on available fields
+            if "filename" in clean_item and "content_type" in clean_item:
+                # This looks like ContentMeta structure
+                from app.models import ContentMeta
+                model_fields = ContentMeta.model_fields.keys()
+                filtered_item = {k: v for k, v in clean_item.items() if k in model_fields}
+                metadata = ContentMeta(**filtered_item)
+                saved = await repo.save_content_meta(metadata)
+            else:
+                # This looks like ContentMetadata structure
+                from app.models import ContentMetadata
+                model_fields = ContentMetadata.model_fields.keys()
+                filtered_item = {k: v for k, v in clean_item.items() if k in model_fields}
+                metadata = ContentMetadata(**filtered_item)
+                saved = await repo.save(metadata)
+        
+        return safe_json_response(saved)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"failed to update status: {e}")
 
@@ -327,7 +390,7 @@ async def distribute_content(content_id: str, target_devices: List[str] = Form(N
         if not target_devices:
             raise HTTPException(status_code=400, detail="No target devices found")
 
-        # Create content distribution records
+        # Create content distribution records with enhanced metadata
         distribution_records = []
         for device_id in target_devices:
             record = {
@@ -335,6 +398,12 @@ async def distribute_content(content_id: str, target_devices: List[str] = Form(N
                 "content_id": content_id,
                 "device_id": device_id,
                 "status": "queued",  # queued -> downloading -> downloaded -> displayed
+                "priority": 1,  # Default priority
+                "scheduled_at": None,  # Immediate distribution
+                "expires_at": None,  # No expiration
+                "retry_count": 0,
+                "last_attempt": None,
+                "error_message": None,
                 "created_at": str(asyncio.get_event_loop().time()),
                 "updated_at": str(asyncio.get_event_loop().time())
             }
@@ -346,28 +415,33 @@ async def distribute_content(content_id: str, target_devices: List[str] = Form(N
             saved = await repo.save_content_distribution(record)
             saved_distributions.append(saved)
 
-        # TODO: Trigger actual push notifications to devices
-        # This would involve WebSocket notifications or push services
-        
-        # Notify devices via WebSocket
+        # Notify devices via WebSocket with enhanced message
+        successful_notifications = 0
         for record in distribution_records:
             device_id = record.get("device_id")
             if device_id:
-                await websocket_manager.notify_content_distribution(
+                success = await websocket_manager.notify_content_distribution(
                     device_id, content_id, record.get("id")
                 )
+                if success:
+                    successful_notifications += 1
+
+        # Log distribution summary
+        logger.info(f"Content {content_id} distributed to {len(target_devices)} devices, {successful_notifications} notified immediately")
 
         return {
             "status": "distributed",
             "content_id": content_id,
             "target_devices": len(target_devices),
+            "successful_notifications": successful_notifications,
             "distribution_ids": [r["id"] for r in saved_distributions],
-            "message": f"Content queued for distribution to {len(target_devices)} devices"
+            "message": f"Content queued for distribution to {len(target_devices)} devices ({successful_notifications} notified immediately)"
         }
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to distribute content {content_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to distribute content: {str(e)}")
 
 
@@ -409,39 +483,133 @@ async def get_distribution_status(content_id: str):
 async def get_device_content(device_id: str):
     """Get all approved content assigned to a specific device"""
     try:
-        # Verify device exists
+        # Try to verify device exists
         device = await repo.get_digital_screen(device_id)
-        if not device:
-            raise HTTPException(status_code=404, detail="Device not found")
-
+        
         # Get all approved content
         all_content = await repo.list_content_meta()
         approved_content = [c for c in all_content if c.get("status") == "approved"]
 
-        # Get distribution records for this device using repo method
-        device_distributions = await repo.list_content_distributions(device_id=device_id)
-        distributed_content_ids = {
-            d.get("content_id") for d in device_distributions
-            if d.get("status") in ["downloaded", "displayed"]
-        }
+        if device:
+            # Device exists - get distributed content
+            device_distributions = await repo.list_content_distributions(device_id=device_id)
+            distributed_content_ids = {
+                d.get("content_id") for d in device_distributions
+                if d.get("status") in ["downloaded", "displayed"]
+            }
 
-        # Filter content that's been distributed to this device
-        device_content = [
-            c for c in approved_content
-            if c.get("id") in distributed_content_ids
-        ]
+            # Filter content that's been distributed to this device
+            device_content = [
+                c for c in approved_content
+                if c.get("id") in distributed_content_ids
+            ]
 
-        return {
-            "device_id": device_id,
-            "device_name": device.get("name"),
-            "content": device_content,
-            "total": len(device_content)
-        }
+            # Check if we should show default content
+            if await default_content_manager.should_show_default_content(device_id, device_content):
+                company_id = device.get("company_id")
+                device_content = await default_content_manager.get_default_content(device_id, company_id)
+                logger.info(f"Using default content for registered device {device_id}")
+
+            return {
+                "device_id": device_id,
+                "device_name": device.get("name"),
+                "content": device_content,
+                "total": len(device_content),
+                "is_default_content": await default_content_manager.should_show_default_content(device_id, 
+                    [c for c in approved_content if c.get("id") in distributed_content_ids])
+            }
+        else:
+            # Device doesn't exist - return demo content
+            logger.info(f"Device {device_id} not found, returning demo content")
+            
+            demo_content = await default_content_manager.get_demo_content(device_id)
+            
+            return {
+                "device_id": device_id,
+                "device_name": f"Demo Device ({device_id[:8]}...)",
+                "content": demo_content,
+                "total": len(demo_content),
+                "is_demo": True,
+                "note": "Demo mode - device not registered"
+            }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get device content: {str(e)}")
+
+
+@router.get("/device/{device_id}")
+async def get_device_info(device_id: str):
+    """Get device information and current content"""
+    try:
+        # Get device information
+        device = await repo.get_digital_screen(device_id)
+        
+        if not device:
+            # Return demo device info for unregistered devices
+            logger.info(f"Device {device_id} not found, returning demo device info")
+            
+            # Get demo content
+            demo_content = await default_content_manager.get_demo_content(device_id)
+            
+            return {
+                "id": device_id,
+                "name": f"Demo Device ({device_id[:8]}...)",
+                "status": "demo",
+                "location": "Demo Location",
+                "company_id": "demo-company",
+                "resolution_width": 1920,
+                "resolution_height": 1080,
+                "orientation": "landscape",
+                "aspect_ratio": "16:9",
+                "last_seen": str(asyncio.get_event_loop().time()),
+                "is_demo": True,
+                "current_content": demo_content,
+                "total_content": len(demo_content)
+            }
+        
+        # Get device's current content
+        device_distributions = await repo.list_content_distributions(device_id=device_id)
+        distributed_content_ids = {
+            d.get("content_id") for d in device_distributions
+            if d.get("status") in ["downloaded", "displayed"]
+        }
+        
+        # Get content details
+        current_content = []
+        if distributed_content_ids:
+            all_content = await repo.list_content_meta()
+            current_content = [
+                c for c in all_content
+                if c.get("id") in distributed_content_ids and c.get("status") == "approved"
+            ]
+        
+        # Check if we should show default content
+        if await default_content_manager.should_show_default_content(device_id, current_content):
+            company_id = device.get("company_id")
+            current_content = await default_content_manager.get_default_content(device_id, company_id)
+            logger.info(f"Using default content for device info {device_id}")
+        
+        return {
+            "id": device.get("id"),
+            "name": device.get("name"),
+            "status": device.get("status", "unknown"),
+            "location": device.get("location", "Unknown Location"),
+            "company_id": device.get("company_id"),
+            "resolution_width": device.get("resolution_width"),
+            "resolution_height": device.get("resolution_height"),
+            "orientation": device.get("orientation", "landscape"),
+            "aspect_ratio": device.get("aspect_ratio", "16:9"),
+            "last_seen": device.get("last_seen"),
+            "is_demo": False,
+            "current_content": current_content,
+            "total_content": len(current_content)
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get device info for {device_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get device info: {str(e)}")
 
 
 @router.get("/download/{content_id}")
@@ -549,6 +717,159 @@ async def update_content_display_status(device_id: str, content_id: str, status:
         raise HTTPException(status_code=500, detail=f"Failed to update content status: {str(e)}")
 
 
-@router.get("/ping")
-async def ping():
-    return JSONResponse({"pong": True})
+@router.post("/bulk-distribute")
+async def bulk_distribute_content(
+    content_ids: List[str] = Form(...),
+    device_ids: List[str] = Form(...),
+    priority: int = Form(1),
+    scheduled_at: Optional[str] = Form(None)
+):
+    """Distribute multiple content items to multiple devices with priority and scheduling"""
+    try:
+        if not content_ids or not device_ids:
+            raise HTTPException(status_code=400, detail="Content IDs and device IDs are required")
+
+        # Validate content items exist and are approved
+        valid_content_ids = []
+        for content_id in content_ids:
+            content = await repo.get_content_meta(content_id)
+            if not content:
+                raise HTTPException(status_code=404, detail=f"Content {content_id} not found")
+            if content.get("status") != "approved":
+                raise HTTPException(status_code=400, detail=f"Content {content_id} is not approved")
+            valid_content_ids.append(content_id)
+
+        # Validate devices exist and are active
+        valid_device_ids = []
+        for device_id in device_ids:
+            device = await repo.get_digital_screen(device_id)
+            if not device:
+                raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
+            if device.get("status") != "active":
+                logger.warning(f"Device {device_id} is not active (status: {device.get('status')})")
+                continue  # Skip inactive devices but don't fail
+            valid_device_ids.append(device_id)
+
+        if not valid_device_ids:
+            raise HTTPException(status_code=400, detail="No valid active devices found")
+
+        # Create distribution records for each content-device combination
+        distribution_records = []
+        for content_id in valid_content_ids:
+            for device_id in valid_device_ids:
+                record = {
+                    "id": str(uuid.uuid4()),
+                    "content_id": content_id,
+                    "device_id": device_id,
+                    "status": "queued",
+                    "priority": priority,
+                    "scheduled_at": scheduled_at,
+                    "expires_at": None,
+                    "retry_count": 0,
+                    "last_attempt": None,
+                    "error_message": None,
+                    "created_at": str(asyncio.get_event_loop().time()),
+                    "updated_at": str(asyncio.get_event_loop().time())
+                }
+                distribution_records.append(record)
+
+        # Save all distribution records
+        saved_distributions = []
+        for record in distribution_records:
+            saved = await repo.save_content_distribution(record)
+            saved_distributions.append(saved)
+
+        # Notify devices immediately if not scheduled
+        successful_notifications = 0
+        if not scheduled_at:
+            for record in distribution_records:
+                device_id = record.get("device_id")
+                content_id = record.get("content_id")
+                if device_id and content_id:
+                    success = await websocket_manager.notify_content_distribution(
+                        device_id, content_id, record.get("id")
+                    )
+                    if success:
+                        successful_notifications += 1
+
+        logger.info(f"Bulk distribution: {len(valid_content_ids)} contents to {len(valid_device_ids)} devices, {len(saved_distributions)} records created")
+
+        return {
+            "status": "bulk_distributed",
+            "content_count": len(valid_content_ids),
+            "device_count": len(valid_device_ids),
+            "total_distributions": len(saved_distributions),
+            "successful_notifications": successful_notifications,
+            "scheduled": scheduled_at is not None,
+            "priority": priority,
+            "message": f"Content distributed to {len(valid_device_ids)} devices ({successful_notifications} notified immediately)"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed bulk distribution: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to distribute content: {str(e)}")
+
+
+@router.get("/distribution/stats")
+async def get_distribution_stats():
+    """Get overall distribution statistics and device status overview"""
+    try:
+        # Get all content distributions
+        all_distributions = await repo.list_content_distributions()
+
+        # Get all devices
+        all_devices = await repo.list_digital_screens()
+
+        # Get all approved content
+        all_content = await repo.list_content_meta()
+        approved_content = [c for c in all_content if c.get("status") == "approved"]
+
+        # Calculate statistics
+        stats = {
+            "total_distributions": len(all_distributions),
+            "total_devices": len(all_devices),
+            "total_approved_content": len(approved_content),
+            "active_devices": len([d for d in all_devices if d.get("status") == "active"]),
+            "inactive_devices": len([d for d in all_devices if d.get("status") != "active"]),
+            "distribution_status": {
+                "queued": len([d for d in all_distributions if d.get("status") == "queued"]),
+                "downloading": len([d for d in all_distributions if d.get("status") == "downloading"]),
+                "downloaded": len([d for d in all_distributions if d.get("status") == "downloaded"]),
+                "displayed": len([d for d in all_distributions if d.get("status") == "displayed"]),
+                "failed": len([d for d in all_distributions if d.get("status") == "failed"])
+            },
+            "device_status": {
+                "online": len([d for d in all_devices if d.get("status") == "active" and d.get("last_heartbeat")]),
+                "offline": len([d for d in all_devices if d.get("status") == "active" and not d.get("last_heartbeat")]),
+                "inactive": len([d for d in all_devices if d.get("status") != "active"])
+            }
+        }
+
+        # Get recent distributions (last 24 hours)
+        current_time = asyncio.get_event_loop().time()
+        recent_distributions = [
+            d for d in all_distributions
+            if d.get("created_at") and float(d.get("created_at", 0)) > (current_time - 86400)  # 24 hours ago
+        ]
+
+        stats["recent_distributions"] = len(recent_distributions)
+
+        # Get distribution success rate
+        completed_distributions = [d for d in all_distributions if d.get("status") in ["downloaded", "displayed"]]
+        failed_distributions = [d for d in all_distributions if d.get("status") == "failed"]
+
+        total_completed = len(completed_distributions)
+        total_failed = len(failed_distributions)
+
+        if total_completed + total_failed > 0:
+            stats["success_rate"] = round((total_completed / (total_completed + total_failed)) * 100, 2)
+        else:
+            stats["success_rate"] = 0.0
+
+        return stats
+
+    except Exception as e:
+        logger.error(f"Failed to get distribution stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get distribution stats: {str(e)}")

@@ -136,9 +136,9 @@ export function useContent() {
       const response = await fetch(`/api/content/${contentId}/status`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({ status }),
+        body: new URLSearchParams({ status }),
       });
 
       if (!response.ok) {

@@ -45,7 +45,7 @@ settings = SimpleNamespace(
     AZURE_STORAGE_CONNECTION_STRING=os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
     AZURE_CONTAINER_NAME=os.getenv("AZURE_CONTAINER_NAME", "openkiosk-media"),
     LOCAL_MEDIA_DIR=os.getenv("LOCAL_MEDIA_DIR", "./data/media"),
-    MONGO_URI=os.getenv("MONGO_URI", None),
+    MONGO_URI=os.getenv("MONGO_URI", "mongodb://localhost:27017/openkiosk"),
     SERVICE_BUS_CONNECTION_STRING=os.getenv("SERVICE_BUS_CONNECTION_STRING"),
     AZURE_AI_ENDPOINT=os.getenv("AZURE_AI_ENDPOINT"),
     AZURE_AI_KEY=os.getenv("AZURE_AI_KEY"),
@@ -59,3 +59,10 @@ settings = SimpleNamespace(
     USE_LOCAL_EVENT_PROCESSOR=os.getenv("USE_LOCAL_EVENT_PROCESSOR", "true").lower() == "true",
     EVENT_PROCESSOR_QUEUE_SIZE=int(os.getenv("EVENT_PROCESSOR_QUEUE_SIZE", "100")),
 )
+
+# Debug logging for database configuration
+logger.info(f"MONGO_URI configured: {settings.MONGO_URI is not None}")
+if settings.MONGO_URI:
+    logger.info(f"MONGO_URI value: {settings.MONGO_URI}")
+else:
+    logger.warning("MONGO_URI not set, using in-memory storage")
