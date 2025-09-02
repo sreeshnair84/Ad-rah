@@ -14,8 +14,8 @@ from app.models import (
     DeviceRegistrationKey, DeviceRegistrationKeyCreate, DeviceHeartbeat, DeviceCapabilities, 
     DeviceFingerprint, DeviceType
 )
-# from app.repo import repo
-# from app.device_auth import device_auth_service
+from app.repo import repo
+from app.device_auth import device_auth_service
 # from app.enhanced_device_registration import enhanced_device_registration
 import secrets
 import string

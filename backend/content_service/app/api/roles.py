@@ -5,7 +5,8 @@ import logging
 
 from app.models import Role, RolePermission, User, RoleGroup
 from app.repo import repo
-from app.auth import get_current_user_with_roles, get_current_user
+from app.api.auth import get_current_user, check_permission
+from app.rbac.permissions import Page, Permission
 from bson import ObjectId
 
 # Configure logger
@@ -31,27 +32,35 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 @router.post("/", response_model=Dict)
 async def create_role(
     role_data: Dict,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new role"""
     try:
         logger.info(f"User {current_user.get('email')} attempting to create role: {role_data.get('name')}")
+        print(f"[ROLES] DEBUG: User type in create_role: {current_user.get('user_type')}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
-        
-        if not is_admin:
-            logger.warning(f"User {current_user.get('email')} denied role creation - insufficient permissions")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can create roles"
+        # For SUPER_USER, grant immediate access
+        if current_user.get("user_type") == "SUPER_USER":
+            print("[ROLES] INFO: SUPER_USER detected, granting create access")
+        else:
+            # Check permission using the auth service for other users
+            from app.services.auth_service import AuthService
+            from app.api.auth import get_auth_service
+            
+            auth_service = get_auth_service()
+            result = await auth_service.check_permission(
+                user_id=current_user["id"],
+                company_id=current_user.get("active_company"),
+                page=Page.ROLES,
+                permission=Permission.CREATE
             )
+            
+            if not result.success or not result.data["has_permission"]:
+                logger.warning(f"User {current_user.get('email')} denied role creation - insufficient permissions")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions to create roles"
+                )
         
         # Validate required fields
         required_fields = ["name", "role_group", "company_id"]
@@ -95,31 +104,35 @@ async def create_role(
 @router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_roles(
     company_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all roles, optionally filtered by company"""
     try:
         print(f"[ROLES] INFO: User {current_user.get('email')} requesting roles list, company_id: {company_id}")
-        print(f"[ROLES] DEBUG: Current user roles: {len(current_user.get('roles', []))}")
+        print(f"[ROLES] DEBUG: Current user type: {current_user.get('user_type')}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
-        
-        print(f"[ROLES] DEBUG: Is admin: {is_admin}")
-        print(f"[ROLES] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': (r.get('role_details') or {}).get('role_group')} for r in user_roles if r]}")
-        
-        if not is_admin:
-            print(f"[ROLES] WARNING: User {current_user.get('email')} denied roles list access - insufficient permissions")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view roles"
+        # For SUPER_USER, grant immediate access
+        if current_user.get("user_type") == "SUPER_USER":
+            print("[ROLES] INFO: SUPER_USER detected, granting access")
+        else:
+            # Check permission using the auth service for other users
+            from app.services.auth_service import AuthService
+            from app.api.auth import get_auth_service
+            
+            auth_service = get_auth_service()
+            result = await auth_service.check_permission(
+                user_id=current_user["id"],
+                company_id=current_user.get("active_company"),
+                page=Page.ROLES,
+                permission=Permission.VIEW
             )
+            
+            if not result.success or not result.data["has_permission"]:
+                print(f"[ROLES] WARNING: User {current_user.get('email')} denied roles list access - insufficient permissions")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions to view roles"
+                )
         
         print("[ROLES] INFO: User has admin permissions, proceeding with role listing")
         
@@ -209,7 +222,7 @@ async def list_roles(
 @router.get("/{role_id}", response_model=Dict)
 async def get_role(
     role_id: str,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific role by ID"""
     try:
@@ -239,26 +252,29 @@ async def get_role(
 async def update_role(
     role_id: str,
     role_data: Dict,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update an existing role"""
     try:
         logger.info(f"User {current_user.get('email')} attempting to update role {role_id}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
+        # Check permission using the auth service
+        from app.services.auth_service import AuthService
+        from app.api.auth import get_auth_service
+        
+        auth_service = get_auth_service()
+        result = await auth_service.check_permission(
+            user_id=current_user["id"],
+            company_id=current_user.get("active_company"),
+            page=Page.ROLES,
+            permission=Permission.EDIT
         )
         
-        if not is_admin:
+        if not result.success or not result.data["has_permission"]:
             logger.warning(f"User {current_user.get('email')} denied role update - insufficient permissions")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can update roles"
+                detail="Insufficient permissions to update roles"
             )
         
         # Check if role exists
@@ -306,27 +322,35 @@ async def update_role(
 @router.delete("/{role_id}")
 async def delete_role(
     role_id: str,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a role"""
     try:
         logger.info(f"User {current_user.get('email')} attempting to delete role {role_id}")
+        print(f"[ROLES] DEBUG: User type in delete_role: {current_user.get('user_type')}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
-        
-        if not is_admin:
-            logger.warning(f"User {current_user.get('email')} denied role deletion - insufficient permissions")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can delete roles"
+        # For SUPER_USER, grant immediate access
+        if current_user.get("user_type") == "SUPER_USER":
+            print("[ROLES] INFO: SUPER_USER detected, granting delete access")
+        else:
+            # Check permission using the auth service for other users
+            from app.services.auth_service import AuthService
+            from app.api.auth import get_auth_service
+            
+            auth_service = get_auth_service()
+            result = await auth_service.check_permission(
+                user_id=current_user["id"],
+                company_id=current_user.get("active_company"),
+                page=Page.ROLES,
+                permission=Permission.DELETE
             )
+            
+            if not result.success or not result.data["has_permission"]:
+                logger.warning(f"User {current_user.get('email')} denied role deletion - insufficient permissions")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions to delete roles"
+                )
         
         # Check if role exists
         role = await repo.get_role(role_id)
@@ -451,26 +475,29 @@ async def get_role_permissions(role_id: str):
 async def set_role_permissions(
     role_id: str,
     permissions_data: List[Dict],
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Set permissions for a role"""
     try:
         logger.info(f"User {current_user.get('email')} attempting to set permissions for role {role_id}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
+        # Check permission using the auth service - using MANAGE permission for setting permissions
+        from app.services.auth_service import AuthService
+        from app.api.auth import get_auth_service
+        
+        auth_service = get_auth_service()
+        result = await auth_service.check_permission(
+            user_id=current_user["id"],
+            company_id=current_user.get("active_company"),
+            page=Page.ROLES,
+            permission=Permission.MANAGE
         )
         
-        if not is_admin:
+        if not result.success or not result.data["has_permission"]:
             logger.warning(f"User {current_user.get('email')} denied permission management - insufficient permissions")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can manage role permissions"
+                detail="Insufficient permissions to manage role permissions"
             )
         
         # Check if role exists

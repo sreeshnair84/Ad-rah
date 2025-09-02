@@ -10,7 +10,7 @@ import secrets
 from app.database import get_db_service, QueryFilter, FilterOperation, QueryOptions, DatabaseResult
 from app.rbac.permissions import (
     Role, UserType, PermissionManager, DEFAULT_ROLE_TEMPLATES, 
-    PagePermissions, is_super_admin
+    PagePermissions, is_super_admin, Page, Permission
 )
 from app.models import User, UserCreate, UserUpdate, UserProfile
 from app.auth import get_password_hash, verify_password  # Use centralized password functions
@@ -417,7 +417,29 @@ class UserService:
     ) -> DatabaseResult:
         """Get user's effective permissions"""
         try:
-            # Get user roles
+            # First get the user to check if they are SUPER_USER
+            user_result = await self.get_user_profile(user_id)
+            if not user_result.success:
+                return user_result
+            
+            user_data = user_result.data
+            is_super_user = user_data.get("user_type") == "SUPER_USER"
+            
+            # If it's a super user, grant all permissions
+            if is_super_user:
+                # Super admin gets all permissions on all pages
+                all_permissions = []
+                for page in Page:
+                    page_permissions = PagePermissions(page=page, permissions={Permission.VIEW, Permission.EDIT, Permission.DELETE, Permission.MANAGE})
+                    all_permissions.append(page_permissions)
+                
+                permissions_data = [p.to_dict() for p in all_permissions]
+                return DatabaseResult(success=True, data={
+                    "permissions": permissions_data,
+                    "is_super_admin": True
+                })
+            
+            # Get user roles for regular users
             roles_result = await self._get_user_roles_with_details(user_id)
             if not roles_result.success:
                 return roles_result

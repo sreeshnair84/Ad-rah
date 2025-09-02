@@ -116,9 +116,13 @@ class User(BaseModel):
     phone: Optional[str] = None
     status: str = "active"  # active or inactive
     hashed_password: Optional[str] = None
+    user_type: Optional[str] = "COMPANY_USER"  # SUPER_USER, COMPANY_USER, DEVICE_USER
+    company_id: Optional[str] = None  # Company the user belongs to (None for SUPER_USER)
     roles: List[UserRole] = []
     oauth_provider: Optional[str] = None  # For OAuth support
     oauth_id: Optional[str] = None
+    is_active: bool = True
+    is_deleted: bool = False  # Soft delete flag
     email_verified: bool = False
     last_login: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

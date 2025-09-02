@@ -16,6 +16,7 @@ from app.models import (
 from app.repo import repo
 from app.api.auth import get_current_user
 from app.services.auth_service import AuthService
+from app.auth import get_password_hash  # Import password hashing function
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])
 
@@ -82,26 +83,20 @@ async def submit_company_application(application_data: CompanyApplicationCreate)
 @router.get("/", response_model=List[Dict])
 @router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_company_applications(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status_filter: Optional[str] = Query(None, description="Filter by status"),
     company_type: Optional[str] = Query(None, description="Filter by company type"),
     current_user: dict = Depends(get_current_user)
 ):
     """List company applications (Admin only)"""
     try:
         print(f"[COMPANY_APPS] INFO: User {current_user.get('email')} requesting company applications list")
-        print(f"[COMPANY_APPS] DEBUG: Current user roles: {len(current_user.get('roles', []))}")
+        print(f"[COMPANY_APPS] DEBUG: Current user type: {current_user.get('user_type')}")
         
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
+        # Check if user has SUPER_USER access (new authentication system)
+        user_type = current_user.get("user_type", "")
+        is_admin = user_type == "SUPER_USER"
         
         print(f"[COMPANY_APPS] DEBUG: Is admin: {is_admin}")
-        print(f"[COMPANY_APPS] DEBUG: User roles details: {[{'role': r.get('role'), 'role_group': r.get('role_group'), 'role_details': ((r.get('role_details') or {}) if r else {}).get('role_group')} for r in user_roles]}")
         
         if not is_admin:
             print(f"[COMPANY_APPS] WARNING: User {current_user.get('email')} denied company applications access - insufficient permissions")
@@ -112,7 +107,7 @@ async def list_company_applications(
         
         print("[COMPANY_APPS] INFO: User has admin permissions, proceeding with application listing")
         
-        applications = await repo.list_company_applications(status=status, company_type=company_type)
+        applications = await repo.list_company_applications(status=status_filter, company_type=company_type)
         print(f"[COMPANY_APPS] INFO: Retrieved {len(applications)} applications for user {current_user.get('email')}")
         
         return [convert_objectid_to_str(app) for app in applications]
@@ -137,14 +132,9 @@ async def get_company_application(
 ):
     """Get specific company application details (Admin only)"""
     try:
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
+        # Check if user has SUPER_USER access (new authentication system)
+        user_type = current_user.get("user_type", "")
+        is_admin = user_type == "SUPER_USER"
         
         if not is_admin:
             raise HTTPException(
@@ -179,13 +169,9 @@ async def review_company_application(
     """Review and approve/reject company application (Admin only)"""
     try:
         # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
+        # Check if user has SUPER_USER access (new authentication system)
+        user_type = current_user.get("user_type", "")
+        is_admin = user_type == "SUPER_USER"
         
         if not is_admin:
             raise HTTPException(
@@ -320,14 +306,9 @@ async def _create_company_and_user(application: dict, reviewer_id: str):
 async def get_application_stats(current_user: dict = Depends(get_current_user)):
     """Get application statistics (Admin only)"""
     try:
-        # Check if user has ADMIN role
-        user_roles = current_user.get("roles", [])
-        is_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
+        # Check if user has SUPER_USER access (new authentication system)
+        user_type = current_user.get("user_type", "")
+        is_admin = user_type == "SUPER_USER"
         
         if not is_admin:
             raise HTTPException(

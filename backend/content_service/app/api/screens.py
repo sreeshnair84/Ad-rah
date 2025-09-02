@@ -9,7 +9,7 @@ from app.models import (
     DigitalTwin, DigitalTwinCreate, DigitalTwinUpdate,
     LayoutTemplate, LayoutTemplateCreate, LayoutTemplateUpdate
 )
-from app.auth import get_current_user, get_user_company_context
+from app.auth import get_current_user, get_user_company_context, get_current_user_with_super_admin_bypass
 from app.repo import repo
 from app.utils.serialization import safe_json_response
 
@@ -194,10 +194,17 @@ async def use_layout_template(
 async def get_screens(
     company_id: Optional[str] = None,
     status: Optional[ScreenStatus] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_with_super_admin_bypass),
     company_context=Depends(get_user_company_context)
 ):
     """Get all digital screens with company-scoped filtering"""
+    # SUPER_USER bypass
+    if current_user.get("user_type") == "SUPER_USER":
+        screens = await repo.list_digital_screens(company_id)
+        if status:
+            screens = [s for s in screens if s.get("status") == status.value]
+        return screens
+    
     is_platform_admin = company_context["is_platform_admin"]
     accessible_companies = company_context["accessible_companies"]
     accessible_company_ids = {c.get("id") for c in accessible_companies}
@@ -269,9 +276,17 @@ async def create_screen(
 @router.get("/{screen_id}", response_model=dict)
 async def get_screen(
     screen_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_with_super_admin_bypass),
+    company_context=Depends(get_user_company_context)
 ):
     """Get a specific digital screen"""
+    # SUPER_USER bypass
+    if current_user.get("user_type") == "SUPER_USER":
+        screen = await repo.get_digital_screen(screen_id)
+        if not screen:
+            raise HTTPException(status_code=404, detail="Screen not found")
+        return screen
+    
     screen = await repo.get_digital_screen(screen_id)
     if not screen:
         raise HTTPException(status_code=404, detail="Screen not found")

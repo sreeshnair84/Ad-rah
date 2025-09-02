@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 # Import fallback components
 from app.api import api_router
-from app.auth import init_default_data
+
 
 # Configure logging
 logging.basicConfig(
@@ -45,18 +45,6 @@ async def lifespan(app: FastAPI):
             logger.info("🔌 Initializing database connection...")
             db_initialized = await initialize_database_from_url(mongo_uri)
             
-            if db_initialized:
-                logger.info("✅ DATABASE SERVICE INITIALIZED - Using MongoDB")
-                
-                # Initialize RBAC and default data
-                try:
-                    await init_default_data()
-                    logger.info("✅ Default data and RBAC system initialized")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to initialize default data: {e}")
-            else:
-                logger.error("❌ Failed to initialize database service")
-                raise RuntimeError("Database initialization failed")
         else:
             # Fallback to old repo system for development
             logger.warning("⚠️ No MONGO_URI found - using legacy in-memory storage")
@@ -65,8 +53,6 @@ async def lifespan(app: FastAPI):
             if not persistence_enabled:
                 logger.warning("💾 TEMPORARY STORAGE - Data will be LOST on restart!")
             
-            # Initialize with old system
-            await init_default_data()
             logger.info("✅ Legacy storage initialized")
             
     except Exception as e:
@@ -142,7 +128,7 @@ async def initialize_data():
         if hasattr(repo, '_store'):
             repo._store.clear()
         
-        await init_default_data()
+        
         
         # Show result
         if hasattr(repo, '_store'):

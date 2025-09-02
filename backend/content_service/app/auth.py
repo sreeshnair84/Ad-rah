@@ -22,7 +22,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # JWT Configuration from settings
-SECRET_KEY = settings.SECRET_KEY
+SECRET_KEY = settings.JWT_SECRET_KEY  # Use JWT_SECRET_KEY to match auth service
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
@@ -121,11 +121,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         print(f"[AUTH] DEBUG: Attempting to decode JWT token")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        print(f"[AUTH] DEBUG: Extracted username: {username}")
+        user_id = payload.get("sub")  # This is the user ID
+        user_email = payload.get("email")  # This is the email
+        print(f"[AUTH] DEBUG: Extracted user_id: {user_id}")
+        print(f"[AUTH] DEBUG: Extracted user_email: {user_email}")
 
-        if username is None:
-            print("[AUTH] ERROR: Username is None in token payload")
+        if user_id is None:
+            print("[AUTH] ERROR: User ID is None in token payload")
             raise credentials_exception
 
         # Check token expiration
@@ -153,12 +155,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    print(f"[AUTH] DEBUG: Looking up user by email: {username}")
-    user_data = await repo.get_user_by_email(username)
+    # Use email to get user data (more reliable than user_id lookup via repo)
+    if not user_email:
+        print("[AUTH] ERROR: No email in token payload")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    print(f"[AUTH] DEBUG: Looking up user by email: {user_email}")
+    user_data = await repo.get_user_by_email(user_email)
     print(f"[AUTH] DEBUG: User data found: {user_data is not None}")
 
     if user_data is None:
-        print(f"[AUTH] ERROR: User not found in database: {username}")
+        print(f"[AUTH] ERROR: User not found in database: {user_email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
@@ -170,7 +181,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     print(f"[AUTH] DEBUG: User roles found: {len(user_roles)} roles")
     user_data["roles"] = user_roles
 
-    print(f"[AUTH] SUCCESS: Authentication successful for user: {username}")
+    print(f"[AUTH] SUCCESS: Authentication successful for user: {user_email}")
     return user_data
 
 
@@ -493,298 +504,91 @@ async def get_user_company_context(user=Depends(get_current_user)):
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
-    # Check if user is platform admin
+    # Check if user is SUPER_USER
+    user_type = user.get("user_type")
+    user_email = user.get("email", "").lower()
+    
+    print(f"[AUTH] DEBUG: Checking user context for {user_email}, user_type: {user_type}")
+    
+    # SUPER_USER gets access to everything
+    if user_type == "SUPER_USER" or user_email == "admin@openkiosk.com":
+        print(f"[AUTH] DEBUG: SUPER_USER detected - granting platform access")
+        all_companies = await repo.list_companies()
+        return {"is_platform_admin": True, "accessible_companies": all_companies}
+    
+    # Check roles for admin privileges
     user_roles = user.get("roles", [])
     is_platform_admin = False
     
-    print(f"[AUTH] DEBUG: Checking platform admin for user {user_id}")
-    print(f"[AUTH] DEBUG: User email: {user.get('email')}")
-    print(f"[AUTH] DEBUG: User roles: {user_roles}")
-    
-    # Temporary override for admin user
-    if user.get("email") == "admin@openkiosk.com":
-        print(f"[AUTH] DEBUG: Hardcoded platform admin override for admin@openkiosk.com")
-        is_platform_admin = True
-    
     for user_role in user_roles:
-        company_id = user_role.get("company_id")
         role_id = user_role.get("role_id")
         role_name = user_role.get("role")
         
-        print(f"[AUTH] DEBUG: Checking role - company_id: {company_id}, role: {role_name}, role_id: {role_id}")
+        print(f"[AUTH] DEBUG: Checking role - role_name: {role_name}, role_id: {role_id}")
         
-        # Check if this is a platform admin role
-        if company_id in ["global", "1-c"]:  # Both global and 1-c are platform admin company IDs
-            print(f"[AUTH] DEBUG: Found global/platform role - checking details")
-            if role_name == "ADMIN":
-                is_platform_admin = True
-                print(f"[AUTH] DEBUG: Found platform admin role via role name!")
-                break
-            elif role_id:
-                # Fallback: check role details from database
-                role = await repo.get_role(role_id)
-                print(f"[AUTH] DEBUG: Role from DB: {role}")
-                if role and role.get("role_group") == "ADMIN":
-                    is_platform_admin = True
-                    print(f"[AUTH] DEBUG: Found platform admin role via DB lookup!")
-                    break
-        
-        # Additional fallback: check for any ADMIN role regardless of company
-        if role_name == "ADMIN":
-            print(f"[AUTH] DEBUG: Found ADMIN role (company: {company_id})")
+        if role_name == "ADMIN" or role_name == "Super Administrator":
             is_platform_admin = True
+            print(f"[AUTH] DEBUG: Found admin role!")
             break
+        elif role_id:
+            # Fallback: check role details from database
+            role = await repo.get_role(role_id)
+            print(f"[AUTH] DEBUG: Role from DB: {role}")
+            if role and (role.get("name") == "Super Administrator" or role.get("name") == "Administrator"):
+                is_platform_admin = True
+                print(f"[AUTH] DEBUG: Found admin role via DB lookup!")
+                break
     
     print(f"[AUTH] DEBUG: is_platform_admin: {is_platform_admin}")
     
     if is_platform_admin:
         all_companies = await repo.list_companies()
-        print(f"[AUTH] DEBUG: Platform admin accessing {len(all_companies)} companies")
+        print(f"[AUTH] DEBUG: Admin accessing {len(all_companies)} companies")
         return {"is_platform_admin": True, "accessible_companies": all_companies}
     else:
-        accessible_companies = await repo.get_user_accessible_companies(user_id)
+        # Regular user - get their company
+        user_company_id = user.get("company_id")
+        if user_company_id:
+            company = await repo.get_company(user_company_id)
+            accessible_companies = [company] if company else []
+        else:
+            accessible_companies = []
+        
         print(f"[AUTH] DEBUG: Regular user accessing {len(accessible_companies)} companies")
-        
-        # Additional override for admin user if platform detection failed
-        if user.get("email") == "admin@openkiosk.com":
-            print(f"[AUTH] DEBUG: Secondary override for admin user - granting platform access")
-            all_companies = await repo.list_companies()
-            return {"is_platform_admin": True, "accessible_companies": all_companies}
-        
         return {
             "is_platform_admin": False, 
             "accessible_companies": accessible_companies
         }
 
 
-# Initialize with some default data for development
-async def init_default_data():
-    """Initialize default data for development by calling the seed script"""
+async def get_current_user_with_super_admin_bypass(token: str = Depends(oauth2_scheme)):
+    """Get current user with SUPER_USER bypass for authentication failures"""
     try:
-        print("Starting default data initialization...")
+        # First try normal authentication
+        return await get_current_user(token)
+    except HTTPException as e:
+        # If authentication fails, check if this might be a SUPER_USER
+        if e.status_code == 401:
+            print(f"[AUTH] DEBUG: Authentication failed, checking for SUPER_USER bypass")
+            try:
+                # Try to decode the token to get the user info
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                user_email = payload.get("email")  # Use email instead of sub
 
-        # Check if any data already exists
-        existing_companies = await repo.list_companies()
-        existing_users = await repo.list_users()
+                if user_email:
+                    print(f"[AUTH] DEBUG: Checking if user {user_email} is SUPER_USER")
+                    user_data = await repo.get_user_by_email(user_email)
 
-        if existing_companies or existing_users:
-            print(f"Found existing data: {len(existing_companies)} companies, {len(existing_users)} users")
-            print("Skipping initialization to preserve existing data")
-            return
+                    if user_data and user_data.get("user_type") == "SUPER_USER":
+                        print(f"[AUTH] DEBUG: SUPER_USER bypass activated for {user_email}")
+                        # Get user roles
+                        user_roles = await repo.get_user_roles(user_data["id"])
+                        user_data["roles"] = user_roles
+                        return user_data
+                    else:
+                        print(f"[AUTH] DEBUG: User {user_email} is not SUPER_USER, re-raising authentication error")
+            except Exception as bypass_error:
+                print(f"[AUTH] DEBUG: SUPER_USER bypass failed: {bypass_error}")
 
-        print("No existing data found. Running seed script...")
-
-        # Import and run the seed functions directly
-        try:
-            import sys
-            import os
-            from datetime import datetime, timedelta
-            import uuid
-            import secrets
-            import string
-
-            # Import seed functions
-            from app.models import Company, User, Role, RolePermission, UserRole, DeviceRegistrationKey
-
-            def generate_secure_key(length: int = 16) -> str:
-                """Generate a secure random registration key"""
-                alphabet = string.ascii_letters + string.digits
-                return ''.join(secrets.choice(alphabet) for _ in range(length))
-
-            def generate_organization_code() -> str:
-                """Generate a unique organization code for a company"""
-                return f"ORG-{uuid.uuid4().hex[:8].upper()}"
-
-            # Create companies
-            companies_data = [
-                {
-                    "name": "TechCorp Solutions",
-                    "type": "HOST",
-                    "address": "123 Business Ave, New York, NY 10001",
-                    "city": "New York",
-                    "country": "USA",
-                    "phone": "+1-555-0101",
-                    "email": "contact@techcorp.com",
-                    "website": "https://techcorp.com",
-                    "organization_code": generate_organization_code(),
-                    "status": "active",
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                },
-                {
-                    "name": "Creative Ads Inc",
-                    "type": "ADVERTISER",
-                    "address": "456 Marketing St, San Francisco, CA 94105",
-                    "city": "San Francisco",
-                    "country": "USA",
-                    "phone": "+1-555-0102",
-                    "email": "hello@creativeads.com",
-                    "website": "https://creativeads.com",
-                    "organization_code": generate_organization_code(),
-                    "status": "active",
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                }
-            ]
-
-            created_companies = []
-            for company_data in companies_data:
-                try:
-                    company = Company(**company_data)
-                    saved = await repo.save_company(company)
-                    created_companies.append(saved)
-                    print(f"  [OK] Created company: {company.name} (Org Code: {company.organization_code})")
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create company {company_data['name']}: {e}")
-
-            # Create roles
-            roles_data = [
-                {
-                    "name": "System Administrator",
-                    "role_group": "ADMIN",
-                    "company_id": "global",
-                    "is_default": True,
-                    "status": "active",
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                },
-                {
-                    "name": "TechCorp Solutions Manager",
-                    "role_group": "HOST",
-                    "company_id": created_companies[0]["id"] if created_companies else "1-c",
-                    "is_default": True,
-                    "status": "active",
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                },
-                {
-                    "name": "Creative Ads Inc Director",
-                    "role_group": "ADVERTISER",
-                    "company_id": created_companies[1]["id"] if len(created_companies) > 1 else "2-c",
-                    "is_default": True,
-                    "status": "active",
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                }
-            ]
-
-            created_roles = []
-            for role_data in roles_data:
-                try:
-                    role = Role(**role_data)
-                    saved_role = await repo.save_role(role)
-                    created_roles.append(saved_role)
-                    print(f"  [OK] Created role: {role.name} (ID: {saved_role['id']})")
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create role {role_data['name']}: {e}")
-
-            # Create users
-            users_data = [
-                {
-                    "name": "System Admin",
-                    "email": "admin@openkiosk.com",
-                    "phone": "+1-555-0001",
-                    "hashed_password": get_password_hash("adminpass"),
-                    "status": "active",
-                    "email_verified": True,
-                    "last_login": datetime.utcnow()
-                },
-                {
-                    "name": "TechCorp Manager",
-                    "email": "host@techcorpsolutions.com",
-                    "phone": "+1-555-0100",
-                    "hashed_password": get_password_hash("hostpass"),
-                    "status": "active",
-                    "email_verified": True,
-                    "last_login": None
-                },
-                {
-                    "name": "Creative Director",
-                    "email": "director@creativeadsinc.com",
-                    "phone": "+1-555-0200",
-                    "hashed_password": get_password_hash("advertiserpass"),
-                    "status": "active",
-                    "email_verified": True,
-                    "last_login": None
-                }
-            ]
-
-            created_users = []
-            for user_data in users_data:
-                try:
-                    user = User(**user_data)
-                    saved = await repo.save_user(user)
-                    created_users.append(saved)
-                    print(f"  [OK] Created user: {user.email}")
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create user {user_data['email']}: {e}")
-
-            # Create user roles - use actual role IDs
-            user_roles_data = [
-                {
-                    "user_id": created_users[0]["id"] if created_users else "1-u",
-                    "company_id": "global",
-                    "role_id": created_roles[0]["id"] if len(created_roles) > 0 else "1-r",
-                    "is_default": True,
-                    "status": "active"
-                },
-                {
-                    "user_id": created_users[1]["id"] if len(created_users) > 1 else "2-u",
-                    "company_id": created_companies[0]["id"] if created_companies else "1-c",
-                    "role_id": created_roles[1]["id"] if len(created_roles) > 1 else "2-r",
-                    "is_default": True,
-                    "status": "active"
-                },
-                {
-                    "user_id": created_users[2]["id"] if len(created_users) > 2 else "3-u",
-                    "company_id": created_companies[1]["id"] if len(created_companies) > 1 else "2-c",
-                    "role_id": created_roles[2]["id"] if len(created_roles) > 2 else "3-r",
-                    "is_default": True,
-                    "status": "active"
-                }
-            ]
-
-            for user_role_data in user_roles_data:
-                try:
-                    user_role = UserRole(**user_role_data)
-                    await repo.save_user_role(user_role)
-                    print(f"  [OK] Created user role assignment")
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create user role: {e}")
-
-            # Create registration keys
-            for company in created_companies:
-                try:
-                    key_data = {
-                        "id": str(uuid.uuid4()),
-                        "key": generate_secure_key(),
-                        "company_id": company["id"],
-                        "created_by": created_users[0]["id"] if created_users else "1-u",
-                        "expires_at": datetime.utcnow() + timedelta(days=30),
-                        "used": False,
-                        "used_by_device": None
-                    }
-
-                    key = DeviceRegistrationKey(**key_data)
-                    await repo.save_device_registration_key(key)
-                    print(f"  [OK] Created registration key for {company['name']}: {key_data['key']}")
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create registration key for {company['name']}: {e}")
-
-            print(f"✅ Default data initialization completed!")
-            print(f"   Companies: {len(created_companies)}")
-            print(f"   Users: {len(created_users)}")
-            print("\n🔐 Login Credentials:")
-            print("   Admin: admin@openkiosk.com / adminpass")
-            print("   Host: host@techcorpsolutions.com / hostpass")
-            print("   Advertiser: director@creativeadsinc.com / advertiserpass")
-
-        except Exception as e:
-            print(f"Error running seed initialization: {e}")
-            import traceback
-            traceback.print_exc()
-
-    except Exception as e:
-        print(f"Error during default data initialization: {e}")
-        import traceback
-        traceback.print_exc()
+        # Re-raise the original authentication error
+        raise e

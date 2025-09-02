@@ -5,7 +5,8 @@ import uuid
 from bson import ObjectId
 from app.models import User, UserCreate, UserUpdate, UserRole, UserProfile, Role, RoleCreate, RoleUpdate, PermissionCheck
 from app.repo import repo
-from app.auth import require_roles, get_password_hash, get_current_user, get_current_user_with_roles, get_user_company_context
+from app.auth import require_roles, get_password_hash, get_user_company_context, get_current_user_with_super_admin_bypass
+from app.api.auth import get_current_user
 # Data initialization is handled at server startup
 
 def convert_objectid_to_str(data: Any) -> Any:
@@ -33,49 +34,61 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/", response_model=List[Dict])
 @router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_users(
-    current_user: dict = Depends(get_current_user_with_roles),
+    current_user: dict = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """List users with company-scoped access control"""
     try:
-        # Company admins can list users in their company, platform admins see all users
+        # Initialize variables
         current_user_id = current_user.get("id")
-        is_platform_admin = company_context["is_platform_admin"]
-        accessible_companies = company_context["accessible_companies"]
+        is_platform_admin = False
+        accessible_companies = []
+        can_manage_users = False
         
-        print(f"[USERS] DEBUG: User {current_user_id} requesting user list")
-        print(f"[USERS] DEBUG: is_platform_admin: {is_platform_admin}")
-        print(f"[USERS] DEBUG: accessible_companies count: {len(accessible_companies)}")
-        
-        # Check if user has admin role (platform or company level)
-        user_roles = current_user.get("roles", [])
-        can_manage_users = is_platform_admin
-        
-        # Also check if the user has an ADMIN role directly (fallback for platform admin detection)
-        if not can_manage_users:
-            for role in user_roles:
-                if role.get("role") == "ADMIN":
-                    can_manage_users = True
-                    print(f"[USERS] DEBUG: Found ADMIN role directly in user roles")
-                    break
-        
-        if not is_platform_admin and not can_manage_users:
-            # Check if user is company admin in any of their companies
-            for company in accessible_companies:
-                company_id = company.get("id")
-                if company_id:
-                    user_role = await repo.get_user_role_in_company(current_user_id, company_id)
-                    if user_role:
-                        role_details = user_role.get("role_details", {})
-                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
-                            can_manage_users = True
-                            print(f"[USERS] DEBUG: Found COMPANY_ADMIN role")
-                            break
-        
-        print(f"[USERS] DEBUG: can_manage_users: {can_manage_users}")
-        
-        if not can_manage_users:
-            raise HTTPException(status_code=403, detail="Only admins can list users")
+        # SUPER_USER bypass
+        if current_user.get("user_type") == "SUPER_USER":
+            print(f"[USERS] SUPER_USER detected, granting full access")
+            is_platform_admin = True  # SUPER_USER has platform admin privileges
+            accessible_companies = []  # Will be populated with all companies later
+            can_manage_users = True
+        else:
+            # Company admins can list users in their company, platform admins see all users
+            is_platform_admin = company_context["is_platform_admin"]
+            accessible_companies = company_context["accessible_companies"]
+            
+            print(f"[USERS] DEBUG: User {current_user_id} requesting user list")
+            print(f"[USERS] DEBUG: is_platform_admin: {is_platform_admin}")
+            print(f"[USERS] DEBUG: accessible_companies count: {len(accessible_companies)}")
+            
+            # Check if user has admin role (platform or company level)
+            user_roles = current_user.get("roles", [])
+            can_manage_users = is_platform_admin
+            
+            # Also check if the user has an ADMIN role directly (fallback for platform admin detection)
+            if not can_manage_users:
+                for role in user_roles:
+                    if role.get("role") == "ADMIN":
+                        can_manage_users = True
+                        print(f"[USERS] DEBUG: Found ADMIN role directly in user roles")
+                        break
+            
+            if not is_platform_admin and not can_manage_users:
+                # Check if user is company admin in any of their companies
+                for company in accessible_companies:
+                    company_id = company.get("id")
+                    if company_id:
+                        user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                        if user_role:
+                            role_details = user_role.get("role_details", {})
+                            if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                                can_manage_users = True
+                                print(f"[USERS] DEBUG: Found COMPANY_ADMIN role")
+                                break
+            
+            print(f"[USERS] DEBUG: can_manage_users: {can_manage_users}")
+            
+            if not can_manage_users:
+                raise HTTPException(status_code=403, detail="Only admins can list users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):
@@ -221,7 +234,7 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=Dict)
-async def get_user(user_id: str, current_user: dict = Depends(get_current_user_with_roles)):
+async def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
     """Get a specific user by ID"""
     try:
 # Mock data initialization is handled at server startup

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
 from app.database import get_db_service, QueryFilter, FilterOperation, DatabaseResult
-from app.rbac.permissions import PermissionManager, Page, Permission, is_super_admin
+from app.rbac.permissions import PermissionManager, Page, Permission, is_super_admin, PagePermissions
 from app.services.user_service import UserService
 from app.config import settings
 
@@ -193,7 +193,29 @@ class AuthService:
     ) -> DatabaseResult:
         """Check if user has specific permission"""
         try:
-            # Get user permissions
+            print(f"[AUTH_SERVICE] Checking permission for user_id: {user_id}, page: {page}, permission: {permission}")
+            
+            # First, get the user to check if they are SUPER_USER
+            user_result = await self.user_service.get_user_profile(user_id)
+            if not user_result.success:
+                print(f"[AUTH_SERVICE] Failed to get user profile: {user_result.error}")
+                return user_result
+            
+            user_data = user_result.data["user"]
+            user_type = user_data.get("user_type")
+            print(f"[AUTH_SERVICE] User data: {user_data}")
+            print(f"[AUTH_SERVICE] User type: {user_type}")
+            
+            # SUPER_USER has access to everything
+            if user_type == "SUPER_USER":
+                print(f"[AUTH_SERVICE] SUPER_USER detected, granting permission")
+                return DatabaseResult(success=True, data={
+                    "has_permission": True,
+                    "is_super_admin": True
+                })
+            
+            print(f"[AUTH_SERVICE] Not SUPER_USER, checking RBAC permissions")
+            # For other users, check permissions through RBAC
             permissions_result = await self.user_service.get_user_permissions(user_id, company_id)
             if not permissions_result.success:
                 return permissions_result
@@ -201,7 +223,7 @@ class AuthService:
             permissions_data = permissions_result.data["permissions"]
             user_permissions = PermissionManager.deserialize_permissions(
                 PermissionManager.serialize_permissions([
-                    PermissionManager.PagePermissions.from_dict(p) for p in permissions_data
+                    PagePermissions.from_dict(p) for p in permissions_data
                 ])
             )
             
