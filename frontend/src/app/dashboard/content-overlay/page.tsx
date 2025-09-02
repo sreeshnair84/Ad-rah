@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,23 +12,13 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Move,
-  RotateCw,
   Eye,
-  EyeOff,
-  Settings,
   Monitor,
-  Smartphone,
   AlertCircle,
   Save,
-  Play,
-  Pause,
-  Square,
   Search,
-  Filter,
   ZoomIn,
-  ZoomOut,
-  RotateCcw
+  ZoomOut
 } from 'lucide-react';
 
 interface DigitalScreen {
@@ -110,7 +100,7 @@ export default function ContentOverlayPage() {
   });
 
   // Fetch screens
-  const fetchScreens = async () => {
+  const fetchScreens = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/screens', {
@@ -125,10 +115,10 @@ export default function ContentOverlayPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch screens');
     }
-  };
+  }, [selectedScreen]);
 
   // Fetch overlays for selected screen
-  const fetchOverlays = async (screenId: string) => {
+  const fetchOverlays = useCallback(async (screenId: string) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/screens/${screenId}/overlays`, {
@@ -140,7 +130,7 @@ export default function ContentOverlayPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch overlays');
     }
-  };
+  }, []);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -149,14 +139,14 @@ export default function ContentOverlayPage() {
       setLoading(false);
     };
     initializeData();
-  }, []);
+  }, [fetchScreens]);
 
   useEffect(() => {
     if (selectedScreen) {
       fetchOverlays(selectedScreen.id);
       setFormData(prev => ({ ...prev, screen_id: selectedScreen.id }));
     }
-  }, [selectedScreen]);
+  }, [selectedScreen, fetchOverlays]);
 
   // Canvas drawing
   useEffect(() => {
@@ -165,7 +155,7 @@ export default function ContentOverlayPage() {
     }
   }, [selectedScreen, overlays, zoomLevel]);
 
-  const drawCanvas = () => {
+  const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !selectedScreen) return;
 
@@ -246,7 +236,7 @@ export default function ContentOverlayPage() {
 
       ctx.restore();
     });
-  };
+  }, [selectedScreen, overlays, zoomLevel, selectedOverlay]);
 
   // Handle canvas mouse events for drag and drop
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {

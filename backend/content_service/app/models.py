@@ -13,9 +13,17 @@ class Permission(str, Enum):
 
 
 class RoleGroup(str, Enum):
-    ADMIN = "ADMIN"
-    HOST = "HOST"
-    ADVERTISER = "ADVERTISER"
+    ADMIN = "ADMIN"  # Platform administrators
+    HOST = "HOST"    # Host company roles
+    ADVERTISER = "ADVERTISER"  # Advertiser company roles
+
+
+class CompanyRoleType(str, Enum):
+    """Specific role types within companies"""
+    COMPANY_ADMIN = "COMPANY_ADMIN"      # Full company management
+    APPROVER = "APPROVER"                # Content approval/rejection
+    EDITOR = "EDITOR"                    # Content upload/editing
+    VIEWER = "VIEWER"                    # Read-only access
 
 
 class Screen(str, Enum):
@@ -82,7 +90,8 @@ class Role(BaseModel):
     id: Optional[str] = None
     name: str
     role_group: RoleGroup
-    company_id: str  # Role belongs to a company
+    company_role_type: Optional[CompanyRoleType] = None  # Specific role type within company
+    company_id: str  # Role belongs to a company  
     is_default: bool = False
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -141,23 +150,34 @@ class UserUpdate(BaseModel):
 
 class UserProfile(BaseModel):
     id: str
-    name: Optional[str] = None
     email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    name: Optional[str] = None  # Keep for backward compatibility
     phone: Optional[str] = None
-    status: str
+    user_type: str = "COMPANY_USER"  # SUPER_USER, COMPANY_USER, DEVICE_USER
+    company_id: Optional[str] = None
+    company_role: Optional[str] = None  # ADMIN, REVIEWER, EDITOR, VIEWER
+    permissions: List[str] = []  # List of permission strings like "content_create"
+    is_active: bool = True
+    status: str = "active"  # Keep for backward compatibility
     roles: List[Dict] = []  # Expanded role information
     companies: List[Dict] = []  # Company information
     active_company: Optional[str] = None
     active_role: Optional[str] = None
     email_verified: bool = False
     last_login: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
+    failed_login_attempts: Optional[int] = 0
+    locked_until: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: Optional[str] = None
 
 
 class RoleCreate(BaseModel):
     name: str
     role_group: RoleGroup
+    company_role_type: Optional[CompanyRoleType] = None
     company_id: str
     permissions: List[Dict] = []  # List of {screen: str, permissions: List[str]}
     is_default: bool = False
@@ -165,6 +185,7 @@ class RoleCreate(BaseModel):
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
+    company_role_type: Optional[CompanyRoleType] = None
     permissions: Optional[List[Dict]] = None
     is_default: Optional[bool] = None
     status: Optional[str] = None
@@ -355,6 +376,7 @@ class Review(BaseModel):
     action: str  # approved | needs_review | rejected | manual_approve | manual_reject
     reviewer_id: Optional[str] = None
     notes: Optional[str] = None
+    ai_analysis: Optional[Dict] = None  # AI analysis details
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

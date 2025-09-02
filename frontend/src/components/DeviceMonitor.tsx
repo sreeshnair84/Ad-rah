@@ -14,7 +14,7 @@ import {
   HardDrive,
   Cpu,
   AlertTriangle,
-  CheckCircle,
+  // CheckCircle, // Unused import
   RefreshCw,
   MapPin
 } from 'lucide-react';
@@ -112,7 +112,7 @@ export default function DeviceMonitor({
     };
   }, [autoRefresh]);
 
-  const handleWebSocketMessage = (message: any) => {
+  const handleWebSocketMessage = (message: { type: string; data: any; device_id: string }) => {
     const { type, data, device_id } = message;
 
     switch (type) {
@@ -195,7 +195,7 @@ export default function DeviceMonitor({
   // Initial data fetch
   useEffect(() => {
     fetchDevices();
-  }, [companyId]);
+  }, [companyId, fetchDevices]);
 
   // Auto refresh fallback (in case WebSocket fails)
   useEffect(() => {
@@ -203,7 +203,7 @@ export default function DeviceMonitor({
 
     const interval = setInterval(fetchDevices, refreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, wsConnected]);
+  }, [autoRefresh, refreshInterval, wsConnected, fetchDevices]);
 
   const getStatusColor = (device: Device) => {
     if (!device.is_online) return 'bg-red-500';

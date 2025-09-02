@@ -7,6 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+interface InvitationData {
+  company_name: string;
+  role: string;
+  email: string;
+}
+
 export default function CompleteRegistrationPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -15,7 +21,7 @@ export default function CompleteRegistrationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [invitationData, setInvitationData] = useState<any>(null);
+  const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -125,7 +131,7 @@ export default function CompleteRegistrationPage() {
         <CardHeader>
           <CardTitle>Complete Your Registration</CardTitle>
           <CardDescription>
-            You've been invited to join OpenKiosk. Please complete your registration.
+            You&apos;ve been invited to join OpenKiosk. Please complete your registration.
           </CardDescription>
         </CardHeader>
         <CardContent>

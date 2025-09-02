@@ -7,92 +7,96 @@ try:
 except ImportError:
     print("[WARNING] python-dotenv not installed, using system environment variables only")
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging
 from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+# Import fallback components
 from app.api import api_router
 from app.auth import init_default_data
-import logging
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing Adarah Kiosk Service...")
+    """Application lifespan context manager"""
+    logger.info("🚀 Starting Adārah Digital Signage Platform")
     
-    # Debug: Check environment variables
-    mongo_uri = os.getenv("MONGO_URI")
-    secret_key = os.getenv("SECRET_KEY")
-    logger.info(f"MONGO_URI loaded: {mongo_uri is not None}")
-    logger.info(f"SECRET_KEY loaded: {secret_key is not None}")
-    if mongo_uri:
-        logger.info(f"MONGO_URI value: {mongo_uri}")
-    
-    # Initialize authentication data - THIS IS CRITICAL
+    # Initialize database service layer
     try:
-        from app.repo import repo, persistence_enabled
+        from app.database import initialize_database_from_url, DatabaseProvider
+        from app.config import settings
         
-        # Show clear status about data persistence
-        if persistence_enabled:
-            logger.info("✅ PERSISTENT STORAGE ENABLED - Data will survive restarts!")
-            logger.info(f"📊 Repository type: {type(repo).__name__}")
-        else:
-            logger.warning("⚠️ TEMPORARY STORAGE - Data will be LOST on restart!")
-            logger.warning(f"💾 Repository type: {type(repo).__name__}")
-            logger.warning("🔧 To enable persistence, run: setup-mongodb.bat (Windows) or setup-mongodb.sh (Linux/Mac)")
+        # Check environment variables
+        mongo_uri = getattr(settings, "MONGO_URI", None)
+        secret_key = getattr(settings, "SECRET_KEY", None)
+        logger.info(f"MONGO_URI configured: {mongo_uri is not None}")
+        logger.info(f"SECRET_KEY configured: {secret_key is not None}")
         
-        logger.info("Checking authentication data...")
-        
-        if hasattr(repo, '_store'):
-            existing_users = len(repo._store.get("__users__", {}))
-            logger.info(f"Found {existing_users} existing users")
+        # Initialize database service
+        if mongo_uri:
+            logger.info("🔌 Initializing database connection...")
+            db_initialized = await initialize_database_from_url(mongo_uri)
             
-            if existing_users == 0:
-                logger.info("No users found, initializing default data...")
-                await init_default_data()
-                new_users = len(repo._store.get("__users__", {}))
-                logger.info(f"SUCCESS: {new_users} users initialized")
+            if db_initialized:
+                logger.info("✅ DATABASE SERVICE INITIALIZED - Using MongoDB")
                 
-                # Show created users for verification
-                users = repo._store.get("__users__", {})
-                for uid, user in users.items():
-                    logger.info(f"User: {user.get('email')}")
-            else:
-                logger.info(f"Using existing {existing_users} users")
-        else:
-            logger.info("Using MongoDB - checking existing data...")
-            # Check if data already exists before initializing
-            try:
-                existing_companies = await repo.list_companies()
-                existing_users = await repo.list_users()
-                
-                if existing_companies or existing_users:
-                    logger.info(f"Found existing data: {len(existing_companies)} companies, {len(existing_users)} users")
-                    logger.info("Skipping initialization to preserve existing data")
-                else:
-                    logger.info("No existing data found, initializing default data...")
+                # Initialize RBAC and default data
+                try:
                     await init_default_data()
-                    logger.info("MongoDB data initialized")
-            except Exception as e:
-                logger.error(f"Error checking existing data: {e}")
-                # If we can't check, assume no data exists and initialize
-                logger.info("Unable to check existing data, initializing default data...")
-                await init_default_data()
-                logger.info("MongoDB data initialized")
+                    logger.info("✅ Default data and RBAC system initialized")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to initialize default data: {e}")
+            else:
+                logger.error("❌ Failed to initialize database service")
+                raise RuntimeError("Database initialization failed")
+        else:
+            # Fallback to old repo system for development
+            logger.warning("⚠️ No MONGO_URI found - using legacy in-memory storage")
+            from app.repo import repo, persistence_enabled
+            
+            if not persistence_enabled:
+                logger.warning("💾 TEMPORARY STORAGE - Data will be LOST on restart!")
+            
+            # Initialize with old system
+            await init_default_data()
+            logger.info("✅ Legacy storage initialized")
             
     except Exception as e:
-        logger.error(f"CRITICAL ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        # Continue anyway to allow debugging
+        logger.error(f"❌ Failed to initialize application: {e}")
+        # Don't raise the exception, let the app start anyway for debugging
+        
+    logger.info("✅ Application startup complete!")
     
-    logger.info("Adarah Kiosk Service ready for requests!")
     yield
-    logger.info("Service stopping...")
+    
+    # Cleanup on shutdown
+    logger.info("🛑 Shutting down application...")
+    try:
+        from app.database import close_database
+        await close_database()
+        logger.info("🔌 Database connections closed")
+    except Exception as e:
+        logger.warning(f"⚠️ Error during shutdown: {e}")
 
-app = FastAPI(title="Adarah from Hebron - Content Service", lifespan=lifespan)
+# Create FastAPI app
+app = FastAPI(
+    title="Adārah Digital Signage API",
+    description="Content management system for digital signage with multi-tenant architecture and RBAC",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-# Add CORS middleware for development
+# Configure CORS - SECURITY: Restrict for production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -104,22 +108,33 @@ app.add_middleware(
         "http://127.0.0.1:8080",
         "http://localhost:5000",  # Flutter web alternative
         "http://127.0.0.1:5000",
-        "*",  # Allow all origins for development (be careful in production!)
+        "*",  # Allow all origins for development (restrict for production!)
     ],
-    allow_credentials=True,  # Allow credentials (Authorization headers)
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# Include API routes
 app.include_router(api_router, prefix="/api")
 
+# Health check endpoint
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health_check():
+    return {"status": "healthy", "message": "Adārah Digital Signage API is running"}
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to Adārah Digital Signage API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 @app.post("/admin/init-data")
 async def initialize_data():
-    """Initialize authentication data (no auth required)"""
+    """Initialize authentication data (admin endpoint)"""
     try:
         from app.repo import repo
         
@@ -148,3 +163,23 @@ async def initialize_data():
             "error": str(e),
             "details": traceback.format_exc()
         }
+
+# Main entry point
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get configuration from environment
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    log_level = os.getenv("LOG_LEVEL", "info")
+    reload = os.getenv("RELOAD", "true").lower() == "true"
+    
+    logger.info(f"Starting server on {host}:{port} (reload={reload})")
+    
+    uvicorn.run(
+        "app.main:app",
+        host=host,
+        port=port,
+        log_level=log_level,
+        reload=reload
+    )

@@ -309,13 +309,31 @@ jspm_packages/
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
-# Azure
+# Azure Development Artifacts
 .azure/
 __blobstorage__/
+__queuestorage__/
+__azurite_db_*.json
 
 # Docker
 .dockerignore
 
-# Temporary files
+# Security & Sensitive Files
+token.json
+*.key
+*.pem
+*.p12
+
+# Test & Temporary files
 *.tmp
 *.temp
+test.txt
+test_device.json
+
+# Flutter specific
+flutter/adarah_digital_signage/flutter_*.log
+flutter/adarah_digital_signage/.dart_tool/
+flutter/adarah_digital_signage/.packages
+flutter/adarah_digital_signage/.metadata
+flutter/adarah_digital_signage/pubspec.lock
+flutter/adarah_digital_signage/build/

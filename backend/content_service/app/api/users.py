@@ -5,7 +5,7 @@ import uuid
 from bson import ObjectId
 from app.models import User, UserCreate, UserUpdate, UserRole, UserProfile, Role, RoleCreate, RoleUpdate, PermissionCheck
 from app.repo import repo
-from app.auth import require_roles, get_password_hash, get_current_user, get_current_user_with_roles
+from app.auth import require_roles, get_password_hash, get_current_user, get_current_user_with_roles, get_user_company_context
 # Data initialization is handled at server startup
 
 def convert_objectid_to_str(data: Any) -> Any:
@@ -32,23 +32,49 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/", response_model=List[Dict])
 @router.get("", response_model=List[Dict])  # Add route without trailing slash
-async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
-    """List all users with expanded information"""
+async def list_users(
+    current_user: dict = Depends(get_current_user_with_roles),
+    company_context=Depends(get_user_company_context)
+):
+    """List users with company-scoped access control"""
     try:
-        # Mock data initialization is handled at server startup
+        # Company admins can list users in their company, platform admins see all users
+        current_user_id = current_user.get("id")
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
         
-        # Check if user has ADMIN role
+        print(f"[USERS] DEBUG: User {current_user_id} requesting user list")
+        print(f"[USERS] DEBUG: is_platform_admin: {is_platform_admin}")
+        print(f"[USERS] DEBUG: accessible_companies count: {len(accessible_companies)}")
+        
+        # Check if user has admin role (platform or company level)
         user_roles = current_user.get("roles", [])
-        has_admin = any(
-            role.get("role") == "ADMIN" or 
-            role.get("role_group") == "ADMIN" or
-            ((role.get("role_details") or {}).get("role_group") == "ADMIN")
-            for role in user_roles if role
-        )
-        if not has_admin:
-            role_list = [role.get("role") for role in user_roles]
-            role_group_list = [role.get("role_group") for role in user_roles] 
-            role_details_list = [((role.get("role_details") or {}) if role else {}).get("role_group") for role in user_roles]
+        can_manage_users = is_platform_admin
+        
+        # Also check if the user has an ADMIN role directly (fallback for platform admin detection)
+        if not can_manage_users:
+            for role in user_roles:
+                if role.get("role") == "ADMIN":
+                    can_manage_users = True
+                    print(f"[USERS] DEBUG: Found ADMIN role directly in user roles")
+                    break
+        
+        if not is_platform_admin and not can_manage_users:
+            # Check if user is company admin in any of their companies
+            for company in accessible_companies:
+                company_id = company.get("id")
+                if company_id:
+                    user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                    if user_role:
+                        role_details = user_role.get("role_details", {})
+                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                            can_manage_users = True
+                            print(f"[USERS] DEBUG: Found COMPANY_ADMIN role")
+                            break
+        
+        print(f"[USERS] DEBUG: can_manage_users: {can_manage_users}")
+        
+        if not can_manage_users:
             raise HTTPException(status_code=403, detail="Only admins can list users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
@@ -60,11 +86,25 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
             user_role_store = repo._store.get("__user_roles__", {})
             company_store = repo._store.get("__companies__", {})
             
+            # Get accessible company IDs for filtering
+            accessible_company_ids = {c.get("id") for c in accessible_companies} if not is_platform_admin else None
+            
             for user_id, user_data in user_store.items():
                 # Get user roles
                 user_roles_info = []
+                user_has_accessible_role = False
+                
                 for ur_id, ur_data in user_role_store.items():
                     if ur_data.get("user_id") == user_id and ur_data.get("status") == "active":
+                        company_id = ur_data.get("company_id")
+                        
+                        # For platform admins, show all roles
+                        # For non-platform admins, filter by company access
+                        if not is_platform_admin and accessible_company_ids:
+                            if company_id not in accessible_company_ids and company_id not in ["global", "1-c"]:
+                                continue
+                        
+                        user_has_accessible_role = True
                         # Get role details - handle empty role_id and company_id
                         role_id = ur_data.get("role_id")
                         company_id = ur_data.get("company_id")
@@ -86,6 +126,11 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
                             "updated_at": str(ur_data.get("updated_at", ""))
                         }
                         user_roles_info.append(role_info)
+                
+                # For platform admins, show all users even if they don't have accessible roles
+                # For non-platform admins, skip users who don't have any accessible roles  
+                if not is_platform_admin and not user_has_accessible_role:
+                    continue
                 
                 # Get companies
                 user_companies = []
@@ -114,16 +159,39 @@ async def list_users(current_user: dict = Depends(get_current_user_with_roles)):
                 # Get all users
                 user_cursor = repo._user_col.find({})
                 async for user_data in user_cursor:
-                    user_id = str(user_data["_id"])
+                    # Use the UUID id field, not the MongoDB _id
+                    user_id = user_data.get("id")
+                    if not user_id:
+                        # Fallback to _id if no id field exists
+                        user_id = str(user_data["_id"])
                     
-                    # Get user roles
-                    user_roles_info = await repo.get_user_roles(user_id)
+                    # Get user roles with company filtering
+                    user_roles_info = []
+                    all_user_roles = await repo.get_user_roles(user_id)
+                    user_has_accessible_role = False
+                    
+                    for role in all_user_roles:
+                        company_id = role.get("company_id")
+                        # For platform admins, show all roles
+                        # For non-platform admins, filter by company access
+                        if not is_platform_admin and accessible_companies:
+                            accessible_company_ids = {c.get("id") for c in accessible_companies}
+                            if company_id not in accessible_company_ids and company_id not in ["global", "1-c"]:
+                                continue
+                        
+                        user_has_accessible_role = True
+                        user_roles_info.append(role)
+                    
+                    # For platform admins, show all users even if they don't have accessible roles
+                    # For non-platform admins, skip users who don't have any accessible roles
+                    if not is_platform_admin and not user_has_accessible_role:
+                        continue
                     
                     # Get companies
                     user_companies = []
                     company_ids = list(set(ur.get("company_id") for ur in user_roles_info if ur.get("company_id")))
                     for comp_id in company_ids:
-                        if comp_id and comp_id != "global":
+                        if comp_id and comp_id not in ["global", "1-c"]:
                             company = await repo.get_company(comp_id)
                             if company:
                                 user_companies.append(company)
@@ -233,10 +301,20 @@ async def get_user_profile(user_id: str, current_user=Depends(require_roles("ADM
 
 
 @router.get("/roles/dropdown", response_model=List[Dict])
-async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_roles)):
-    """Get roles for dropdown selection"""
+async def get_roles_dropdown(
+    current_user: dict = Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
+    """Get roles for dropdown selection with company filtering"""
     try:
-# Mock data initialization is handled at server startup
+        print(f"[ROLES] DEBUG: Getting roles dropdown for user {current_user.get('id')}")
+        
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
+        accessible_company_ids = {c.get("id") for c in accessible_companies}
+        
+        print(f"[ROLES] DEBUG: is_platform_admin: {is_platform_admin}")
+        print(f"[ROLES] DEBUG: accessible_company_ids: {accessible_company_ids}")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):
@@ -244,19 +322,31 @@ async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_
             role_store = repo._store.get("__roles__", {})
             company_store = repo._store.get("__companies__", {})
             
+            print(f"[ROLES] DEBUG: Found {len(role_store)} roles in store")
+            
             roles_data = []
             for role_id, role_data in role_store.items():
-                company = company_store.get(role_data.get("company_id"), {})
-                company_name = "System" if role_data.get("company_id") == "global" else company.get("name") or None
+                role_company_id = role_data.get("company_id")
                 
-                roles_data.append({
+                # Filter roles by company access
+                if not is_platform_admin:
+                    # Non-platform admins only see roles from their accessible companies
+                    if role_company_id not in accessible_company_ids and role_company_id not in ["global", "1-c"]:
+                        continue
+                
+                company = company_store.get(role_company_id, {})
+                company_name = "System" if role_company_id in ["global", "1-c"] else company.get("name") or None
+                
+                role_item = {
                     "id": role_id,
                     "name": role_data.get("name", ""),
                     "role_group": role_data.get("role_group", ""),
-                    "company_id": role_data.get("company_id", ""),
+                    "company_id": role_company_id or "",
                     "company_name": company_name,
                     "is_default": role_data.get("is_default", False)
-                })
+                }
+                roles_data.append(role_item)
+                print(f"[ROLES] DEBUG: Added role: {role_item['name']} (company: {company_name})")
         else:
             # MongoRepo - use proper async methods
             from app.repo import MongoRepo
@@ -265,28 +355,36 @@ async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_
                 roles_data = []
                 async for role_data in roles_cursor:
                     role_id = str(role_data["_id"])
-                    company_id = role_data.get("company_id", "")
+                    role_company_id = role_data.get("company_id", "")
+                    
+                    # Filter roles by company access
+                    if not is_platform_admin:
+                        # Non-platform admins only see roles from their accessible companies
+                        if role_company_id not in accessible_company_ids and role_company_id not in ["global", "1-c"]:
+                            continue
                     
                     company_name = "System"
-                    if company_id and company_id != "global":
-                        company = await repo.get_company(company_id)
+                    if role_company_id and role_company_id not in ["global", "1-c"]:
+                        company = await repo.get_company(role_company_id)
                         if company:
-                            company_name = company.get("name") or None or None
+                            company_name = company.get("name") or None
                     
                     role_item = {
                         "id": role_id,
                         "name": role_data.get("name", ""),
                         "role_group": role_data.get("role_group", ""),
-                        "company_id": company_id,
+                        "company_id": role_company_id,
                         "company_name": company_name,
                         "is_default": role_data.get("is_default", False)
                     }
                     # Convert ObjectIds to strings recursively
                     role_item = convert_objectid_to_str(role_item)
                     roles_data.append(role_item)
+                    print(f"[ROLES] DEBUG: Added MongoDB role: {role_item['name']} (company: {company_name})")
             else:
                 roles_data = []
         
+        print(f"[ROLES] DEBUG: Returning {len(roles_data)} roles")
         return roles_data
         
     except Exception as e:
@@ -294,44 +392,31 @@ async def get_roles_dropdown(current_user: dict = Depends(get_current_user_with_
 
 
 @router.get("/companies/dropdown", response_model=List[Dict])
-async def get_companies_dropdown(current_user: dict = Depends(get_current_user_with_roles)):
-    """Get companies for dropdown selection"""
+async def get_companies_dropdown(
+    current_user: dict = Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
+    """Get companies for dropdown selection with company filtering"""
     try:
-# Mock data initialization is handled at server startup
+        print(f"[COMPANIES] DEBUG: Getting companies dropdown for user {current_user.get('id')}")
         
-        # Check if repo has _store (InMemoryRepo) or use MongoDB methods
-        if hasattr(repo, '_store'):
-            # InMemoryRepo
-            company_store = repo._store.get("__companies__", {})
-            
-            companies_data = []
-            for company_id, company_data in company_store.items():
-                companies_data.append({
-                    "id": company_id,
-                    "name": company_data.get("name", ""),
-                    "type": company_data.get("type", ""),
-                    "status": company_data.get("status", "")
-                })
-        else:
-            # MongoRepo - use proper async methods
-            from app.repo import MongoRepo
-            if isinstance(repo, MongoRepo):
-                companies_cursor = repo._company_col.find({})
-                companies_data = []
-                async for company_data in companies_cursor:
-                    company_id = str(company_data["_id"])
-                    company_item = {
-                        "id": company_id,
-                        "name": company_data.get("name", ""),
-                        "type": company_data.get("type", ""),
-                        "status": company_data.get("status", "")
-                    }
-                    # Convert ObjectIds to strings recursively
-                    company_item = convert_objectid_to_str(company_item)
-                    companies_data.append(company_item)
-            else:
-                companies_data = []
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
         
+        print(f"[COMPANIES] DEBUG: is_platform_admin: {is_platform_admin}")
+        print(f"[COMPANIES] DEBUG: accessible_companies count: {len(accessible_companies)}")
+        
+        # For companies dropdown, we just return the accessible companies
+        companies_data = []
+        for company in accessible_companies:
+            companies_data.append({
+                "id": company.get("id", ""),
+                "name": company.get("name", ""),
+                "type": company.get("type", ""),
+                "status": company.get("status", "")
+            })
+        
+        print(f"[COMPANIES] DEBUG: Returning {len(companies_data)} companies")
         return companies_data
         
     except Exception as e:
@@ -339,14 +424,49 @@ async def get_companies_dropdown(current_user: dict = Depends(get_current_user_w
 
 
 @router.post("/", response_model=Dict)
-async def create_user(user_data: Dict, current_user: dict = Depends(get_current_user_with_roles)):
+async def create_user(
+    user_data: Dict, 
+    current_user: dict = Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
     """Create a new user"""
     try:
 # Mock data initialization is handled at server startup
         
-        # Check permissions
-        if not any(role.get("role") == "ADMIN" for role in current_user.get("roles", [])):
-            raise HTTPException(status_code=403, detail="Only admins can create users")
+        # Check permissions - Platform admins and Company admins can create users
+        current_user_id = current_user.get("id")
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
+        
+        user_can_create = is_platform_admin
+        
+        if not is_platform_admin:
+            # Check if user is company admin in any of their companies
+            for company in accessible_companies:
+                company_id = company.get("id")
+                if company_id:
+                    user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                    if user_role:
+                        role_details = user_role.get("role_details", {})
+                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                            user_can_create = True
+                            break
+        
+        if not user_can_create:
+            raise HTTPException(status_code=403, detail="Only platform admins and company admins can create users")
+        
+        # Validate that non-platform admins can only create users for their accessible companies
+        if not is_platform_admin:
+            user_roles_data = user_data.get("roles", [])
+            accessible_company_ids = {c.get("id") for c in accessible_companies}
+            
+            for role_data in user_roles_data:
+                role_company_id = role_data.get("company_id")
+                if role_company_id not in accessible_company_ids:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Cannot assign user to company {role_company_id} - access denied"
+                    )
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):
@@ -450,11 +570,32 @@ async def create_user(user_data: Dict, current_user: dict = Depends(get_current_
 async def update_user(
     user_id: str,
     user_update: UserUpdate,
-    current_user=Depends(require_roles("ADMIN"))
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
 ):
-    """Update a user (Admin only)"""
+    """Update a user (Platform admins and Company admins only)"""
     try:
-# Mock data initialization is handled at server startup
+        # Check permissions - Platform admins and Company admins can update users
+        current_user_id = current_user.get("id")
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
+        
+        user_can_update = is_platform_admin
+        
+        if not is_platform_admin:
+            # Check if user is company admin in any of their companies
+            for company in accessible_companies:
+                company_id = company.get("id")
+                if company_id:
+                    user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                    if user_role:
+                        role_details = user_role.get("role_details", {})
+                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                            user_can_update = True
+                            break
+        
+        if not user_can_update:
+            raise HTTPException(status_code=403, detail="Only platform admins and company admins can update users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):
@@ -563,10 +704,34 @@ async def update_user(
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: str, current_user=Depends(require_roles("ADMIN"))):
-    """Delete a user (Admin only)"""
+async def delete_user(
+    user_id: str, 
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
+    """Delete a user (Platform admins and Company admins only)"""
     try:
-# Mock data initialization is handled at server startup
+        # Check permissions - Platform admins and Company admins can delete users
+        current_user_id = current_user.get("id")
+        is_platform_admin = company_context["is_platform_admin"]
+        accessible_companies = company_context["accessible_companies"]
+        
+        user_can_delete = is_platform_admin
+        
+        if not is_platform_admin:
+            # Check if user is company admin in any of their companies
+            for company in accessible_companies:
+                company_id = company.get("id")
+                if company_id:
+                    user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                    if user_role:
+                        role_details = user_role.get("role_details", {})
+                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                            user_can_delete = True
+                            break
+        
+        if not user_can_delete:
+            raise HTTPException(status_code=403, detail="Only platform admins and company admins can delete users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):

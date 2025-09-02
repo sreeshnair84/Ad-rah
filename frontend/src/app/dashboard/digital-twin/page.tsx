@@ -646,7 +646,7 @@ export default function DigitalTwinPage() {
                           Digital Twin Stopped
                         </h3>
                         <p className="text-gray-500 text-sm">
-                          Click "Start Twin" to begin virtual testing
+                          Click &quot;Start Twin&quot; to begin virtual testing
                         </p>
                       </div>
                     </div>

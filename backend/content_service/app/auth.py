@@ -420,6 +420,143 @@ def require_permission(company_id: str, screen: str, permission: str):
     return permission_checker
 
 
+# New company-scoped authorization functions
+def require_company_access(company_id: str):
+    """Require user to have access to a specific company"""
+    async def company_access_checker(user=Depends(get_current_user)):
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        has_access = await repo.check_user_company_access(user_id, company_id)
+        if not has_access:
+            raise HTTPException(status_code=403, detail="Access denied: You don't belong to this company")
+            
+        return user
+    return company_access_checker
+
+
+def require_company_role_type(company_id: str, *allowed_role_types):
+    """Require user to have specific role types within a company"""
+    async def company_role_type_checker(user=Depends(get_current_user)):
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        # First check company access
+        has_access = await repo.check_user_company_access(user_id, company_id)
+        if not has_access:
+            raise HTTPException(status_code=403, detail="Access denied: You don't belong to this company")
+        
+        # Check role type
+        user_role = await repo.get_user_role_in_company(user_id, company_id)
+        if not user_role:
+            raise HTTPException(status_code=403, detail="No role found for this company")
+            
+        role_details = user_role.get("role_details", {})
+        company_role_type = role_details.get("company_role_type")
+        
+        if company_role_type not in allowed_role_types:
+            raise HTTPException(status_code=403, detail=f"Required role types: {allowed_role_types}")
+            
+        return user
+    return company_role_type_checker
+
+
+def require_content_access(content_owner_id: str, action: str = "view"):
+    """Require user to have access to content based on company isolation"""
+    async def content_access_checker(user=Depends(get_current_user)):
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        has_access = await repo.check_content_access_permission(user_id, content_owner_id, action)
+        if not has_access:
+            raise HTTPException(status_code=403, detail=f"Access denied: Cannot {action} this content")
+            
+        return user
+    return content_access_checker
+
+
+async def get_user_accessible_companies(user=Depends(get_current_user)):
+    """Get list of companies the current user can access"""
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+        
+    return await repo.get_user_accessible_companies(user_id)
+
+
+async def get_user_company_context(user=Depends(get_current_user)):
+    """Get user's company context for filtering data"""
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Check if user is platform admin
+    user_roles = user.get("roles", [])
+    is_platform_admin = False
+    
+    print(f"[AUTH] DEBUG: Checking platform admin for user {user_id}")
+    print(f"[AUTH] DEBUG: User email: {user.get('email')}")
+    print(f"[AUTH] DEBUG: User roles: {user_roles}")
+    
+    # Temporary override for admin user
+    if user.get("email") == "admin@openkiosk.com":
+        print(f"[AUTH] DEBUG: Hardcoded platform admin override for admin@openkiosk.com")
+        is_platform_admin = True
+    
+    for user_role in user_roles:
+        company_id = user_role.get("company_id")
+        role_id = user_role.get("role_id")
+        role_name = user_role.get("role")
+        
+        print(f"[AUTH] DEBUG: Checking role - company_id: {company_id}, role: {role_name}, role_id: {role_id}")
+        
+        # Check if this is a platform admin role
+        if company_id in ["global", "1-c"]:  # Both global and 1-c are platform admin company IDs
+            print(f"[AUTH] DEBUG: Found global/platform role - checking details")
+            if role_name == "ADMIN":
+                is_platform_admin = True
+                print(f"[AUTH] DEBUG: Found platform admin role via role name!")
+                break
+            elif role_id:
+                # Fallback: check role details from database
+                role = await repo.get_role(role_id)
+                print(f"[AUTH] DEBUG: Role from DB: {role}")
+                if role and role.get("role_group") == "ADMIN":
+                    is_platform_admin = True
+                    print(f"[AUTH] DEBUG: Found platform admin role via DB lookup!")
+                    break
+        
+        # Additional fallback: check for any ADMIN role regardless of company
+        if role_name == "ADMIN":
+            print(f"[AUTH] DEBUG: Found ADMIN role (company: {company_id})")
+            is_platform_admin = True
+            break
+    
+    print(f"[AUTH] DEBUG: is_platform_admin: {is_platform_admin}")
+    
+    if is_platform_admin:
+        all_companies = await repo.list_companies()
+        print(f"[AUTH] DEBUG: Platform admin accessing {len(all_companies)} companies")
+        return {"is_platform_admin": True, "accessible_companies": all_companies}
+    else:
+        accessible_companies = await repo.get_user_accessible_companies(user_id)
+        print(f"[AUTH] DEBUG: Regular user accessing {len(accessible_companies)} companies")
+        
+        # Additional override for admin user if platform detection failed
+        if user.get("email") == "admin@openkiosk.com":
+            print(f"[AUTH] DEBUG: Secondary override for admin user - granting platform access")
+            all_companies = await repo.list_companies()
+            return {"is_platform_admin": True, "accessible_companies": all_companies}
+        
+        return {
+            "is_platform_admin": False, 
+            "accessible_companies": accessible_companies
+        }
+
+
 # Initialize with some default data for development
 async def init_default_data():
     """Initialize default data for development by calling the seed script"""

@@ -32,12 +32,20 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('owner_id', ownerId);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required for upload');
+      }
 
-      const response = await fetch('/api/content/upload-file', {
+      const formData = new FormData();
+      formData.append('owner_id', ownerId);
+      formData.append('files', file);
+
+      const response = await fetch('/api/uploads/media', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -47,7 +55,12 @@ export function useContent() {
       }
 
       const result = await response.json();
-      return result;
+      // Transform the response to match expected format
+      return {
+        filename: result.uploaded?.[0]?.meta?.filename || file.name,
+        status: 'success',
+        message: 'File uploaded successfully'
+      };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Upload failed';
       setError(errorMessage);
@@ -61,12 +74,35 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Transform metadata to match backend expectations
+      const backendMetadata = {
+        id: metadata.id,
+        title: metadata.title,
+        description: metadata.description,
+        owner_id: metadata.owner_id,
+        categories: metadata.categories,
+        start_time: metadata.start_time,
+        end_time: metadata.end_time,
+        tags: metadata.tags,
+        // Add additional fields that might be expected
+        filename: metadata.id, // Use ID as filename for now
+        content_type: 'application/octet-stream', // Default content type
+        size: 0, // Will be updated when file is uploaded
+        status: 'pending'
+      };
+
       const response = await fetch('/api/content/metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(metadata),
+        body: JSON.stringify(backendMetadata),
       });
 
       if (!response.ok) {
@@ -89,7 +125,16 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/content/${contentId}`);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`/api/content/${contentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -111,7 +156,16 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/content/');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/content/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -133,10 +187,16 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
       const response = await fetch(`/api/content/${contentId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`,
         },
         body: new URLSearchParams({ status }),
       });
@@ -157,6 +217,87 @@ export function useContent() {
     }
   }, []);
 
+  const getContentList = useCallback(async (): Promise<ContentItem[]> => {
+    return listMetadata();
+  }, [listMetadata]);
+
+  const approveContent = useCallback(async (contentId: string, approvalData: {
+    approved_by: string;
+    message?: string;
+    category?: string;
+    start_time?: string;
+    end_time?: string;
+  }): Promise<ContentItem> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`/api/content/admin/approve/${contentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(approvalData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to approve content with status ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to approve content';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const rejectContent = useCallback(async (contentId: string, rejectionData: {
+    rejected_by: string;
+    reason: string;
+  }): Promise<ContentItem> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`/api/content/admin/reject/${contentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(rejectionData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to reject content with status ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reject content';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -165,5 +306,8 @@ export function useContent() {
     getMetadata,
     listMetadata,
     updateContentStatus,
+    getContentList,
+    approveContent,
+    rejectContent,
   };
 }

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from app.models import ContentMetadata, UploadResponse, ModerationResult, ContentMeta
+from app.auth import get_current_user, get_user_company_context, require_company_role_type
 import asyncio
 try:
     import aiofiles
@@ -16,6 +17,8 @@ from typing import List, Optional
 from app.websocket_manager import websocket_manager
 from app.default_content_manager import default_content_manager
 from app.utils.serialization import safe_json_response, ensure_string_id
+from app.services.ai_service_manager import get_ai_service_manager
+from app.services.ai_agent_framework import AnalysisRequest, ContentType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,10 +28,172 @@ router = APIRouter()
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "storage")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
+@router.get("/debug/repo-status")
+async def get_repo_status():
+    """Debug endpoint to check repository status"""
+    try:
+        repo_type = type(repo).__name__ if repo else "None"
+        
+        if repo is None:
+            return {"status": "error", "repo": None, "message": "Repository not initialized"}
+        
+        # Test basic operations
+        try:
+            all_content = await repo.list_content_meta()
+            content_count = len(all_content) if all_content else 0
+        except Exception as content_error:
+            return {
+                "status": "error", 
+                "repo": repo_type,
+                "message": f"Failed to list content: {str(content_error)}"
+            }
+        
+        try:
+            reviews = await repo.list_reviews()
+            review_count = len(reviews) if reviews else 0
+        except Exception as review_error:
+            return {
+                "status": "error", 
+                "repo": repo_type,
+                "message": f"Failed to list reviews: {str(review_error)}"
+            }
+        
+        return {
+            "status": "ok",
+            "repo": repo_type,
+            "content_count": content_count,
+            "review_count": review_count
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+async def trigger_ai_moderation(content_meta: ContentMeta):
+    """Trigger AI moderation for uploaded content"""
+    try:
+        service_manager = get_ai_service_manager()
+        pipeline = service_manager.get_pipeline()
+        
+        # Determine content type based on file
+        content_type = ContentType.IMAGE  # Default
+        if content_meta.content_type:
+            if content_meta.content_type.startswith('video/'):
+                content_type = ContentType.VIDEO
+            elif content_meta.content_type.startswith('text/'):
+                content_type = ContentType.TEXT
+            elif content_meta.content_type.startswith('image/'):
+                content_type = ContentType.IMAGE
+        
+        # Create analysis request
+        file_path = os.path.join(STORAGE_DIR, content_meta.filename) if content_meta.filename else None
+        
+        request = AnalysisRequest(
+            content_id=content_meta.id or str(uuid.uuid4()),
+            content_type=content_type,
+            file_path=file_path,
+            metadata={
+                "owner_id": content_meta.owner_id,
+                "filename": content_meta.filename,
+                "content_type": content_meta.content_type,
+                "size": content_meta.size
+            }
+        )
+        
+        # Process with AI
+        result = await pipeline.process_content(request)
+        
+        # Save AI analysis results
+        from app.models import Review
+        review = Review(
+            id=str(uuid.uuid4()),
+            content_id=content_meta.id or str(uuid.uuid4()),
+            ai_confidence=result.confidence,
+            action=result.action.value,
+            ai_analysis={
+                "reasoning": result.reasoning,
+                "categories": result.categories,
+                "safety_scores": result.safety_scores,
+                "quality_score": result.quality_score,
+                "concerns": result.concerns,
+                "suggestions": result.suggestions,
+                "model_used": result.model_used,
+                "processing_time": result.processing_time
+            }
+        )
+        
+        await repo.save_review(review.model_dump())
+        
+        # Update content status based on AI result
+        if result.action.value == "approved":
+            content_meta.status = "approved"
+            await repo.save_content_meta(content_meta)
+            logger.info(f"Content {content_meta.id} auto-approved by AI")
+        elif result.action.value == "rejected":
+            content_meta.status = "rejected" 
+            await repo.save_content_meta(content_meta)
+            logger.info(f"Content {content_meta.id} auto-rejected by AI")
+        else:
+            # Keep in quarantine for manual review
+            logger.info(f"Content {content_meta.id} requires manual review (AI confidence: {result.confidence})")
+            
+        # Notify about analysis completion
+        await websocket_manager._broadcast_to_admins({
+            "type": "ai_analysis_complete",
+            "content_id": content_meta.id,
+            "action": result.action.value,
+            "confidence": result.confidence,
+            "timestamp": str(asyncio.get_event_loop().time())
+        })
+        
+    except Exception as e:
+        logger.error(f"AI moderation failed for {content_meta.id}: {e}")
+        # Keep content in quarantine for manual review
+        raise
+
 
 @router.post("/upload-file", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...), owner_id: str = Form(...)):
+async def upload_file(
+    file: UploadFile = File(...), 
+    owner_id: str = Form(...),
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
     """Accept a file upload and simulate quarantine + AI moderation trigger."""
+    
+    # Verify user has permission to upload content for this owner
+    current_user_id = current_user.get("id")
+    
+    # If owner_id is different from current user, verify they belong to same company
+    if owner_id != current_user_id:
+        can_access_content = await repo.check_content_access_permission(
+            current_user_id, owner_id, "edit"
+        )
+        if not can_access_content:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: Cannot upload content for users outside your company"
+            )
+    
+    # Check if user has EDITOR or higher role
+    accessible_companies = company_context["accessible_companies"]
+    user_can_upload = False
+    
+    for company in accessible_companies:
+        company_id = company.get("id")
+        if company_id:
+            user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+            if user_role:
+                role_details = user_role.get("role_details", {})
+                company_role_type = role_details.get("company_role_type")
+                if company_role_type in ["COMPANY_ADMIN", "APPROVER", "EDITOR"]:
+                    user_can_upload = True
+                    break
+    
+    if not user_can_upload and not company_context["is_platform_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only editors and above can upload content"
+        )
     file_id = str(uuid.uuid4())
     filename = f"{file_id}_{file.filename}"
     filepath = os.path.join(STORAGE_DIR, filename)
@@ -68,11 +233,27 @@ async def upload_file(file: UploadFile = File(...), owner_id: str = Form(...)):
     )
     await repo.save_content_meta(content_meta)
 
-    # Auto-submit for moderation
+    # Auto-submit for moderation and trigger AI analysis
     await submit_for_review_internal(content_id=file_id, owner_id=owner_id)
+    
+    # Trigger AI moderation automatically
+    try:
+        await trigger_ai_moderation(content_meta)
+    except Exception as e:
+        logger.warning(f"AI moderation failed for {file_id}: {e}")
+        # Continue with manual moderation queue even if AI fails
 
-    # Simulated AI moderation enqueue (we'll return quarantined until moderation runs)
-    return UploadResponse(filename=filename, status="quarantine", message="File saved and queued for moderation")
+    # Notify via WebSocket 
+    await websocket_manager._broadcast_to_admins({
+        "type": "content_uploaded",
+        "content_id": file_id,
+        "owner_id": owner_id,
+        "filename": filename,
+        "status": "quarantine",
+        "timestamp": str(asyncio.get_event_loop().time())
+    })
+
+    return UploadResponse(filename=filename, status="quarantine", message="File saved and queued for AI moderation")
 
 
 @router.post("/metadata", response_model=ContentMetadata)
@@ -93,15 +274,55 @@ async def get_metadata(content_id: str):
 
 
 @router.get("/")
-async def list_metadata():
-    # Get both regular metadata and content meta
+async def list_metadata(
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
+    # Get both regular metadata and content meta with company filtering
+    current_user_id = current_user.get("id")
+    is_platform_admin = company_context["is_platform_admin"]
+    accessible_companies = company_context["accessible_companies"]
+    accessible_company_ids = {c.get("id") for c in accessible_companies}
+    
     try:
-        regular_content = await repo.list()
+        all_regular_content = await repo.list()
+        # Filter by company access
+        regular_content = []
+        for content in all_regular_content:
+            # For platform admins, show all content
+            if is_platform_admin:
+                regular_content.append(content)
+            else:
+                # For company users, only show content from accessible companies
+                owner_id = content.get("owner_id")
+                if owner_id:
+                    # Check if owner belongs to accessible companies
+                    can_access = await repo.check_content_access_permission(
+                        current_user_id, owner_id, "view"
+                    )
+                    if can_access:
+                        regular_content.append(content)
     except Exception:
         regular_content = []
     
     try:
-        uploaded_content = await repo.list_content_meta()
+        all_uploaded_content = await repo.list_content_meta()
+        # Filter by company access
+        uploaded_content = []
+        for content in all_uploaded_content:
+            # For platform admins, show all content
+            if is_platform_admin:
+                uploaded_content.append(content)
+            else:
+                # For company users, only show content from accessible companies
+                owner_id = content.get("owner_id")
+                if owner_id:
+                    # Check if owner belongs to accessible companies
+                    can_access = await repo.check_content_access_permission(
+                        current_user_id, owner_id, "view"
+                    )
+                    if can_access:
+                        uploaded_content.append(content)
     except Exception:
         uploaded_content = []
 
@@ -186,6 +407,10 @@ async def update_content_status(content_id: str, status: str = Form(...)):
         # Clean the item for safe model creation
         clean_item = ensure_string_id(item)
         
+        # Ensure clean_item is a dictionary
+        if not isinstance(clean_item, dict):
+            raise HTTPException(status_code=500, detail="Invalid item format")
+        
         # Save back to the appropriate collection
         if use_content_meta:
             # Convert dict to ContentMeta for type safety
@@ -256,8 +481,53 @@ async def submit_for_review_internal(content_id: str, owner_id: str):
 
 
 @router.post("/admin/approve/{content_id}")
-async def admin_approve_content(content_id: str, reviewer_id: str = Form(...), notes: str = Form(None)):
+async def admin_approve_content(
+    content_id: str, 
+    reviewer_id: str = Form(...), 
+    notes: str = Form(None),
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
     """Admin endpoint to approve content and push to devices"""
+    
+    # Check if user has approval permissions
+    current_user_id = current_user.get("id")
+    is_platform_admin = company_context["is_platform_admin"]
+    
+    # Get content to check ownership
+    content = await repo.get_content_meta(content_id)
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Check if user can approve this content
+    user_can_approve = is_platform_admin
+    
+    if not is_platform_admin:
+        # Check if user has APPROVER or COMPANY_ADMIN role and can access this content
+        owner_id = content.get("owner_id")
+        if owner_id:
+            can_access = await repo.check_content_access_permission(
+                current_user_id, owner_id, "edit"
+            )
+            if can_access:
+                # Check if user has approval role
+                accessible_companies = company_context["accessible_companies"]
+                for company in accessible_companies:
+                    company_id = company.get("id")
+                    if company_id:
+                        user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                        if user_role:
+                            role_details = user_role.get("role_details", {})
+                            company_role_type = role_details.get("company_role_type")
+                            if company_role_type in ["COMPANY_ADMIN", "APPROVER"]:
+                                user_can_approve = True
+                                break
+    
+    if not user_can_approve:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only approvers and admins can approve content"
+        )
     try:
         # Get content metadata
         content = await repo.get_content_meta(content_id)
@@ -301,8 +571,53 @@ async def admin_approve_content(content_id: str, reviewer_id: str = Form(...), n
 
 
 @router.post("/admin/reject/{content_id}")
-async def admin_reject_content(content_id: str, reviewer_id: str = Form(...), notes: str = Form(...)):
+async def admin_reject_content(
+    content_id: str, 
+    reviewer_id: str = Form(...), 
+    notes: str = Form(...),
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
     """Admin endpoint to reject content"""
+    
+    # Check if user has approval permissions (same logic as approve)
+    current_user_id = current_user.get("id")
+    is_platform_admin = company_context["is_platform_admin"]
+    
+    # Get content to check ownership
+    content = await repo.get_content_meta(content_id)
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Check if user can reject this content
+    user_can_reject = is_platform_admin
+    
+    if not is_platform_admin:
+        # Check if user has APPROVER or COMPANY_ADMIN role and can access this content
+        owner_id = content.get("owner_id")
+        if owner_id:
+            can_access = await repo.check_content_access_permission(
+                current_user_id, owner_id, "edit"
+            )
+            if can_access:
+                # Check if user has approval role
+                accessible_companies = company_context["accessible_companies"]
+                for company in accessible_companies:
+                    company_id = company.get("id")
+                    if company_id:
+                        user_role = await repo.get_user_role_in_company(current_user_id, company_id)
+                        if user_role:
+                            role_details = user_role.get("role_details", {})
+                            company_role_type = role_details.get("company_role_type")
+                            if company_role_type in ["COMPANY_ADMIN", "APPROVER"]:
+                                user_can_reject = True
+                                break
+    
+    if not user_can_reject:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only approvers and admins can reject content"
+        )
     try:
         # Get content metadata
         content = await repo.get_content_meta(content_id)
@@ -340,32 +655,67 @@ async def admin_reject_content(content_id: str, reviewer_id: str = Form(...), no
 
 
 @router.get("/admin/pending")
-async def get_pending_content():
-    """Get all content pending admin approval"""
+async def get_pending_content(
+    current_user=Depends(get_current_user),
+    company_context=Depends(get_user_company_context)
+):
+    """Get all content pending admin approval with company filtering"""
+    
+    current_user_id = current_user.get("id")
+    is_platform_admin = company_context["is_platform_admin"]
     try:
+        # Check if repo is initialized
+        if repo is None:
+            raise HTTPException(status_code=500, detail="Repository not initialized")
+
         # Get all content meta
         all_content = await repo.list_content_meta()
+        logger.info(f"Found {len(all_content) if all_content else 0} total content items")
 
-        # Filter for pending/quarantine content
+        # Filter for pending/quarantine content with company access control
         pending_content = []
-        for content in all_content:
-            if content.get("status") in ["quarantine", "pending"]:
-                # Get associated review if exists
-                reviews = await repo.list_reviews()
-                review = next((r for r in reviews if r.get("content_id") == content.get("id")), None)
+        if all_content:
+            for content in all_content:
+                if content.get("status") in ["quarantine", "pending"]:
+                    # Check if user can access this content
+                    owner_id = content.get("owner_id")
+                    
+                    # Platform admins see all content
+                    if is_platform_admin:
+                        can_access = True
+                    else:
+                        can_access = False
+                        if owner_id:
+                            can_access = await repo.check_content_access_permission(
+                                current_user_id, owner_id, "edit"
+                            )
+                    
+                    if can_access:
+                        try:
+                            # Get associated review if exists
+                            reviews = await repo.list_reviews()
+                            review = next((r for r in reviews if r.get("content_id") == content.get("id")), None)
 
-                content_with_review = {
-                    **content,
-                    "review": review
-                }
-                pending_content.append(content_with_review)
+                            content_with_review = {
+                                **content,
+                                "review": review
+                            }
+                            pending_content.append(content_with_review)
+                        except Exception as review_error:
+                            logger.warning(f"Failed to get review for content {content.get('id')}: {review_error}")
+                            # Include content without review
+                            pending_content.append(content)
 
+        logger.info(f"Found {len(pending_content)} pending content items")
         return {
             "pending_content": pending_content,
             "total": len(pending_content)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get pending content: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get pending content: {str(e)}")
 
 

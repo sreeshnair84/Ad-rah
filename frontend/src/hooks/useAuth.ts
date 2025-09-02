@@ -1,57 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-
-interface AuthUser {
-  id: string;
-  name?: string;
-  email: string;
-  phone?: string;
-  status: string;
-  roles: Array<{
-    id: string;
-    user_id: string;
-    company_id: string;
-    role_id: string;
-    role: string;  // role_group like "ADMIN", "HOST", "ADVERTISER"
-    role_name: string;  // full role name like "System Administrator"
-    is_default: boolean;
-    status: string;
-    created_at: string;
-    role_details?: {
-      id: string;
-      name: string;
-      role_group: string;
-      company_id: string;
-      is_default: boolean;
-      status: string;
-      created_at: string;
-      updated_at: string;
-    };
-  }>;
-  companies?: Array<{
-    id: string;
-    name: string;
-    type: string;
-    address: string;
-    city: string;
-    country: string;
-    phone?: string;
-    email?: string;
-    website?: string;
-    status: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-  active_company?: string;
-  active_role?: string;
-}
-
-interface LoginCredentials {
-  username: string;
-  password: string;
-}
+import { User, LoginCredentials } from '@/types';
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -69,7 +20,7 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/auth/me/with-roles', {
+      const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -77,10 +28,10 @@ export function useAuth() {
 
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user);
+        setUser(data.user || data);
         setIsInitialized(true);
-        console.log('User data loaded successfully:', data.user);
-        return data.user;
+        console.log('User data loaded successfully:', data.user || data);
+        return data.user || data;
       } else if (response.status === 401) {
         console.log('Token expired or invalid, clearing token');
         localStorage.removeItem('token');
@@ -123,30 +74,34 @@ export function useAuth() {
     initializeAuth();
   }, [getCurrentUser]);
 
-  const login = useCallback(async (credentials: LoginCredentials): Promise<AuthUser | null> => {
+  const login = useCallback(async (credentials: LoginCredentials): Promise<User | null> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/auth/token', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: new URLSearchParams({
-          username: credentials.username,
-          password: credentials.password,
-        }),
+        body: JSON.stringify(credentials),
       });
 
       if (!response.ok) {
-        throw new Error('Login failed');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Login failed');
       }
 
       const data = await response.json();
       localStorage.setItem('token', data.access_token);
 
-      // Fetch user info with roles and companies
-      const userResponse = await fetch('/api/auth/me/with-roles', {
+      // Set user data from login response
+      if (data.user) {
+        setUser(data.user);
+        return data.user;
+      }
+
+      // Fetch user info if not included in login response
+      const userResponse = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${data.access_token}`,
         },
@@ -154,8 +109,8 @@ export function useAuth() {
 
       if (userResponse.ok) {
         const userData = await userResponse.json();
-        setUser(userData.user);
-        return userData.user;
+        setUser(userData.user || userData);
+        return userData.user || userData;
       }
       return null;
     } catch (err) {
@@ -166,71 +121,111 @@ export function useAuth() {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setIsInitialized(true);
-  }, []);
-
-  const switchRole = useCallback(async (companyId: string, roleId: string) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
+  const logout = useCallback(async () => {
     try {
-      const response = await fetch('/api/auth/switch-role', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          company_id: companyId,
-          role_id: roleId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        let errorMessage = 'Failed to switch role';
-        if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail;
-        } else if (errorData.detail && typeof errorData.detail === 'object') {
-          errorMessage = JSON.stringify(errorData.detail);
-        }
-        throw new Error(errorMessage);
+      const token = localStorage.getItem('token');
+      if (token) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
       }
-
-      const data = await response.json();
-      setUser(data.user);
     } catch (err) {
-      throw err;
+      console.error('Error during logout:', err);
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+      setIsInitialized(true);
     }
   }, []);
 
-  const hasRole = useCallback((role: string, companyId?: string) => {
+  // Check if user has a specific permission
+  const hasPermission = useCallback((resource: string, action: string): boolean => {
     if (!user) return false;
-
-    return user.roles.some(userRole => {
-      if (companyId) {
-        return userRole.role === role && userRole.company_id === companyId;
-      }
-      return userRole.role === role;
-    });
+    if (user.user_type === 'SUPER_USER') return true;
+    return user.permissions.includes(`${resource}_${action}`);
   }, [user]);
 
-  const hasAnyRole = useCallback((roles: string[]) => {
+  // Check if user has any of the specified permissions
+  const hasAnyPermission = useCallback((permissions: Array<{resource: string, action: string}>): boolean => {
     if (!user) return false;
-
-    return user.roles.some(userRole => roles.includes(userRole.role));
+    if (user.user_type === 'SUPER_USER') return true;
+    return permissions.some(({resource, action}) => user.permissions.includes(`${resource}_${action}`));
   }, [user]);
 
-  const getDefaultRole = useCallback(() => {
-    if (!user) return null;
+  // Check if user has a specific company role
+  const hasRole = useCallback((role: 'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER'): boolean => {
+    if (!user) return false;
+    if (user.user_type === 'SUPER_USER') return true;
+    return user.company_role === role;
+  }, [user]);
 
-    const defaultRole = user.roles.find(role => role.is_default);
-    return defaultRole || user.roles[0];
+  // Check if user has any of the specified roles
+  const hasAnyRole = useCallback((roles: Array<'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER'>): boolean => {
+    if (!user) return false;
+    if (user.user_type === 'SUPER_USER') return true;
+    return user.company_role ? roles.includes(user.company_role) : false;
+  }, [user]);
+
+  // Check if user is super user
+  const isSuperUser = useCallback((): boolean => {
+    return user?.user_type === 'SUPER_USER';
+  }, [user]);
+
+  // Check if user is company user
+  const isCompanyUser = useCallback((): boolean => {
+    return user?.user_type === 'COMPANY_USER';
+  }, [user]);
+
+  // Check if user can access component
+  const canAccess = useCallback((component: string): boolean => {
+    if (!user) return false;
+    if (user.user_type === 'SUPER_USER') return true;
+
+    switch (component) {
+      case 'user_management':
+        return hasPermission('user', 'view');
+      case 'device_management':
+        return hasPermission('device', 'view');
+      case 'content_creation':
+        return hasPermission('content', 'create');
+      case 'content_approval':
+        return hasPermission('content', 'approve');
+      case 'content_sharing':
+        return hasPermission('content', 'share');
+      case 'analytics':
+        return hasPermission('analytics', 'view');
+      case 'platform_admin':
+        return hasPermission('platform', 'admin');
+      case 'company_admin':
+        return hasRole('ADMIN');
+      default:
+        return false;
+    }
+  }, [user, hasPermission, hasRole]);
+
+  // Get user's display name
+  const getDisplayName = useCallback((): string => {
+    if (!user) return 'Guest';
+    return `${user.first_name} ${user.last_name}`.trim() || user.email;
+  }, [user]);
+
+  // Get user's role display
+  const getRoleDisplay = useCallback((): string => {
+    if (!user) return 'No Role';
+    if (user.user_type === 'SUPER_USER') return 'Super User';
+    if (user.company_role) {
+      const roleLabels = {
+        'ADMIN': 'Administrator',
+        'REVIEWER': 'Reviewer',
+        'EDITOR': 'Editor',
+        'VIEWER': 'Viewer'
+      };
+      return roleLabels[user.company_role];
+    }
+    return 'Company User';
   }, [user]);
 
   return {
@@ -241,9 +236,14 @@ export function useAuth() {
     login,
     logout,
     getCurrentUser,
-    switchRole,
+    hasPermission,
+    hasAnyPermission,
     hasRole,
     hasAnyRole,
-    getDefaultRole,
+    isSuperUser,
+    isCompanyUser,
+    canAccess,
+    getDisplayName,
+    getRoleDisplay,
   };
 }

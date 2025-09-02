@@ -36,6 +36,8 @@ This document outlines the enterprise architecture standards, governance, and im
 - Real-time performance monitoring
 - Automated issue detection and resolution
 
+Repository status: Digital twin UI and mirroring are implemented in the repo. See `frontend/src/app/dashboard/digital-twin/page.tsx` for the UI and `backend/content_service/app/websocket_manager.py` plus `backend/content_service/app/api/websocket.py` for the backend mirroring and control channels. Device health monitoring code is present in `backend/content_service/app/monitoring/device_health_monitor.py`.
+
 ## Current Architecture Assessment
 
 ### ✅ Strengths
@@ -49,6 +51,8 @@ This document outlines the enterprise architecture standards, governance, and im
 - **Scalability Limitations**: Single-instance deployments
 - **Monitoring Deficits**: Limited observability and alerting
 - **Compliance Gaps**: Incomplete audit trails and data governance
+
+Repository note: Several monitoring and observability components exist in code (audit logger, device health monitor). See `backend/content_service/app/security/audit_logger.py` and `backend/content_service/app/monitoring/` for implemented pieces that should be wired to Application Insights / Log Analytics in production.
 
 ## Enterprise Architecture Standards
 

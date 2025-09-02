@@ -15,7 +15,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const router = useRouter();
+  // const router = useRouter(); // TODO: Add navigation logic after successful signup
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +47,8 @@ export default function SignupPage() {
       } else {
         setError(data.detail || 'Registration failed');
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Signup error:', error);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

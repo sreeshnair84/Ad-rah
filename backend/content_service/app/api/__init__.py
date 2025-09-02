@@ -17,6 +17,42 @@ from .categories import router as categories_router
 from .websocket import router as websocket_router
 from .debug_roles import router as debug_router
 
+# Import debug token router
+from .debug_token import router as debug_token_router
+
+# Import overlays router
+from .overlays import router as overlays_router
+
+# Import simple screens router
+from .simple_screens import router as simple_screens_router
+
+# Import content delivery router if available
+try:
+    from .content_delivery import router as content_delivery_router
+    CONTENT_DELIVERY_ROUTER_AVAILABLE = True
+except (ImportError, TypeError) as e:
+    CONTENT_DELIVERY_ROUTER_AVAILABLE = False
+    logger = __import__('logging').getLogger(__name__)
+    logger.warning(f"Content delivery router not available: {e}")
+
+# Import delivery router
+try:
+    from .delivery import router as delivery_router
+    DELIVERY_ROUTER_AVAILABLE = True
+except (ImportError, TypeError) as e:
+    DELIVERY_ROUTER_AVAILABLE = False
+    logger = __import__('logging').getLogger(__name__)
+    logger.warning(f"Delivery router not available: {e}")
+
+# Import analytics router
+from .analytics import router as analytics_router
+
+# Import dashboard router
+from .dashboard import router as dashboard_router
+
+# Import seed router for testing
+from .seed import router as seed_router
+
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(registration_router)
@@ -33,3 +69,17 @@ api_router.include_router(device_router)
 api_router.include_router(categories_router)
 api_router.include_router(websocket_router)
 api_router.include_router(debug_router)
+api_router.include_router(debug_token_router)
+api_router.include_router(overlays_router, prefix="/overlays")
+api_router.include_router(simple_screens_router, prefix="/screens")
+api_router.include_router(analytics_router)
+api_router.include_router(dashboard_router)
+api_router.include_router(seed_router)
+
+# Include content delivery router if available
+if CONTENT_DELIVERY_ROUTER_AVAILABLE:
+    api_router.include_router(content_delivery_router)
+
+# Include delivery router if available
+if DELIVERY_ROUTER_AVAILABLE:
+    api_router.include_router(delivery_router, prefix="/delivery")

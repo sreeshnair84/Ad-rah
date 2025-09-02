@@ -7,7 +7,13 @@
       "Bash(taskkill:*)",
       "Bash(find:*)",
       "Bash(uvicorn:*)",
-      "Bash(flutter:*)"
+      "Bash(flutter:*)",
+      "WebSearch",
+      "WebSearch",
+      "Bash(mongosh:*)",
+      "Bash(mongo:*)",
+      "Bash(docker rm:*)",
+      "Bash(uv run:*)"
     ],
     "deny": [],
     "ask": []

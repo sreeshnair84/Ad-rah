@@ -18,8 +18,8 @@ interface KioskMetrics {
 }
 
 export function useKiosks() {
-  const [kiosks, setKiosks] = useState<Kiosk[]>([]);
-  const [metrics, setMetrics] = useState<KioskMetrics>({
+  const [kiosks] = useState<Kiosk[]>([]); // TODO: Implement kiosk data fetching
+  const [metrics] = useState<KioskMetrics>({ // TODO: Implement metrics calculation
     totalKiosks: 0,
     onlineCount: 0,
     offlineCount: 0,

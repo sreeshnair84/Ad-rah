@@ -15,7 +15,7 @@ interface BreadcrumbProps {
   setPathname: (pathname: string) => void;
 }
 
-export function Breadcrumb({ items, pathname, setPathname }: BreadcrumbProps) {
+export function Breadcrumb({ items, setPathname }: BreadcrumbProps) {
   const router = useRouter();
 
   const handleClick = (href?: string, key?: string) => {

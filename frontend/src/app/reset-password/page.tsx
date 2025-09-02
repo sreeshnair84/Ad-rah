@@ -49,7 +49,8 @@ export default function ResetPasswordPage() {
       } else {
         setError(data.detail || 'Failed to send reset email');
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Request error:', error);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -89,7 +90,8 @@ export default function ResetPasswordPage() {
       } else {
         setError(data.detail || 'Failed to reset password');
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Request error:', error);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -156,7 +158,7 @@ export default function ResetPasswordPage() {
         <CardHeader>
           <CardTitle>Reset Password</CardTitle>
           <CardDescription>
-            Enter your email address and we'll send you instructions to reset your password.
+            Enter your email address and we&apos;ll send you instructions to reset your password.
           </CardDescription>
         </CardHeader>
         <CardContent>

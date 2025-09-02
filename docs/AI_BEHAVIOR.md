@@ -41,3 +41,11 @@ Operational TODOs:
  - Add storage of thumbnails and flagged regions to enable reviewer UI.
  - Expose a `moderation.queue` API to list pending items and a `moderation/{id}/decision` endpoint to capture supervisor actions.
  - Add tenant-level configuration for thresholds and SLAs.
+ 
+Repository status (implemented pieces):
+
+- Dev simulation endpoint: `/api/content/moderation/simulate` available in `backend/content_service/app/routes/content.py` (used in tests and UI flows).
+- Moderation worker: `backend/content_service/app/moderation_worker.py` implements a local async worker used by tests and development to simulate queue processing; tests exist in `backend/content_service/tests/test_moderation.py`.
+- Audit logging for review decisions: `backend/content_service/app/security/audit_logger.py` is used across moderation and review flows to record actions.
+
+Recommended doc action: add an example moderation API contract and sample payloads (simulate, queue, decision) to make it straightforward for integrators to test and for the UI to call.

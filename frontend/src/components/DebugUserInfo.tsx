@@ -43,11 +43,11 @@ export function DebugUserInfo() {
         <div className="mt-2">
           <strong>Role Checks:</strong>
           <ul className="list-disc list-inside ml-2">
-            <li>hasRole('ADMIN'): {hasRole('ADMIN') ? '✅ Yes' : '❌ No'}</li>
-            <li>hasRole('HOST'): {hasRole('HOST') ? '✅ Yes' : '❌ No'}</li>
-            <li>hasRole('ADVERTISER'): {hasRole('ADVERTISER') ? '✅ Yes' : '❌ No'}</li>
-            <li>hasAnyRole(['ADMIN']): {hasAnyRole(['ADMIN']) ? '✅ Yes' : '❌ No'}</li>
-            <li>hasAnyRole(['ADMIN', 'HOST']): {hasAnyRole(['ADMIN', 'HOST']) ? '✅ Yes' : '❌ No'}</li>
+            <li>hasRole(&apos;ADMIN&apos;): {hasRole('ADMIN') ? '✅ Yes' : '❌ No'}</li>
+            <li>hasRole(&apos;HOST&apos;): {hasRole('HOST') ? '✅ Yes' : '❌ No'}</li>
+            <li>hasRole(&apos;ADVERTISER&apos;): {hasRole('ADVERTISER') ? '✅ Yes' : '❌ No'}</li>
+            <li>hasAnyRole([&apos;ADMIN&apos;]): {hasAnyRole(['ADMIN']) ? '✅ Yes' : '❌ No'}</li>
+            <li>hasAnyRole([&apos;ADMIN&apos;, &apos;HOST&apos;]): {hasAnyRole(['ADMIN', 'HOST']) ? '✅ Yes' : '❌ No'}</li>
           </ul>
         </div>
 

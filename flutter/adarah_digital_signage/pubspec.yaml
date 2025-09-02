@@ -37,16 +37,16 @@ dependencies:
   http: ^1.2.0
   
   # Device information and system APIs
-  device_info_plus: ^10.1.0
+  device_info_plus: ^11.5.0
   
   # QR Code scanning
-  mobile_scanner: ^5.0.0
+  mobile_scanner: ^7.0.1
   
   # Secure storage for device credentials
   flutter_secure_storage: ^9.2.2
   
   # WebSocket communication
-  web_socket_channel: ^2.4.0
+  web_socket_channel: ^3.0.3
   
   # JSON handling
   json_annotation: ^4.8.1
@@ -64,7 +64,7 @@ dependencies:
   cached_network_image: ^3.3.1
   
   # Permission handling
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   
   # State management
   provider: ^6.1.1
@@ -73,13 +73,13 @@ dependencies:
   connectivity_plus: ^6.0.1
   
   # Local notifications
-  flutter_local_notifications: ^17.2.1
+  flutter_local_notifications: ^19.4.1
   
   # Window management for kiosk mode
-  window_manager: ^0.3.7
+  window_manager: ^0.5.1
   
   # Screen utilities
-  screen_brightness: ^0.2.2+1
+  screen_brightness: ^2.1.7
   
   # Logging
   logger: ^2.0.2+1
@@ -89,6 +89,9 @@ dependencies:
   
   # URL launcher for external links
   url_launcher: ^6.2.4
+  
+  # WebView for HTML content display
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

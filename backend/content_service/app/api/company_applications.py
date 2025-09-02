@@ -14,7 +14,8 @@ from app.models import (
     UserRole
 )
 from app.repo import repo
-from app.auth import get_current_user_with_roles, get_password_hash
+from app.api.auth import get_current_user
+from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])
 
@@ -83,7 +84,7 @@ async def submit_company_application(application_data: CompanyApplicationCreate)
 async def list_company_applications(
     status: Optional[str] = Query(None, description="Filter by status"),
     company_type: Optional[str] = Query(None, description="Filter by company type"),
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """List company applications (Admin only)"""
     try:
@@ -132,7 +133,7 @@ async def list_company_applications(
 @router.get("/{application_id}", response_model=Dict)
 async def get_company_application(
     application_id: str,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific company application details (Admin only)"""
     try:
@@ -173,7 +174,7 @@ async def get_company_application(
 async def review_company_application(
     application_id: str,
     review_data: CompanyApplicationReview,
-    current_user: dict = Depends(get_current_user_with_roles)
+    current_user: dict = Depends(get_current_user)
 ):
     """Review and approve/reject company application (Admin only)"""
     try:
@@ -316,7 +317,7 @@ async def _create_company_and_user(application: dict, reviewer_id: str):
 
 
 @router.get("/stats/summary", response_model=Dict)
-async def get_application_stats(current_user: dict = Depends(get_current_user_with_roles)):
+async def get_application_stats(current_user: dict = Depends(get_current_user)):
     """Get application statistics (Admin only)"""
     try:
         # Check if user has ADMIN role

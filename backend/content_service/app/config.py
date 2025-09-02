@@ -45,7 +45,7 @@ settings = SimpleNamespace(
     AZURE_STORAGE_CONNECTION_STRING=os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
     AZURE_CONTAINER_NAME=os.getenv("AZURE_CONTAINER_NAME", "openkiosk-media"),
     LOCAL_MEDIA_DIR=os.getenv("LOCAL_MEDIA_DIR", "./data/media"),
-    MONGO_URI=os.getenv("MONGO_URI", "mongodb://localhost:27017/openkiosk"),
+    MONGO_URI=os.getenv("MONGO_URI"),
     SERVICE_BUS_CONNECTION_STRING=os.getenv("SERVICE_BUS_CONNECTION_STRING"),
     AZURE_AI_ENDPOINT=os.getenv("AZURE_AI_ENDPOINT"),
     AZURE_AI_KEY=os.getenv("AZURE_AI_KEY"),
@@ -58,6 +58,38 @@ settings = SimpleNamespace(
     # Local development settings
     USE_LOCAL_EVENT_PROCESSOR=os.getenv("USE_LOCAL_EVENT_PROCESSOR", "true").lower() == "true",
     EVENT_PROCESSOR_QUEUE_SIZE=int(os.getenv("EVENT_PROCESSOR_QUEUE_SIZE", "100")),
+    
+    # Security enhancements
+    JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", _secret_key),
+    REFRESH_TOKEN_SECRET=os.getenv("REFRESH_TOKEN_SECRET", _secret_key + "_refresh"),
+    ENCRYPTION_KEY=os.getenv("ENCRYPTION_KEY"),
+    
+    # Content security
+    CONTENT_MAX_SIZE_MB=int(os.getenv("CONTENT_MAX_SIZE_MB", "100")),
+    ALLOWED_FILE_TYPES=os.getenv("ALLOWED_FILE_TYPES", "jpg,jpeg,png,gif,webp,mp4,avi,mov,txt,json"),
+    CONTENT_SCAN_ENABLED=os.getenv("CONTENT_SCAN_ENABLED", "true").lower() == "true",
+    COPYRIGHT_CHECK_ENABLED=os.getenv("COPYRIGHT_CHECK_ENABLED", "true").lower() == "true",
+    
+    # Rate limiting
+    RATE_LIMIT_REQUESTS_PER_MINUTE=int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60")),
+    RATE_LIMIT_UPLOADS_PER_HOUR=int(os.getenv("RATE_LIMIT_UPLOADS_PER_HOUR", "10")),
+    
+    # Compliance
+    DATA_ENCRYPTION_ENABLED=os.getenv("DATA_ENCRYPTION_ENABLED", "true").lower() == "true",
+    AUDIT_LOGGING_ENABLED=os.getenv("AUDIT_LOGGING_ENABLED", "true").lower() == "true",
+    GDPR_COMPLIANCE_MODE=os.getenv("GDPR_COMPLIANCE_MODE", "true").lower() == "true",
+    DATA_RETENTION_DAYS=int(os.getenv("DATA_RETENTION_DAYS", "365")),
+    
+    # Device security
+    DEVICE_CERTIFICATE_VALIDATION=os.getenv("DEVICE_CERTIFICATE_VALIDATION", "true").lower() == "true",
+    WEBSOCKET_MESSAGE_VALIDATION=os.getenv("WEBSOCKET_MESSAGE_VALIDATION", "strict"),
+    DEVICE_HEARTBEAT_TIMEOUT_SECONDS=int(os.getenv("DEVICE_HEARTBEAT_TIMEOUT_SECONDS", "300")),
+    
+    # Azure Key Vault
+    AZURE_KEY_VAULT_URL=os.getenv("AZURE_KEY_VAULT_URL"),
+    AZURE_CLIENT_ID=os.getenv("AZURE_CLIENT_ID"),
+    AZURE_CLIENT_SECRET=os.getenv("AZURE_CLIENT_SECRET"),
+    AZURE_TENANT_ID=os.getenv("AZURE_TENANT_ID"),
 )
 
 # Debug logging for database configuration

@@ -1,33 +1,98 @@
-# Adara<sup>from Hebron™</sup> - Content Service
+# Adārah Digital Signage Platform - Content Service
 
-FastAPI content microservice with event-driven architecture and Docker support.
+FastAPI content microservice with advanced RBAC, event-driven architecture, and Docker support.
 
 ## Local Development
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.12+
+- UV (fast Python package manager)
 - Docker & Docker Compose (optional, for full stack)
 
-### Setup
+### Setup with UV
 
-1. Create virtual environment:
+1. Install UV (if not already installed):
 ```pwsh
-python -m venv .venv
+# Windows (PowerShell)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or using pip as fallback
+pip install uv
+```
+
+2. Create virtual environment and install dependencies:
+```pwsh
+# Create virtual environment
+uv venv
+
+# Activate virtual environment
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+
+# Install all dependencies from pyproject.toml
+uv sync
 ```
 
-2. Create `.env` file from `.env.example`:
+3. Create `.env` file from `.env.template`:
 ```pwsh
-cp .env.example .env
+Copy-Item .env.template .env
 ```
 
-3. Run locally:
+4. Run locally:
 ```pwsh
-uvicorn app.main:app --reload --port 8001
+# Using UV to run the application
+uv run uvicorn app.main:app --reload --port 8000
+
+# Or activate venv and run directly
+uv run python app/main.py
 ```
 
-## Docker Development
+## Package Management with UV
+
+### Adding Dependencies
+```pwsh
+# Add runtime dependency
+uv add fastapi uvicorn motor
+
+# Add development dependency  
+uv add --dev pytest pytest-asyncio black ruff mypy
+
+# Add dependency with version constraint
+uv add "fastapi>=0.104.0"
+
+# Add dependency with extras
+uv add "fastapi[email,mail]"
+```
+
+### Managing Dependencies
+```pwsh
+# Update all dependencies
+uv sync --upgrade
+
+# Remove dependency
+uv remove package-name
+
+# Show dependency tree
+uv tree
+
+# Generate lock file
+uv lock
+
+# Install from lock file (production)
+uv sync --frozen
+```
+
+### Running Commands
+```pwsh
+# Run any command in the virtual environment
+uv run command
+
+# Examples:
+uv run uvicorn app.main:app --reload
+uv run pytest
+uv run python seed_data.py
+uv run black .
+uv run ruff check .
+```
 
 ### Using Docker Compose (Recommended)
 
@@ -128,7 +193,7 @@ The service includes a comprehensive data seeding system for development and tes
 
 ```pwsh
 # Run the seeding script to populate test data
-python seed_data.py
+uv run python seed_data.py
 ```
 
 This creates:

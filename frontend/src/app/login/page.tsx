@@ -6,20 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { Building2, Shield, User, Lock, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Building2, Shield, User, Lock, AlertCircle, CheckCircle, Loader2, Crown } from 'lucide-react';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<{ companyId: string; roleId: string } | null>(null);
-  const [currentStep, setCurrentStep] = useState<'login' | 'role-selection' | 'redirecting'>('login');
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [authenticatedUser, setAuthenticatedUser] = useState<any>(null);
   const router = useRouter();
-  const { login, user, switchRole, loading, isInitialized } = useAuth();
+  const { login, user, loading, isInitialized, getDisplayName, getRoleDisplay } = useAuth();
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -40,25 +37,16 @@ export default function LoginPage() {
 
     try {
       console.log('Attempting login for:', email);
-      const loggedInUser = await login({ username: email, password });
+      const loggedInUser = await login({ email, password });
       
       if (loggedInUser) {
-        console.log('Login successful, user roles:', loggedInUser.roles);
-        setAuthenticatedUser(loggedInUser);
+        console.log('Login successful, user type:', loggedInUser.user_type);
         
-        if (loggedInUser.roles && loggedInUser.roles.length > 1) {
-          // Multiple roles - show role selection
-          setCurrentStep('role-selection');
-        } else if (loggedInUser.roles && loggedInUser.roles.length === 1) {
-          // Single role - auto-select and redirect
-          setCurrentStep('redirecting');
-          const role = loggedInUser.roles[0];
-          await switchRole(role.company_id, role.role_id);
-          console.log('Single role selected, redirecting to dashboard');
+        // Show success message briefly then redirect
+        setTimeout(() => {
+          console.log('Redirecting to dashboard');
           router.replace('/dashboard');
-        } else {
-          setLoginError('No roles assigned to this user. Please contact your administrator.');
-        }
+        }, 1000);
       } else {
         setLoginError('Login failed. Please check your credentials and try again.');
       }
@@ -68,50 +56,29 @@ export default function LoginPage() {
     }
   };
 
-  const handleRoleSelect = async () => {
-    if (!selectedRole) {
-      setLoginError('Please select a role to continue');
-      return;
-    }
-
-    try {
-      setCurrentStep('redirecting');
-      console.log('Switching to role:', selectedRole);
-      await switchRole(selectedRole.companyId, selectedRole.roleId);
-      console.log('Role switched successfully, redirecting to dashboard');
-      router.replace('/dashboard');
-    } catch (error) {
-      console.error('Role switch error:', error);
-      setLoginError(error instanceof Error ? error.message : 'Failed to switch role. Please try again.');
-      setCurrentStep('role-selection');
+  const getUserTypeIcon = (userType: string) => {
+    switch (userType) {
+      case 'SUPER_USER':
+        return <Crown className="w-5 h-5 text-purple-600" />;
+      case 'COMPANY_USER':
+        return <Building2 className="w-5 h-5 text-blue-600" />;
+      case 'DEVICE_USER':
+        return <Shield className="w-5 h-5 text-green-600" />;
+      default:
+        return <User className="w-5 h-5 text-gray-600" />;
     }
   };
 
-  const getRoleDisplayName = (role: string, roleName?: string) => {
-    if (roleName) {
-      return roleName;
-    }
-    switch (role) {
-      case 'ADMIN':
-        return 'Administrator';
-      case 'HOST':
-        return 'Host Company User';
-      case 'ADVERTISER':
-        return 'Advertiser Company User';
+  const getUserTypeLabel = (userType: string) => {
+    switch (userType) {
+      case 'SUPER_USER':
+        return 'Platform Administrator';
+      case 'COMPANY_USER':
+        return 'Company User';
+      case 'DEVICE_USER':
+        return 'Device User';
       default:
-        return role;
-    }
-  };
-
-  const getCompanyDisplayName = (companyId: string) => {
-    // This function is kept for compatibility but should be removed
-    // Company names should come from the API
-    switch (companyId) {
-      case 'global':
-      case 'system':
-        return 'System';
-      default:
-        return companyId ? `Company ${companyId.slice(-3)}` : 'No Company';
+        return 'User';
     }
   };
 
@@ -122,102 +89,15 @@ export default function LoginPage() {
         <Card className="w-full max-w-md">
           <CardContent className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+            <span className="ml-2 text-sm text-muted-foreground">Initializing...</span>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  // Role selection step
-  if (currentStep === 'role-selection' && authenticatedUser?.roles) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <Card className="w-full max-w-md shadow-xl">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <Shield className="w-6 h-6 text-blue-600" />
-            </div>
-            <CardTitle className="text-xl">Select Your Role</CardTitle>
-            <CardDescription>
-              Welcome back, {authenticatedUser.name || authenticatedUser.email}! 
-              <br />Please choose your role to continue.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loginError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{loginError}</AlertDescription>
-              </Alert>
-            )}
-            <div>
-              <Label>Select Role & Company</Label>
-              <Select onValueChange={(value) => {
-                const [companyId, roleId] = value.split('|');
-                setSelectedRole({ companyId, roleId });
-                setLoginError(null);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose your role and company" />
-                </SelectTrigger>
-                <SelectContent>
-                  {authenticatedUser.roles.map((role: any, index: number) => (
-                    <SelectItem key={index} value={`${role.company_id}|${role.role_id}`}>
-                      <div className="flex items-center gap-3 py-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {getRoleDisplayName(role.role, role.role_name)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Company: {getCompanyDisplayName(role.company_id)}
-                          </span>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCurrentStep('login');
-                  setAuthenticatedUser(null);
-                  setSelectedRole(null);
-                }}
-                className="w-full"
-              >
-                Back
-              </Button>
-              <Button
-                onClick={handleRoleSelect}
-                className="w-full"
-                disabled={!selectedRole || loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Continue
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Redirecting step
-  if (currentStep === 'redirecting') {
+  // Show success message if user is logged in (before redirect)
+  if (user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <Card className="w-full max-w-md shadow-xl">
@@ -225,7 +105,17 @@ export default function LoginPage() {
             <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Successfully Logged In!</h3>
+            <h3 className="text-lg font-semibold mb-2">Welcome back!</h3>
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-center gap-2">
+                {getUserTypeIcon(user.user_type)}
+                <span className="text-sm font-medium">{getDisplayName()}</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <span>{getRoleDisplay()}</span>
+                {user.company?.name && <span>• {user.company.name}</span>}
+              </div>
+            </div>
             <p className="text-sm text-muted-foreground mb-4">
               Redirecting you to your dashboard...
             </p>
@@ -242,9 +132,11 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <div className="mx-auto w-16 h-16 bg-white rounded-xl flex items-center justify-center mb-4 shadow-lg">
-            <img
+            <Image
               src="/images/logo.png"
               alt="Adara Logo"
+              width={48}
+              height={48}
               className="w-12 h-12 object-contain"
               onError={(e) => {
                 // Fallback to icon if logo fails to load
@@ -261,10 +153,10 @@ export default function LoginPage() {
           <CardTitle className="text-2xl">
             Welcome to{' '}
             <span className="text-blue-600">Adara</span>
-            <span className="text-xs text-muted-foreground block mt-1">from Hebron™</span>
+            <span className="text-xs text-muted-foreground block mt-1">Digital Signage Platform™</span>
           </CardTitle>
           <CardDescription>
-            Sign in to access your digital kiosk dashboard
+            Sign in to access your digital signage dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -343,11 +235,32 @@ export default function LoginPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Don't have an account?{' '}
-              <a href="/signup" className="text-blue-600 hover:underline font-medium">
-                Sign up
+              Don&apos;t have an account?{' '}
+              <a href="/company-registration" className="text-blue-600 hover:underline font-medium">
+                Register Company
               </a>
             </p>
+          </div>
+
+          {/* Enhanced RBAC Features Info */}
+          <div className="mt-6 border-t pt-4">
+            <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+              Enhanced Security Features
+            </h4>
+            <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Shield className="w-3 h-3 text-blue-500" />
+                <span>Role-based access control</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-3 h-3 text-green-500" />
+                <span>Company data isolation</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Crown className="w-3 h-3 text-purple-500" />
+                <span>Granular permissions</span>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

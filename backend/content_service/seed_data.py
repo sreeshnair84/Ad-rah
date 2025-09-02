@@ -26,9 +26,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
 from app.models import (
     Company, CompanyCreate, User, UserCreate, UserRole,
-    Role, RoleGroup, RolePermission, Screen, Permission,
+    Role, RoleGroup, CompanyRoleType, RolePermission, Screen, Permission,
     ContentMeta, ContentMetadata, Review,
     DeviceRegistrationKey
+)
+# Import new RBAC models
+from app.rbac_models import (
+    UserType, CompanyRole, Device
 )
 from app.repo import repo
 from app.auth import get_password_hash
@@ -105,33 +109,59 @@ async def seed_sample_tags(categories):
 
 
 async def seed_companies():
-    """Seed minimal sample companies for development only"""
-    print("🌱 Seeding minimal sample companies...")
+    """Seed comprehensive sample companies with different types"""
+    print("🌱 Seeding sample companies with role-based structure...")
     print("  ⚠️  NOTE: These are sample companies for development. Remove for production!")
 
-    # Minimal set for development testing
+    # Comprehensive set for development testing - includes multiple companies of each type
     companies_data = [
+        # HOST Companies
         {
-            "name": "Demo Host Company",
+            "name": "TechCorp Solutions",
             "type": "HOST",
-            "address": "123 Demo Street, Test City, TC 12345",
-            "city": "Test City",
-            "country": "Demo Land",
-            "phone": "+1-555-DEMO1",
-            "email": "demo@host-company.example",
-            "website": "https://demo-host.example",
+            "address": "123 Tech Street, Dubai, UAE",
+            "city": "Dubai",
+            "country": "UAE",
+            "phone": "+971-4-123-4567",
+            "email": "info@techcorp-solutions.com",
+            "website": "https://techcorp-solutions.com",
             "organization_code": generate_organization_code(),
             "status": "active"
         },
         {
-            "name": "Demo Advertiser Company",
+            "name": "Digital Displays LLC",
+            "type": "HOST", 
+            "address": "456 Display Avenue, Abu Dhabi, UAE",
+            "city": "Abu Dhabi",
+            "country": "UAE",
+            "phone": "+971-2-987-6543",
+            "email": "contact@digitaldisplays.ae",
+            "website": "https://digitaldisplays.ae",
+            "organization_code": generate_organization_code(),
+            "status": "active"
+        },
+        # ADVERTISER Companies
+        {
+            "name": "Creative Ads Inc",
             "type": "ADVERTISER",
-            "address": "456 Demo Avenue, Test City, TC 12345",
-            "city": "Test City",
-            "country": "Demo Land",
-            "phone": "+1-555-DEMO2",
-            "email": "demo@advertiser-company.example",
-            "website": "https://demo-advertiser.example",
+            "address": "789 Creative Boulevard, Dubai, UAE",
+            "city": "Dubai", 
+            "country": "UAE",
+            "phone": "+971-4-555-0123",
+            "email": "hello@creativeads.com",
+            "website": "https://creativeads.com",
+            "organization_code": generate_organization_code(),
+            "status": "active"
+        },
+        {
+            "name": "AdVantage Media",
+            "type": "ADVERTISER",
+            "address": "321 Media Center, Sharjah, UAE",
+            "city": "Sharjah",
+            "country": "UAE",
+            "phone": "+971-6-777-8888",
+            "email": "team@advantage-media.ae",
+            "website": "https://advantage-media.ae",
             "organization_code": generate_organization_code(),
             "status": "active"
         }
@@ -143,7 +173,7 @@ async def seed_companies():
             company = Company(**company_data)
             saved = await repo.save_company(company)
             created_companies.append(saved)
-            print(f"  ✓ Created demo company: {company.name} (Org Code: {company.organization_code})")
+            print(f"  ✓ Created {company.type.lower()} company: {company.name} (Org Code: {company.organization_code})")
         except Exception as e:
             print(f"  ✗ Failed to create company {company_data['name']}: {e}")
 
@@ -151,55 +181,99 @@ async def seed_companies():
 
 
 async def seed_roles():
-    """Seed roles and permissions"""
-    print("🌱 Seeding roles and permissions...")
-
+    """Seed comprehensive role hierarchy with company-specific roles"""
+    print("🌱 Seeding comprehensive role hierarchy...")
+    
     # Get companies for role assignment
     companies = await repo.list_companies()
-
+    
     roles_data = [
-        # System Administrator
+        # Platform Administrator (Global)
         {
-            "name": "System Administrator",
+            "name": "Platform Administrator",
             "role_group": RoleGroup.ADMIN,
+            "company_role_type": None,  # No company role type for platform admin
             "company_id": "global",
             "is_default": True,
             "status": "active"
         }
     ]
 
-    # Add company-specific roles
+    # Create company-specific roles based on type
     for company in companies:
-        if company.get("type") == "HOST":
+        company_id = company["id"]
+        company_name = company["name"]
+        company_type = company.get("type")
+
+        if company_type == "HOST":
+            # HOST Company Roles
             roles_data.extend([
                 {
-                    "name": f"{company['name']} Manager",
+                    "name": f"{company_name} - Admin",
                     "role_group": RoleGroup.HOST,
-                    "company_id": company["id"],
+                    "company_role_type": CompanyRoleType.COMPANY_ADMIN,
+                    "company_id": company_id,
                     "is_default": True,
                     "status": "active"
                 },
                 {
-                    "name": f"{company['name']} Screen Operator",
+                    "name": f"{company_name} - Approver",
                     "role_group": RoleGroup.HOST,
-                    "company_id": company["id"],
+                    "company_role_type": CompanyRoleType.APPROVER,
+                    "company_id": company_id,
+                    "is_default": False,
+                    "status": "active"
+                },
+                {
+                    "name": f"{company_name} - Editor",
+                    "role_group": RoleGroup.HOST,
+                    "company_role_type": CompanyRoleType.EDITOR,
+                    "company_id": company_id,
+                    "is_default": False,
+                    "status": "active"
+                },
+                {
+                    "name": f"{company_name} - Viewer",
+                    "role_group": RoleGroup.HOST,
+                    "company_role_type": CompanyRoleType.VIEWER,
+                    "company_id": company_id,
                     "is_default": False,
                     "status": "active"
                 }
             ])
-        elif company.get("type") == "ADVERTISER":
+        
+        elif company_type == "ADVERTISER":
+            # ADVERTISER Company Roles
             roles_data.extend([
                 {
-                    "name": f"{company['name']} Director",
+                    "name": f"{company_name} - Admin",
                     "role_group": RoleGroup.ADVERTISER,
-                    "company_id": company["id"],
+                    "company_role_type": CompanyRoleType.COMPANY_ADMIN,
+                    "company_id": company_id,
                     "is_default": True,
                     "status": "active"
                 },
                 {
-                    "name": f"{company['name']} Content Creator",
+                    "name": f"{company_name} - Approver", 
                     "role_group": RoleGroup.ADVERTISER,
-                    "company_id": company["id"],
+                    "company_role_type": CompanyRoleType.APPROVER,
+                    "company_id": company_id,
+                    "is_default": False,
+                    "status": "active"
+                },
+                {
+                    "name": f"{company_name} - Editor",
+                    "role_group": RoleGroup.ADVERTISER,
+                    "company_role_type": CompanyRoleType.EDITOR,
+                    "company_id": company_id,
+                    "is_default": False,
+                    "status": "active"
+                },
+                {
+                    "name": f"{company_name} - Viewer",
+                    "role_group": RoleGroup.ADVERTISER,
+                    "company_role_type": CompanyRoleType.VIEWER,
+                    "company_id": company_id,
                     "is_default": False,
                     "status": "active"
                 }
@@ -211,7 +285,11 @@ async def seed_roles():
             role = Role(**role_data)
             saved = await repo.save_role(role)
             created_roles.append(saved)
-            print(f"  ✓ Created role: {role.name}")
+            
+            # Extract role type for cleaner display
+            role_type = role_data.get("company_role_type", "PLATFORM_ADMIN")
+            company_type = "GLOBAL" if role_data["company_id"] == "global" else companies[0].get("type", "UNKNOWN")
+            print(f"  ✓ Created {company_type} {role_type}: {role.name}")
         except Exception as e:
             print(f"  ✗ Failed to create role {role_data['name']}: {e}")
 
@@ -219,98 +297,340 @@ async def seed_roles():
 
 
 async def seed_role_permissions():
-    """Seed role permissions"""
-    print("🌱 Seeding role permissions...")
+    """Seed comprehensive role-based permissions with company isolation"""
+    print("🌱 Seeding comprehensive role-based permissions...")
 
     roles = await repo.list_roles_by_group("ADMIN") + await repo.list_roles_by_group("HOST") + await repo.list_roles_by_group("ADVERTISER")
-
     permissions_data = []
+
+    # Define permission templates based on company role type
+    permission_templates = {
+        # Platform Admin - Full access to everything
+        None: {  # Platform admin has no company_role_type
+            "dashboard": ["view", "edit", "delete", "access"],
+            "users": ["view", "edit", "delete", "access"],
+            "companies": ["view", "edit", "delete", "access"], 
+            "content": ["view", "edit", "delete", "access"],
+            "moderation": ["view", "edit", "delete", "access"],
+            "analytics": ["view", "edit", "delete", "access"],
+            "settings": ["view", "edit", "delete", "access"],
+            "billing": ["view", "edit", "delete", "access"]
+        },
+        # Company Admin - Full company management
+        "COMPANY_ADMIN": {
+            "dashboard": ["view", "edit", "access"],
+            "users": ["view", "edit", "delete", "access"],  # Can manage company users
+            "companies": ["view", "edit", "access"],  # Can edit own company
+            "content": ["view", "edit", "delete", "access"],
+            "moderation": ["view", "edit", "delete", "access"],
+            "analytics": ["view", "edit", "access"],
+            "settings": ["view", "edit", "access"]
+        },
+        # Approver - Content approval and analytics
+        "APPROVER": {
+            "dashboard": ["view", "access"],
+            "content": ["view", "edit", "access"],  # Can approve/reject content
+            "moderation": ["view", "edit", "access"],  # Full moderation access
+            "analytics": ["view", "access"]
+        },
+        # Editor/Uploader - Content creation and basic management
+        "EDITOR": {
+            "dashboard": ["view", "access"],
+            "content": ["view", "edit", "access"],  # Can upload/edit own content
+            "analytics": ["view", "access"]  # Basic analytics
+        },
+        # Viewer - Read-only access
+        "VIEWER": {
+            "dashboard": ["view", "access"],
+            "content": ["view", "access"],  # Can only view content
+            "analytics": ["view", "access"]  # Basic analytics viewing
+        }
+    }
 
     for role in roles:
         role_id = role.get("id")
         role_group = role.get("role_group")
+        company_role_type = role.get("company_role_type")
+        role_name = role.get("name", "Unknown Role")
 
-        if role_group == "ADMIN":
-            # Admin gets all permissions
-            screens = ["dashboard", "users", "companies", "content", "moderation", "analytics", "settings", "billing"]
-            for screen in screens:
-                permissions_data.append({
-                    "role_id": role_id,
-                    "screen": screen,
-                    "permissions": ["view", "edit", "delete", "access"]
-                })
-        elif role_group == "HOST":
-            # Host gets content and screen management permissions
-            permissions_data.extend([
-                {"role_id": role_id, "screen": "dashboard", "permissions": ["view", "access"]},
-                {"role_id": role_id, "screen": "content", "permissions": ["view", "edit", "access"]},
-                {"role_id": role_id, "screen": "moderation", "permissions": ["view", "edit", "access"]},
-                {"role_id": role_id, "screen": "analytics", "permissions": ["view", "access"]}
-            ])
-        elif role_group == "ADVERTISER":
-            # Advertiser gets content creation and analytics permissions
-            permissions_data.extend([
-                {"role_id": role_id, "screen": "dashboard", "permissions": ["view", "access"]},
-                {"role_id": role_id, "screen": "content", "permissions": ["view", "edit", "access"]},
-                {"role_id": role_id, "screen": "analytics", "permissions": ["view", "access"]}
-            ])
+        # Get permission template based on role type
+        if role_group == "ADMIN" and company_role_type is None:
+            # Platform Administrator
+            template = permission_templates[None]
+        else:
+            # Company-specific role
+            template = permission_templates.get(company_role_type, permission_templates["VIEWER"])
 
+        # Create permissions based on template
+        for screen, permissions in template.items():
+            permissions_data.append({
+                "role_id": role_id,
+                "screen": screen,
+                "permissions": permissions
+            })
+
+    # Save all permissions
+    created_count = 0
     for perm_data in permissions_data:
         try:
             permission = RolePermission(**perm_data)
             await repo.save_role_permission(permission)
+            created_count += 1
         except Exception as e:
-            print(f"  ✗ Failed to create permission: {e}")
+            print(f"  ✗ Failed to create permission for role {perm_data['role_id']}: {e}")
 
-    print(f"  ✓ Created {len(permissions_data)} role permissions")
+    print(f"  ✓ Created {created_count} role permissions across {len(roles)} roles")
+
+
+async def seed_devices():
+    """Seed sample devices with API keys for testing device authentication"""
+    print("🌱 Seeding sample devices with API keys...")
+
+    # Get HOST companies (only they can have devices)
+    companies = await repo.list_companies()
+    host_companies = [c for c in companies if c.get("type") == "HOST"]
+
+    if not host_companies:
+        print("  ⚠ No HOST companies found, skipping device seeding")
+        return []
+
+    devices_data = []
+    for company in host_companies:
+        company_id = company["id"]
+        company_name = company["name"]
+        
+        # Create 2-3 devices per HOST company
+        devices_data.extend([
+            {
+                "name": f"{company_name} - Main Display",
+                "company_id": company_id,
+                "api_key": generate_secure_key(32),  # Longer API key for devices
+                "device_type": "digital_signage_display",
+                "location": f"{company_name} Main Lobby",
+                "status": "active",
+                "metadata": {
+                    "resolution": "1920x1080",
+                    "orientation": "landscape",
+                    "installation_date": "2024-01-15"
+                }
+            },
+            {
+                "name": f"{company_name} - Kiosk Terminal",
+                "company_id": company_id,
+                "api_key": generate_secure_key(32),
+                "device_type": "interactive_kiosk",
+                "location": f"{company_name} Reception Area",
+                "status": "active",
+                "metadata": {
+                    "resolution": "1080x1920",
+                    "orientation": "portrait",
+                    "installation_date": "2024-02-01"
+                }
+            }
+        ])
+
+    created_devices = []
+    for device_data in devices_data:
+        try:
+            # Create Device using the rbac_models Device class
+            from app.rbac_models import Device
+            device = Device(**device_data)
+            saved = await repo.save_device(device.model_dump(exclude_none=True))
+            created_devices.append(saved)
+            print(f"  ✓ Created device: {device.name} (API Key: {device.api_key[:8]}...)")
+        except Exception as e:
+            print(f"  ✗ Failed to create device {device_data['name']}: {e}")
+
+    print(f"\n📱 Device Creation Summary: {len(created_devices)} devices created")
+    return created_devices
 
 
 async def seed_users():
-    """Seed only essential admin user for production readiness"""
-    print("🌱 Seeding essential users...")
-    print("  ⚠️  NOTE: Only creating admin user. Companies register through application process.")
+    """Seed comprehensive users with new RBAC system"""
+    print("🌱 Seeding users with enhanced RBAC system...")
+    print("  ⚠️  NOTE: Creating users for demo/development. Remove for production!")
 
-    # Only create admin user - companies and their users will be created through registration
+    # Get companies for user assignment
+    companies = await repo.list_companies()
+
     users_data = [
-        # System Admin - ONLY ESSENTIAL USER
+        # 1. SUPER_USER - Platform Administrator (no company association)
         {
-            "name": "System Administrator",
+            "name": "Platform Administrator",
             "email": "admin@openkiosk.com",
-            "phone": "+1-555-ADMIN",
+            "phone": "+971-4-ADMIN01",
             "hashed_password": get_password_hash("adminpass"),
-            "status": "active",
+            "user_type": UserType.SUPER_USER,
+            "company_id": None,  # Super users are not tied to a company
+            "company_role": None,
+            "permissions": [
+                # Super users have all permissions
+                "company_create", "company_read", "company_update", "company_delete",
+                "user_create", "user_read", "user_update", "user_delete",
+                "content_create", "content_read", "content_update", "content_delete",
+                "content_approve", "content_reject", "content_share",
+                "device_create", "device_read", "device_update", "device_delete",
+                "device_manage", "analytics_read", "settings_manage"
+            ],
+            "is_active": True,
             "email_verified": True,
-            "last_login": None  # Will be set on first login
+            "last_login": None
         }
     ]
 
-    # Only create demo users if we have demo companies (development mode)
-    companies = await repo.list_companies()
-    if companies:
-        print("  ⚠️  Creating demo users for demo companies (development only)")
-        roles = await repo.list_roles_by_group("HOST") + await repo.list_roles_by_group("ADVERTISER")
+    # Create company-specific users with different RBAC roles
+    for company in companies:
+        company_id = company["id"]
+        company_name = company["name"]
+        company_type = company.get("type")
+
+        if company_type == "HOST":
+            # HOST company users with different access levels
+            users_data.extend([
+                # Company Admin - Full company management
+                {
+                    "name": f"{company_name} - Company Admin",
+                    "email": f"admin@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-HOST01",
+                    "hashed_password": get_password_hash("hostpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.ADMIN,
+                    "permissions": [
+                        "user_create", "user_read", "user_update", "user_delete",
+                        "content_create", "content_read", "content_update", "content_delete",
+                        "content_approve", "content_reject", "content_share",
+                        "device_create", "device_read", "device_update", "device_delete",
+                        "device_manage", "analytics_read", "settings_manage"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                },
+                # Content Reviewer - Can approve/reject content
+                {
+                    "name": f"{company_name} - Content Reviewer",
+                    "email": f"reviewer@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-HOST02",
+                    "hashed_password": get_password_hash("hostpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.REVIEWER,
+                    "permissions": [
+                        "content_read", "content_approve", "content_reject",
+                        "analytics_read"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                },
+                # Content Editor - Can create and edit content
+                {
+                    "name": f"{company_name} - Content Editor",
+                    "email": f"editor@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-HOST03",
+                    "hashed_password": get_password_hash("hostpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.EDITOR,
+                    "permissions": [
+                        "content_create", "content_read", "content_update",
+                        "device_read", "analytics_read"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                },
+                # Viewer - Read-only access
+                {
+                    "name": f"{company_name} - Operations Viewer",
+                    "email": f"viewer@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-HOST04",
+                    "hashed_password": get_password_hash("hostpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.VIEWER,
+                    "permissions": [
+                        "content_read", "device_read", "analytics_read"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                }
+            ])
         
-        for company in companies:
-            if company["type"] == "HOST":
-                users_data.append({
-                    "name": f"{company['name']} Manager",
-                    "email": f"demo-host@example.com",
-                    "phone": "+1-555-DEMO-HOST",
-                    "hashed_password": get_password_hash("demopass"),
-                    "status": "active",
+        elif company_type == "ADVERTISER":
+            # ADVERTISER company users with different access levels
+            users_data.extend([
+                # Company Admin - Full company management
+                {
+                    "name": f"{company_name} - Creative Director",
+                    "email": f"director@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-ADV001",
+                    "hashed_password": get_password_hash("advertiserpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.ADMIN,
+                    "permissions": [
+                        "user_create", "user_read", "user_update", "user_delete",
+                        "content_create", "content_read", "content_update", "content_delete",
+                        "content_share", "analytics_read", "settings_manage"
+                    ],
+                    "is_active": True,
                     "email_verified": True,
                     "last_login": None
-                })
-            elif company["type"] == "ADVERTISER":
-                users_data.append({
-                    "name": f"{company['name']} Director",
-                    "email": f"demo-advertiser@example.com",
-                    "phone": "+1-555-DEMO-ADV",
-                    "hashed_password": get_password_hash("demopass"),
-                    "status": "active",
+                },
+                # Content Reviewer - Can approve content for sharing
+                {
+                    "name": f"{company_name} - Campaign Approver",
+                    "email": f"approver@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-ADV002",
+                    "hashed_password": get_password_hash("advertiserpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.REVIEWER,
+                    "permissions": [
+                        "content_read", "content_approve", "content_share",
+                        "analytics_read"
+                    ],
+                    "is_active": True,
                     "email_verified": True,
                     "last_login": None
-                })
+                },
+                # Content Creator - Can create and edit content
+                {
+                    "name": f"{company_name} - Content Creator",
+                    "email": f"creator@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-ADV003",
+                    "hashed_password": get_password_hash("advertiserpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.EDITOR,
+                    "permissions": [
+                        "content_create", "content_read", "content_update",
+                        "analytics_read"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                },
+                # Analytics Viewer - Read-only access to analytics
+                {
+                    "name": f"{company_name} - Analytics Viewer",
+                    "email": f"analytics@{company_name.lower().replace(' ', '').replace('-', '')}.com",
+                    "phone": "+971-4-ADV004",
+                    "hashed_password": get_password_hash("advertiserpass"),
+                    "user_type": UserType.COMPANY_USER,
+                    "company_id": company_id,
+                    "company_role": CompanyRole.VIEWER,
+                    "permissions": [
+                        "content_read", "analytics_read"
+                    ],
+                    "is_active": True,
+                    "email_verified": True,
+                    "last_login": None
+                }
+            ])
 
     created_users = []
     for user_data in users_data:
@@ -318,71 +638,117 @@ async def seed_users():
             user = User(**user_data)
             saved = await repo.save_user(user)
             created_users.append(saved)
-            print(f"  ✓ Created user: {user.email}")
+            user_type = user_data.get("user_type", "UNKNOWN")
+            company_role = user_data.get("company_role", "N/A")
+            print(f"  ✓ Created {user_type} user: {user.email} (Role: {company_role})")
         except Exception as e:
             print(f"  ✗ Failed to create user {user_data['email']}: {e}")
+
+    print(f"\n📊 User Creation Summary:")
+    print(f"   SUPER_USER: 1")
+    print(f"   COMPANY_USER: {len(created_users) - 1}")
+    print(f"   Total: {len(created_users)}")
 
     return created_users
 
 
 async def seed_user_roles():
-    """Seed user role assignments"""
-    print("🌱 Seeding user roles...")
+    """Seed comprehensive user role assignments with proper company mapping"""
+    print("🌱 Seeding comprehensive user role assignments...")
 
     users = await repo.list_users()
-    roles = await repo.list_roles_by_group("ADMIN") + await repo.list_roles_by_group("HOST") + await repo.list_roles_by_group("ADVERTISER")
+    companies = await repo.list_companies()
+    all_roles = await repo.list_roles_by_group("ADMIN") + await repo.list_roles_by_group("HOST") + await repo.list_roles_by_group("ADVERTISER")
 
     user_roles_data = []
+    created_count = 0
 
     for user in users:
-        user_email = user.get("email")
+        user_id = user["id"]
+        user_email = user.get("email", "")
+        user_name = user.get("name", "")
 
-        if "admin" in user_email:
-            # Admin user gets admin role
-            admin_roles = [r for r in roles if r.get("role_group") == "ADMIN"]
+        # Platform Administrator
+        if "admin@openkiosk.com" in user_email:
+            admin_roles = [r for r in all_roles if r.get("role_group") == "ADMIN" and r.get("company_id") == "global"]
             for role in admin_roles:
                 user_roles_data.append({
-                    "user_id": user["id"],
+                    "user_id": user_id,
                     "company_id": "global",
                     "role_id": role["id"],
                     "is_default": True,
                     "status": "active"
                 })
-        elif "host" in user_email or "operator" in user_email:
-            # Host users get host roles
-            for role in roles:
-                if role.get("role_group") == "HOST":
-                    company_id = role.get("company_id")
-                    if company_id and company_id != "global":
-                        user_roles_data.append({
-                            "user_id": user["id"],
-                            "company_id": company_id,
-                            "role_id": role["id"],
-                            "is_default": "manager" in user_email.lower(),
-                            "status": "active"
-                        })
-        elif "director" in user_email or "creator" in user_email:
-            # Advertiser users get advertiser roles
-            for role in roles:
-                if role.get("role_group") == "ADVERTISER":
-                    company_id = role.get("company_id")
-                    if company_id and company_id != "global":
-                        user_roles_data.append({
-                            "user_id": user["id"],
-                            "company_id": company_id,
-                            "role_id": role["id"],
-                            "is_default": "director" in user_email.lower(),
-                            "status": "active"
-                        })
+                created_count += 1
 
+        # Company-specific user role assignments
+        for company in companies:
+            company_id = company["id"]
+            company_name = company["name"]
+            company_type = company.get("type")
+
+            # Get all roles for this company
+            company_roles = [r for r in all_roles if r.get("company_id") == company_id]
+
+            if company_type == "HOST":
+                # Map HOST users to roles based on email pattern
+                role_mappings = {
+                    f"host-admin@{company_name.lower().replace(' ', '-')}.com": "COMPANY_ADMIN",
+                    f"approver@{company_name.lower().replace(' ', '-')}.com": "APPROVER", 
+                    f"editor@{company_name.lower().replace(' ', '-')}.com": "EDITOR",
+                    f"viewer@{company_name.lower().replace(' ', '-')}.com": "VIEWER"
+                }
+
+                for email_pattern, role_type in role_mappings.items():
+                    if user_email == email_pattern:
+                        # Find matching role for this company and type
+                        matching_role = next((r for r in company_roles 
+                                            if r.get("company_role_type") == role_type), None)
+                        if matching_role:
+                            user_roles_data.append({
+                                "user_id": user_id,
+                                "company_id": company_id,
+                                "role_id": matching_role["id"],
+                                "is_default": (role_type == "COMPANY_ADMIN"),  # Admin is default
+                                "status": "active"
+                            })
+                            created_count += 1
+
+            elif company_type == "ADVERTISER":
+                # Map ADVERTISER users to roles based on email pattern
+                role_mappings = {
+                    f"director@{company_name.lower().replace(' ', '-')}.com": "COMPANY_ADMIN",
+                    f"approver@{company_name.lower().replace(' ', '-')}.com": "APPROVER",
+                    f"creator@{company_name.lower().replace(' ', '-')}.com": "EDITOR", 
+                    f"analytics@{company_name.lower().replace(' ', '-')}.com": "VIEWER"
+                }
+
+                for email_pattern, role_type in role_mappings.items():
+                    if user_email == email_pattern:
+                        # Find matching role for this company and type
+                        matching_role = next((r for r in company_roles 
+                                            if r.get("company_role_type") == role_type), None)
+                        if matching_role:
+                            user_roles_data.append({
+                                "user_id": user_id,
+                                "company_id": company_id,
+                                "role_id": matching_role["id"],
+                                "is_default": (role_type == "COMPANY_ADMIN"),  # Admin is default
+                                "status": "active"
+                            })
+                            created_count += 1
+
+    # Save all user roles
+    saved_count = 0
     for user_role_data in user_roles_data:
         try:
             user_role = UserRole(**user_role_data)
             await repo.save_user_role(user_role)
+            saved_count += 1
         except Exception as e:
-            print(f"  ✗ Failed to create user role: {e}")
+            print(f"  ✗ Failed to assign role: {e}")
 
-    print(f"  ✓ Created {len(user_roles_data)} user role assignments")
+    print(f"  ✓ Successfully assigned {saved_count} user roles to {len(users)} users")
 
 
 async def seed_sample_content():
@@ -604,6 +970,10 @@ async def main():
         # Seed only essential users
         users = await seed_users()
         await seed_user_roles()
+        
+        # Seed devices for HOST companies (for authentication testing)
+        if companies:
+            await seed_devices()
         
         # Only create registration keys for demo companies
         if companies:

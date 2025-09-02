@@ -84,6 +84,13 @@ Dashboard → Users → Roles → Registration → Companies → My Ads → Appr
 - `GET/POST /api/screens` - Screen layout management
 - `GET/POST /api/content/overlay` - Content overlay system
 - `GET/POST /api/digital-twin` - Virtual testing environment
+#### ✅ **Implemented APIs (discovered in codebase)**
+- `GET/POST /api/screens` - Screen layout management (backend: `backend/content_service/app/api/screens.py`; models: `backend/content_service/app/models.py`)
+- `GET/POST /api/screens/{screen_id}/overlays` - Content overlay CRUD and positioning (backend: `backend/content_service/app/api/screens.py`; frontend: `frontend/src/app/dashboard/content-overlay/page.tsx`)
+- `GET/POST /api/digital-twins` - Digital twin virtual devices and control endpoints (backend: `backend/content_service/app/api/screens.py` exports DigitalTwin models; frontend: `frontend/src/app/dashboard/digital-twin/page.tsx`)
+- `GET/POST /api/events` - Event ingestion / proof-of-play / analytics events (backend: `backend/content_service/app/api/events.py`; `backend/content_service/app/content_delivery/proof_of_play.py`)
+- `WebSocket /api/ws/*` - Real-time device telemetry and control (backend: `backend/content_service/app/api/websocket.py` and `backend/content_service/app/websocket_manager.py`; frontend: `frontend/src/components/DeviceMonitor.tsx`)
+- `GET/POST /api/content-delivery/*` - Scheduler, distributor and content delivery endpoints (backend: `backend/content_service/app/content_delivery/content_scheduler.py`, `content_distributor.py`)
 
 ### **Frontend Pages Status**
 
@@ -95,6 +102,9 @@ Dashboard → Users → Roles → Registration → Companies → My Ads → Appr
 | `/dashboard/roles` | ✅ Complete | Role CRUD, permission matrix, hierarchy management |
 | `/dashboard/registration` | ✅ Complete | Application review, document management, approval workflow |
 | `/dashboard/master-data` | ✅ Complete | Company management, CRUD operations |
+| `/dashboard/screens` | ✅ Complete | Screen configuration, CRUD, overlays (frontend: `frontend/src/app/dashboard/kiosks/page.tsx`; backend: `backend/content_service/app/api/screens.py`) |
+| `/dashboard/content-overlay` | ✅ Complete | Overlay positioning editor, CRUD (frontend: `frontend/src/app/dashboard/content-overlay/page.tsx`; backend: `backend/content_service/app/api/screens.py`) |
+| `/dashboard/digital-twin` | ✅ Complete | Virtual testing, live mirroring, twin control (frontend: `frontend/src/app/dashboard/digital-twin/page.tsx`; backend: `backend/content_service/app/api/screens.py`, `app/websocket_manager.py`) |
 
 #### 🔄 **Partially Implemented**
 | Page | Status | Missing Features |

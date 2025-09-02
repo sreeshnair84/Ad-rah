@@ -20,11 +20,10 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [rtl, setRtl] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default to collapsed
   const router = useRouter();
   const pathname = usePathname();
-  const { user, getCurrentUser, loading, isInitialized } = useAuth();
+  const { user, loading, isInitialized } = useAuth();
 
   useEffect(() => {
     // Authentication is handled by useAuth hook initialization
@@ -129,7 +128,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div dir={rtl ? "rtl" : "ltr"} className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       <Header 
         showSidebarToggle={true}
         isSidebarCollapsed={isSidebarCollapsed}

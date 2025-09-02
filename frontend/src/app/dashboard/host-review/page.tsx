@@ -13,23 +13,29 @@ import { useAuth } from '@/hooks/useAuth';
 
 interface ContentItem {
   id: string;
-  title: string;
+  title?: string;
   description?: string;
   owner_id: string;
   categories: string[];
   tags: string[];
-  status: string;
+  status?: string;
   created_at?: string;
+  filename?: string;
+  content_type?: string;
+  size?: number;
+  uploaded_at?: string;
+  updated_at?: string;
+  content_id?: string; // Sometimes returned as content_id instead of id
 }
 
 interface ReviewItem {
-  id: string;
+  id?: string;
   content_id: string;
   ai_confidence?: number;
   action: string;
   reviewer_id?: string;
   notes?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export default function HostReviewPage() {
@@ -41,7 +47,7 @@ export default function HostReviewPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const { enqueueForModeration, listQueue, postDecisionByContentId } = useModeration();
+  const { getPendingReviews, postDecisionByContentId } = useModeration();
   const { listMetadata, updateContentStatus } = useContent();
   const { user } = useAuth();
 
@@ -60,9 +66,9 @@ export default function HostReviewPage() {
       const pendingItems = allContent.filter(item => item.status === 'pending');
       setPendingContent(pendingItems);
 
-      // Load review queue
-      const reviewQueue = await listQueue();
-      setReviews(reviewQueue);
+      // Load pending reviews only
+      const pendingReviews = await getPendingReviews();
+      setReviews(pendingReviews);
 
     } catch (error) {
       console.error('Failed to load content:', error);
@@ -149,6 +155,77 @@ export default function HostReviewPage() {
     return <Badge variant="destructive">Low Confidence</Badge>;
   };
 
+  const renderContentPreview = (content: any) => {
+    // Get content type and filename from the content object
+    const contentType = content.content_type || content.type || '';
+    const filename = content.filename || content.title || '';
+    
+    // Generate the file URL (API serves files from /api/uploads/files/ endpoint)
+    const fileUrl = content.filename ? `/api/uploads/files/${content.filename}` : null;
+    
+    if (!fileUrl) {
+      return (
+        <div className="w-32 h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-sm">
+          No Preview
+        </div>
+      );
+    }
+
+    // Handle different content types
+    if (contentType.startsWith('image/')) {
+      return (
+        <div className="w-32 h-24 bg-gray-100 rounded-lg overflow-hidden">
+          <img
+            src={fileUrl}
+            alt={content.title || 'Content preview'}
+            className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => window.open(fileUrl, '_blank')}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxIDNIMTNMMTEgMUg1QzMuOSAxIDMgMS45IDMgM1YxOUM3IDNIOSM4IDEgMjEgM0MyMi4xIDMgMjMgMy45IDIzIDVWMTlDMjMgMjAuMSAyMi4xIDIxIDIxIDIxWiIgc3Ryb2tlPSIjNjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K';
+            }}
+          />
+        </div>
+      );
+    }
+    
+    if (contentType.startsWith('video/')) {
+      return (
+        <div className="w-32 h-24 bg-gray-100 rounded-lg overflow-hidden">
+          <video
+            src={fileUrl}
+            className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+            controls={false}
+            muted
+            onClick={() => window.open(fileUrl, '_blank')}
+          />
+        </div>
+      );
+    }
+    
+    if (contentType.startsWith('text/') || contentType === 'application/json') {
+      return (
+        <div className="w-32 h-24 bg-blue-50 rounded-lg flex items-center justify-center border-2 border-dashed border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+             onClick={() => window.open(fileUrl, '_blank')}>
+          <div className="text-center">
+            <div className="text-blue-600 text-xs font-semibold">TEXT</div>
+            <div className="text-blue-500 text-xs">{filename.split('.').pop()?.toUpperCase()}</div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Default for other file types
+    return (
+      <div className="w-32 h-24 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-200 transition-colors"
+           onClick={() => window.open(fileUrl, '_blank')}>
+        <div className="text-center">
+          <div className="text-gray-600 text-xs font-semibold">FILE</div>
+          <div className="text-gray-500 text-xs">{filename.split('.').pop()?.toUpperCase()}</div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -183,7 +260,7 @@ export default function HostReviewPage() {
           <TabsTrigger value="reviewed">
             Reviewed Today ({reviews.filter(r => {
               const today = new Date().toDateString();
-              return new Date(r.created_at).toDateString() === today;
+              return r.created_at && new Date(r.created_at).toDateString() === today;
             }).length})
           </TabsTrigger>
           <TabsTrigger value="all">
@@ -202,15 +279,34 @@ export default function HostReviewPage() {
             pendingContent.map((content) => (
               <Card key={content.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4">
+                    {/* Content Preview */}
+                    <div className="flex-shrink-0">
+                      {renderContentPreview(content)}
+                    </div>
+                    
+                    {/* Content Details */}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold">{content.title}</h3>
-                        {getStatusBadge(content.status)}
+                        <h3 className="text-lg font-semibold">{content.title || content.filename || 'Untitled Content'}</h3>
+                        {getStatusBadge(content.status || 'unknown')}
                       </div>
 
                       {content.description && (
                         <p className="text-gray-600 mb-2">{content.description}</p>
+                      )}
+                      
+                      {/* File info */}
+                      {content.filename && (
+                        <div className="text-sm text-gray-500 mb-2">
+                          <span className="font-medium">File:</span> {content.filename}
+                          {content.content_type && (
+                            <span className="ml-2">({content.content_type})</span>
+                          )}
+                          {content.size && (
+                            <span className="ml-2">• {(content.size / 1024).toFixed(1)} KB</span>
+                          )}
+                        </div>
                       )}
 
                       <div className="flex flex-wrap gap-2 mb-3">
@@ -260,7 +356,7 @@ export default function HostReviewPage() {
           {reviews
             .filter(r => {
               const today = new Date().toDateString();
-              return new Date(r.created_at).toDateString() === today;
+              return r.created_at && new Date(r.created_at).toDateString() === today;
             })
             .map((review) => {
               const content = pendingContent.find(c => c.id === review.content_id);
@@ -281,7 +377,7 @@ export default function HostReviewPage() {
                         )}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {new Date(review.created_at).toLocaleTimeString()}
+                        {review.created_at ? new Date(review.created_at).toLocaleTimeString() : 'Unknown time'}
                       </div>
                     </div>
                   </CardContent>
@@ -293,11 +389,11 @@ export default function HostReviewPage() {
         <TabsContent value="all" className="space-y-4">
           {/* Combined view of all content and reviews */}
           <div className="grid gap-4">
-            {[...pendingContent, ...reviews.map(r => ({ ...r, type: 'review' }))].map((item) => (
+            {[...pendingContent, ...reviews.map(r => ({ ...r, type: 'review' as const }))].map((item) => (
               <Card key={item.id}>
                 <CardContent className="p-4">
                   <div className="text-sm">
-                    {item.type === 'review' ? 'Review' : 'Content'}: {item.title || item.content_id}
+                    {'type' in item && item.type === 'review' ? 'Review' : 'Content'}: {'title' in item ? item.title || item.content_id : item.content_id}
                   </div>
                 </CardContent>
               </Card>
@@ -311,7 +407,7 @@ export default function HostReviewPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <CardHeader>
-              <CardTitle>Review Content: {selectedContent.title}</CardTitle>
+              <CardTitle>Review Content: {selectedContent.title || selectedContent.filename || 'Untitled Content'}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>

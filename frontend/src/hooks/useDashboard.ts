@@ -26,9 +26,9 @@ interface DashboardMetrics {
 }
 
 export function useDashboard() {
-  const [performanceData, setPerformanceData] = useState<PerformanceData[]>([]);
-  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
+  const [performanceData] = useState<PerformanceData[]>([]); // TODO: Implement performance data fetching
+  const [categoryData] = useState<CategoryData[]>([]); // TODO: Implement category data fetching
+  const [metrics] = useState<DashboardMetrics>({ // TODO: Implement metrics data fetching
     totalUsers: 0,
     activeKiosks: 0,
     pendingReviews: 0,

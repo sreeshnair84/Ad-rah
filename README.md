@@ -1,64 +1,185 @@
-# Adara Platform
+# Adārah Digital Signage Platform
 
-A comprehensive content management and digital signage platform built with modern technologies.
+A comprehensive, enterprise-grade digital signage platform with advanced Role-Based Access Control (RBAC), multi-tenant architecture, and AI-powered content moderation.
 
-## Key Features
+## 🌟 Key Features
 
-### 🔐 **Secure Multi-Tenant Architecture**
-- **Organization Codes**: Unique identifiers for each company (ORG-XXXXXXX format)
-- **Registration Keys**: Secure 16-character keys for device registration
-- **Role-Based Access Control**: Complete RBAC with granular permissions
-- **Company Isolation**: Full data separation between tenants
+### 🔐 **Advanced RBAC & Multi-Tenant Security**
+- **Three-Tier User System**: Super Users, Company Users, and Device Users
+- **Granular Permissions**: Resource-based permissions (content_create, content_approve, device_manage, etc.)
+- **Company Isolation**: Complete data separation between companies with secure content sharing
+- **Device Authentication**: API key-based authentication for secure device access
+- **Role Hierarchy**: Admin, Reviewer, Editor, and Viewer roles with appropriate permissions
 
-### 📊 **Content Management**
-- **AI-Powered Moderation**: Azure AI Content Safety integration
-- **Multi-Format Support**: Images, videos, and documents
-- **Automated Workflows**: Event-driven content processing
-- **Real-time Status Updates**: Live content approval tracking
+### 🏢 **Enterprise Multi-Tenancy**
+- **Company Management**: HOST and ADVERTISER company types with customizable settings
+- **Content Sharing**: Controlled content sharing between companies with approval workflows
+- **Company Limits**: Configurable limits for users, devices, and content per company
+- **Branding & Customization**: Company-specific settings and configurations
 
-### 🖥️ **Digital Signage Integration**
-- **Device Registration**: Secure device onboarding with org codes and keys
-- **Multi-Device Support**: Manage thousands of screens across locations
-- **Real-time Content Delivery**: Instant content updates to registered devices
-- **Performance Monitoring**: Device health and uptime tracking
+### 📊 **Advanced Content Management**
+- **AI-Powered Moderation**: Azure AI Content Safety integration with content scoring
+- **Approval Workflows**: Multi-stage content approval with reviewer assignments
+- **Content Versioning**: Track content changes and approval history
+- **Multi-Format Support**: Images, videos, HTML5, and text content
+- **Visibility Controls**: Private, shared, and public content visibility levels
 
-### 👥 **User Management**
-- **Multi-Role Support**: Admin, Host Manager, Screen Operator, Advertiser roles
-- **Company-Based Access**: Users belong to specific companies with appropriate permissions
-- **Secure Authentication**: JWT-based auth with bcrypt password hashing
-- **Role Switching**: Users can switch between their assigned roles
+### 🖥️ **Smart Device Management**
+- **Secure Device Registration**: Automatic device registration with unique API keys
+- **Company-Based Access**: Devices access only authorized company content
+- **Real-time Monitoring**: Device status tracking and health monitoring
+- **Content Synchronization**: Intelligent content delivery to appropriate devices
+- **Offline Capabilities**: Cached content for offline operation
 
-## Security & Architecture
+### 👥 **Comprehensive User Management**
+- **Super User Dashboard**: Platform-wide administration and monitoring
+- **Company User Roles**: Role-based access within companies
+- **Permission-Based UI**: Dynamic interface based on user permissions
+- **User Activity Tracking**: Audit trails and activity monitoring
 
-### 🔒 **Security Features**
-- **Secure Key Generation**: Cryptographically secure organization codes and registration keys
-- **JWT Authentication**: Token-based authentication with configurable expiration
-- **Password Hashing**: bcrypt-based password security
-- **Role-Based Access Control**: Granular permissions system
-- **Multi-Tenant Isolation**: Complete data separation between companies
+## 🔧 Technology Stack
 
-### 🏗️ **Architecture Highlights**
-- **Event-Driven Processing**: Azure Service Bus for reliable message processing
-- **Microservices Design**: Modular backend services with clear separation of concerns
-- **Scalable Storage**: Azure Blob Storage with local Azurite emulator
-- **AI Integration**: Azure AI Content Safety for automated content moderation
-- **Docker Containerization**: Consistent deployment across environments
+### Backend
+- **FastAPI**: High-performance Python web framework with automatic API documentation
+- **MongoDB**: Document database with advanced indexing and aggregation
+- **JWT Authentication**: Secure token-based authentication
+- **Azure AI Content Safety**: AI-powered content moderation and scoring
+- **Azure Service Bus**: Reliable message queue for event processing
+- **Azure Blob Storage**: Scalable file storage with CDN integration
+- **UV**: Fast Python package installer and resolver for efficient dependency management
 
-### 📈 **Production Readiness**
-- **Infrastructure as Code**: Azure Bicep templates for automated deployment
-- **Monitoring & Logging**: Comprehensive logging and health checks
-- **Database Optimization**: Efficient MongoDB queries and indexing
-- **API Documentation**: Auto-generated Swagger/OpenAPI documentation
-- **Testing Framework**: Comprehensive test suite with pytest
+### Frontend
+- **Next.js 15**: React framework with Turbopack for fast development
+- **TypeScript**: Type-safe development with enhanced developer experience
+- **Tailwind CSS**: Utility-first CSS framework for rapid UI development
+- **React Hook Form**: Performant forms with easy validation
+- **Zustand**: Lightweight state management
 
-## Prerequisites
+### Mobile/Display
+- **Flutter**: Cross-platform framework for device applications
+- **Provider**: State management for device authentication and content
+- **HTTP Client**: Secure API communication with automatic retry
 
-Before you begin, ensure you have the following installed:
+### Infrastructure
+- **Docker**: Containerized deployment for consistency
+- **Azure Bicep**: Infrastructure as Code for Azure resources
+- **GitHub Actions**: CI/CD pipeline for automated deployment
+- **Azurite**: Local Azure Storage emulator for development
 
-- **Python 3.12+** - [Download from python.org](https://python.org)
-- **Node.js 18+** - [Download from nodejs.org](https://nodejs.org)
-- **Docker & Docker Compose** - [Install Docker](https://docs.docker.com/get-docker/)
-- **Git** - [Download from git-scm.com](https://git-scm.com)
+## 🚀 Quick Start
+
+### 1. Prerequisites
+
+Ensure you have the following installed:
+
+- **Python 3.12+** with UV package manager
+- **Node.js 18+** with npm
+- **Docker & Docker Compose**
+- **Git**
+- **UV**: Fast Python package installer
+
+### Installing UV
+
+```bash
+# Windows (PowerShell)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or install via pip as fallback
+pip install uv
+```
+
+### 2. Clone and Setup
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd Open_kiosk
+
+# Start backend services with Docker
+cd backend/content_service
+docker-compose up -d
+
+# Install and start frontend
+cd ../../frontend
+npm install
+npm run dev
+
+# Frontend will be available at http://localhost:3000
+# Backend API at http://localhost:8000
+# API Documentation at http://localhost:8000/docs
+```
+
+### 3. Initialize with Sample Data
+
+```bash
+# Navigate to backend service
+cd backend/content_service
+
+# Run the comprehensive seeding script using UV
+uv run python seed_data.py
+```
+
+### 4. Login with Sample Accounts
+
+**Super User (Platform Administrator):**
+- Email: `admin@openkiosk.com`
+- Password: `adminpass`
+- Access: Full platform administration
+
+**Company Admin (TechCorp Solutions):**
+- Email: `admin@techcorpsolutions.com`
+- Password: `adminpass`
+- Access: Company management and device oversight
+
+**Content Reviewer (Creative Ads Inc):**
+- Email: `reviewer@creativeadsinc.com`
+- Password: `reviewerpass`
+- Access: Content approval and moderation
+
+**Content Editor (Digital Displays LLC):**
+- Email: `editor@digitaldisplays.com`
+- Password: `editorpass`
+- Access: Content creation and editing
+
+### 5. Test Device Registration
+
+Use the Flutter app or test with API calls:
+
+```bash
+# Test device registration (replace with actual company info)
+curl -X POST "http://localhost:8000/api/auth/device/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_name": "Lobby Display", 
+    "device_type": "display", 
+    "location": "Main Lobby"
+  }'
+```
+
+## 📱 Application Components
+
+### Web Management Interface (`/frontend`)
+- **Super User Dashboard**: Platform overview, company management, system monitoring
+- **Company Dashboard**: Company-specific content and device management
+- **Content Management**: Upload, review, and approve content with AI moderation
+- **Device Management**: Monitor and configure display devices
+- **User Management**: Manage company users and permissions
+- **Analytics & Reporting**: Usage statistics and performance metrics
+
+### Flutter Display Application (`/flutter`)
+- **Device Registration**: Automatic setup and company association
+- **Content Playback**: Secure content display with company isolation
+- **Offline Mode**: Cached content for network interruptions
+- **Status Reporting**: Real-time device health and content status
+- **Remote Management**: Over-the-air updates and configuration
+
+### Backend API (`/backend/content_service`)
+- **RBAC Service**: Advanced permission and role management
+- **Content Pipeline**: Upload, moderation, and approval workflows
+- **Device Authentication**: Secure API key-based device access
+- **Company Isolation**: Multi-tenant data separation
+- **AI Integration**: Content safety and automated moderation
+- **Audit Logging**: Comprehensive activity and security logging
 
 ## Data Seeding & Development Setup
 
@@ -70,8 +191,8 @@ The platform includes a comprehensive seeding system for development and testing
 # After starting the backend services
 cd backend/content_service
 
-# Run the seeding script
-python seed_data.py
+# Run the seeding script using UV
+uv run python seed_data.py
 ```
 
 **What gets created:**
@@ -84,7 +205,7 @@ python seed_data.py
 ### Development Workflow
 
 1. **Start Services**: `docker-compose up -d` (from backend/content_service)
-2. **Seed Data**: `python seed_data.py`
+2. **Seed Data**: `uv run python seed_data.py`
 3. **Start Frontend**: `npm run dev` (from frontend directory)
 4. **Access Application**: 
    - Frontend: http://localhost:3000
@@ -113,8 +234,8 @@ If you prefer to run services individually without Docker:
 # Navigate to backend service
 cd backend/content_service
 
-# Create virtual environment
-python -m venv .venv
+# Create virtual environment using UV
+uv venv
 
 # Activate virtual environment
 # Windows:
@@ -122,11 +243,11 @@ python -m venv .venv
 # Linux/Mac:
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies using UV
+uv sync
 
 # Start the development server
-uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 ### Database Setup
@@ -257,11 +378,11 @@ Each company has a unique organization code used for device registration:
 # Navigate to backend service
 cd backend/content_service
 
-# Activate virtual environment
+# Activate virtual environment (if not already active)
 .\.venv\Scripts\Activate.ps1
 
-# Run tests
-python -m pytest tests -q
+# Run tests using UV
+uv run pytest tests -q
 ```
 
 ### Frontend Tests
@@ -317,7 +438,8 @@ Once the backend is running, you can access:
 │       ├── seed_data.py          # Database seeding script
 │       ├── tests/                # Unit and integration tests
 │       ├── data/                 # Local data storage
-│       ├── requirements.txt      # Python dependencies
+│       ├── pyproject.toml        # UV configuration and dependencies
+│       ├── uv.lock               # UV dependency lock file
 │       ├── Dockerfile            # Docker configuration
 │       └── docker-compose.yml    # Multi-service orchestration
 ├── frontend/                     # Next.js application
@@ -368,3 +490,21 @@ For support and questions:
 
 **Note**: This platform is designed to work with popular digital signage systems like Yodeck and Xibo. Integration details are available in the [API Documentation](docs/api.md).
 # Ad-rah
+
+ ✓ Created SUPER_USER user: admin@openkiosk.com (Role: None)
+  ✓ Created COMPANY_USER user: admin@techcorpsolutions.com (Role: ADMIN)
+  ✓ Created COMPANY_USER user: reviewer@techcorpsolutions.com (Role: REVIEWER)        
+  ✓ Created COMPANY_USER user: editor@techcorpsolutions.com (Role: EDITOR)
+  ✓ Created COMPANY_USER user: viewer@techcorpsolutions.com (Role: VIEWER)
+  ✓ Created COMPANY_USER user: admin@digitaldisplaysllc.com (Role: ADMIN)
+  ✓ Created COMPANY_USER user: reviewer@digitaldisplaysllc.com (Role: REVIEWER)       
+  ✓ Created COMPANY_USER user: editor@digitaldisplaysllc.com (Role: EDITOR)
+  ✓ Created COMPANY_USER user: viewer@digitaldisplaysllc.com (Role: VIEWER)
+  ✓ Created COMPANY_USER user: director@creativeadsinc.com (Role: ADMIN)
+  ✓ Created COMPANY_USER user: approver@creativeadsinc.com (Role: REVIEWER)
+  ✓ Created COMPANY_USER user: creator@creativeadsinc.com (Role: EDITOR)
+  ✓ Created COMPANY_USER user: analytics@creativeadsinc.com (Role: VIEWER)
+  ✓ Created COMPANY_USER user: director@advantagemedia.com (Role: ADMIN)
+  ✓ Created COMPANY_USER user: approver@advantagemedia.com (Role: REVIEWER)
+  ✓ Created COMPANY_USER user: creator@advantagemedia.com (Role: EDITOR)
+  ✓ Created COMPANY_USER user: analytics@advantagemedia.com (Role: VIEWER)

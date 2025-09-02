@@ -383,6 +383,14 @@ class InMemoryRepo:
     async def get_digital_screen(self, _id: str) -> Optional[dict]:
         return self._store.get("__digital_screens__", {}).get(_id)
 
+    # Device operations (for new RBAC system)
+    async def save_device(self, device_data: dict) -> dict:
+        async with self._lock:
+            devices = self._store.setdefault("__devices__", {})
+            device_data["id"] = device_data.get("id") or str(len(devices) + 1) + "-dev"
+            devices[device_data["id"]] = device_data
+            return devices[device_data["id"]]
+
     async def list_digital_screens(self, company_id: Optional[str] = None) -> List[Dict]:
         screens = list(self._store.get("__digital_screens__", {}).values())
         if company_id:
@@ -403,6 +411,42 @@ class InMemoryRepo:
             screens = self._store.get("__digital_screens__", {})
             if _id in screens:
                 del screens[_id]
+                return True
+            return False
+
+    # ContentOverlay operations
+    async def save_content_overlay(self, overlay_dict: dict) -> dict:
+        async with self._lock:
+            overlays = self._store.setdefault("__content_overlays__", {})
+            overlay_dict["id"] = overlay_dict.get("id") or str(len(overlays) + 1) + "-overlay"
+            overlays[overlay_dict["id"]] = overlay_dict
+            return overlays[overlay_dict["id"]]
+
+    async def get_content_overlay(self, overlay_id: str) -> Optional[dict]:
+        return self._store.get("__content_overlays__", {}).get(overlay_id)
+
+    async def list_content_overlays(self, screen_id: Optional[str] = None, company_id: Optional[str] = None) -> List[Dict]:
+        overlays = list(self._store.get("__content_overlays__", {}).values())
+        if screen_id:
+            overlays = [o for o in overlays if o.get("screen_id") == screen_id]
+        if company_id:
+            overlays = [o for o in overlays if o.get("company_id") == company_id]
+        return overlays
+
+    async def update_content_overlay(self, overlay_id: str, updates: dict) -> bool:
+        async with self._lock:
+            overlays = self._store.get("__content_overlays__", {})
+            if overlay_id in overlays:
+                overlays[overlay_id].update(updates)
+                overlays[overlay_id]["updated_at"] = datetime.utcnow()
+                return True
+            return False
+
+    async def delete_content_overlay(self, overlay_id: str) -> bool:
+        async with self._lock:
+            overlays = self._store.get("__content_overlays__", {})
+            if overlay_id in overlays:
+                del overlays[overlay_id]
                 return True
             return False
 
@@ -651,6 +695,53 @@ class InMemoryRepo:
             devices = [d for d in devices if d.get("status") == status]
         return devices
 
+    # Device Schedule operations
+    async def create_device_schedule(self, schedule_data: dict) -> dict:
+        """Create a device schedule"""
+        async with self._lock:
+            schedules = self._store.setdefault("__device_schedules__", {})
+            if not schedule_data.get("id"):
+                schedule_data["id"] = str(len(schedules) + 1) + "-schedule"
+            
+            schedule_data["created_at"] = datetime.utcnow()
+            schedule_data["updated_at"] = datetime.utcnow()
+            schedules[schedule_data["id"]] = schedule_data
+            return schedules[schedule_data["id"]]
+
+    async def get_device_schedule(self, device_id: str) -> Optional[dict]:
+        """Get schedule for a specific device"""
+        schedules = self._store.get("__device_schedules__", {})
+        for schedule in schedules.values():
+            if schedule.get("device_id") == device_id:
+                return schedule
+        return None
+
+    async def update_device_schedule(self, schedule_id: str, updates: dict) -> bool:
+        """Update a device schedule"""
+        async with self._lock:
+            schedules = self._store.get("__device_schedules__", {})
+            if schedule_id in schedules:
+                updates["updated_at"] = datetime.utcnow()
+                schedules[schedule_id].update(updates)
+                return True
+            return False
+
+    async def delete_device_schedule(self, schedule_id: str) -> bool:
+        """Delete a device schedule"""
+        async with self._lock:
+            schedules = self._store.get("__device_schedules__", {})
+            if schedule_id in schedules:
+                del schedules[schedule_id]
+                return True
+            return False
+
+    async def list_device_schedules(self, device_id: Optional[str] = None) -> List[dict]:
+        """List device schedules, optionally filtered by device"""
+        schedules = self._store.get("__device_schedules__", {})
+        if device_id:
+            return [s for s in schedules.values() if s.get("device_id") == device_id]
+        return list(schedules.values())
+
     # Content Distribution operations
     async def save_content_distribution(self, distribution: dict) -> dict:
         async with self._lock:
@@ -727,6 +818,62 @@ class InMemoryRepo:
                 templates[template_id]["usage_count"] = templates[template_id].get("usage_count", 0) + 1
                 return True
             return False
+
+    # Content Overlay operations
+    async def create_content_overlay(self, overlay_data: dict) -> dict:
+        """Create a new content overlay definition"""
+        async with self._lock:
+            overlays = self._store.setdefault("__content_overlays__", {})
+            if not overlay_data.get("id"):
+                overlay_data["id"] = str(len(overlays) + 1) + "-overlay"
+            
+            overlay_data["created_at"] = datetime.utcnow()
+            overlay_data["updated_at"] = datetime.utcnow()
+            overlays[overlay_data["id"]] = overlay_data
+            return overlays[overlay_data["id"]]
+
+    async def get_content_overlay(self, overlay_id: str) -> Optional[dict]:
+        """Get a specific content overlay by ID"""
+        return self._store.get("__content_overlays__", {}).get(overlay_id)
+
+    async def update_content_overlay(self, overlay_id: str, updates: dict) -> bool:
+        """Update a content overlay"""
+        async with self._lock:
+            overlays = self._store.get("__content_overlays__", {})
+            if overlay_id in overlays:
+                updates["updated_at"] = datetime.utcnow()
+                overlays[overlay_id].update(updates)
+                return True
+            return False
+
+    async def delete_content_overlay(self, overlay_id: str) -> bool:
+        """Delete a content overlay"""
+        async with self._lock:
+            overlays = self._store.get("__content_overlays__", {})
+            if overlay_id in overlays:
+                del overlays[overlay_id]
+                return True
+            return False
+
+    async def get_content_overlays_by_screen(self, screen_id: str) -> List[dict]:
+        """Get all content overlays for a specific screen"""
+        overlays = self._store.get("__content_overlays__", {})
+        return [overlay for overlay in overlays.values() if overlay.get("screen_id") == screen_id]
+
+    async def get_content_overlays_by_host(self, host_id: str) -> List[dict]:
+        """Get all content overlays created by a specific host"""
+        overlays = self._store.get("__content_overlays__", {})
+        return [overlay for overlay in overlays.values() if overlay.get("host_id") == host_id]
+
+    async def get_active_overlays_for_content(self, content_id: str, screen_id: str) -> List[dict]:
+        """Get active overlays for specific content on a screen"""
+        overlays = self._store.get("__content_overlays__", {})
+        return [
+            overlay for overlay in overlays.values() 
+            if (overlay.get("screen_id") == screen_id and 
+                overlay.get("is_active") == True and
+                (overlay.get("content_id") == content_id or overlay.get("content_id") is None))
+        ]
 
 
 class MongoRepo:
@@ -1138,6 +1285,18 @@ class MongoRepo:
     async def get_digital_screen(self, _id: str) -> Optional[dict]:
         return await self._digital_screen_col.find_one({"id": _id})
 
+    # Device operations (for new RBAC system)
+    @property
+    def _device_col(self):
+        return self._db["devices"]
+
+    async def save_device(self, device_data: dict) -> dict:
+        if not device_data.get("id"):
+            import uuid
+            device_data["id"] = str(uuid.uuid4())
+        await self._device_col.replace_one({"id": device_data["id"]}, device_data, upsert=True)
+        return device_data
+
     async def list_digital_screens(self, company_id: Optional[str] = None) -> List[Dict]:
         query = {}
         if company_id:
@@ -1161,6 +1320,51 @@ class MongoRepo:
 
     async def delete_digital_screen(self, _id: str) -> bool:
         result = await self._digital_screen_col.delete_one({"id": _id})
+        return result.deleted_count > 0
+
+    # ContentOverlay operations
+    @property
+    def _content_overlay_col(self):
+        return self._db["content_overlays"]
+
+    async def save_content_overlay(self, overlay_dict: dict) -> dict:
+        if not overlay_dict.get("id"):
+            import uuid
+            overlay_dict["id"] = str(uuid.uuid4())
+        await self._content_overlay_col.replace_one({"id": overlay_dict["id"]}, overlay_dict, upsert=True)
+        return overlay_dict
+
+    async def get_content_overlay(self, overlay_id: str) -> Optional[dict]:
+        doc = await self._content_overlay_col.find_one({"id": overlay_id})
+        if doc and _OBJECTID_AVAILABLE and ObjectId is not None:
+            doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+        return doc
+
+    async def list_content_overlays(self, screen_id: Optional[str] = None, company_id: Optional[str] = None) -> List[Dict]:
+        query = {}
+        if screen_id:
+            query["screen_id"] = screen_id
+        if company_id:
+            query["company_id"] = company_id
+        cursor = self._content_overlay_col.find(query)
+        overlays = []
+        async for doc in cursor:
+            # Convert ObjectIds to strings
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            overlays.append(doc)
+        return overlays
+
+    async def update_content_overlay(self, overlay_id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._content_overlay_col.update_one(
+            {"id": overlay_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_content_overlay(self, overlay_id: str) -> bool:
+        result = await self._content_overlay_col.delete_one({"id": overlay_id})
         return result.deleted_count > 0
 
     # DeviceRegistrationKey operations
@@ -1415,6 +1619,250 @@ class MongoRepo:
         if status:
             devices = [d for d in devices if d.get("status") == status]
         return devices
+
+    # Device Schedule operations
+    @property
+    def _device_schedules_col(self):
+        return self._db["device_schedules"]
+
+    async def create_device_schedule(self, schedule_data: dict) -> dict:
+        """Create a device schedule"""
+        if not schedule_data.get("id"):
+            import uuid
+            schedule_data["id"] = str(uuid.uuid4())
+        
+        schedule_data["created_at"] = datetime.utcnow()
+        schedule_data["updated_at"] = datetime.utcnow()
+        
+        await self._device_schedules_col.insert_one(schedule_data)
+        
+        # Convert ObjectIds to strings
+        if _OBJECTID_AVAILABLE and ObjectId is not None:
+            schedule_data = {k: str(v) if isinstance(v, ObjectId) else v for k, v in schedule_data.items()}
+        
+        return schedule_data
+
+    async def get_device_schedule(self, device_id: str) -> Optional[dict]:
+        """Get schedule for a specific device"""
+        result = await self._device_schedules_col.find_one({"device_id": device_id})
+        if result and _OBJECTID_AVAILABLE and ObjectId is not None:
+            result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+        return result
+
+    async def update_device_schedule(self, schedule_id: str, updates: dict) -> bool:
+        """Update a device schedule"""
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._device_schedules_col.update_one(
+            {"id": schedule_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_device_schedule(self, schedule_id: str) -> bool:
+        """Delete a device schedule"""
+        result = await self._device_schedules_col.delete_one({"id": schedule_id})
+        return result.deleted_count > 0
+
+    async def list_device_schedules(self, device_id: Optional[str] = None) -> List[dict]:
+        """List device schedules, optionally filtered by device"""
+        query = {"device_id": device_id} if device_id else {}
+        cursor = self._device_schedules_col.find(query)
+        schedules = []
+        async for doc in cursor:
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            schedules.append(doc)
+        return schedules
+
+    # Content Overlay operations
+    @property
+    def _content_overlays_col(self):
+        return self._db["content_overlays"]
+
+    async def create_content_overlay(self, overlay_data: dict) -> dict:
+        """Create a new content overlay definition"""
+        if not overlay_data.get("id"):
+            import uuid
+            overlay_data["id"] = str(uuid.uuid4())
+        
+        overlay_data["created_at"] = datetime.utcnow()
+        overlay_data["updated_at"] = datetime.utcnow()
+        
+        await self._content_overlays_col.insert_one(overlay_data)
+        
+        # Convert ObjectIds to strings
+        if _OBJECTID_AVAILABLE and ObjectId is not None:
+            overlay_data = {k: str(v) if isinstance(v, ObjectId) else v for k, v in overlay_data.items()}
+        
+        return overlay_data
+
+    async def get_content_overlay(self, overlay_id: str) -> Optional[dict]:
+        """Get a specific content overlay by ID"""
+        result = await self._content_overlays_col.find_one({"id": overlay_id})
+        if result and _OBJECTID_AVAILABLE and ObjectId is not None:
+            result = {k: str(v) if isinstance(v, ObjectId) else v for k, v in result.items()}
+        return result
+
+    async def update_content_overlay(self, overlay_id: str, updates: dict) -> bool:
+        """Update a content overlay"""
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._content_overlays_col.update_one(
+            {"id": overlay_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_content_overlay(self, overlay_id: str) -> bool:
+        """Delete a content overlay"""
+        result = await self._content_overlays_col.delete_one({"id": overlay_id})
+        return result.deleted_count > 0
+
+    async def get_content_overlays_by_screen(self, screen_id: str) -> List[dict]:
+        """Get all content overlays for a specific screen"""
+        cursor = self._content_overlays_col.find({"screen_id": screen_id})
+        overlays = []
+        async for doc in cursor:
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            overlays.append(doc)
+        return overlays
+
+    async def get_content_overlays_by_host(self, host_id: str) -> List[dict]:
+        """Get all content overlays created by a specific host"""
+        cursor = self._content_overlays_col.find({"host_id": host_id})
+        overlays = []
+        async for doc in cursor:
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            overlays.append(doc)
+        return overlays
+
+    async def get_active_overlays_for_content(self, content_id: str, screen_id: str) -> List[dict]:
+        """Get active overlays for specific content on a screen"""
+        cursor = self._content_overlays_col.find({
+            "screen_id": screen_id,
+            "is_active": True,
+            "$or": [
+                {"content_id": content_id},
+                {"content_id": None}  # Global overlays
+            ]
+        })
+        overlays = []
+        async for doc in cursor:
+            if _OBJECTID_AVAILABLE and ObjectId is not None:
+                doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+            overlays.append(doc)
+        return overlays
+
+    # Company-scoped access control methods
+    async def check_user_company_access(self, user_id: str, target_company_id: str) -> bool:
+        """Check if user has access to a specific company's data"""
+        user_roles = await self.get_user_roles(user_id)
+        
+        # Check if user belongs to the target company
+        for role in user_roles:
+            if role.get("company_id") == target_company_id:
+                return True
+                
+        # Check if user is a platform admin (global access)
+        for role in user_roles:
+            if role.get("company_id") == "global":
+                role_id = role.get("role_id")
+                if role_id:
+                    role_data = await self.get_role(role_id)
+                    if role_data and role_data.get("role_group") == "ADMIN":
+                        return True
+        
+        return False
+
+    async def get_user_accessible_companies(self, user_id: str) -> List[Dict]:
+        """Get list of companies the user has access to"""
+        user_roles = await self.get_user_roles(user_id)
+        accessible_companies = []
+        
+        # Check for platform admin access (can see all companies)
+        is_platform_admin = False
+        for role in user_roles:
+            if role.get("company_id") == "global":
+                role_id = role.get("role_id")
+                if role_id:
+                    role_data = await self.get_role(role_id)
+                    if role_data and role_data.get("role_group") == "ADMIN":
+                        is_platform_admin = True
+                        break
+        
+        if is_platform_admin:
+            return await self.list_companies()
+        
+        # Get only companies user belongs to
+        company_ids = set()
+        for role in user_roles:
+            company_id = role.get("company_id")
+            if company_id and company_id != "global":
+                company_ids.add(company_id)
+        
+        for company_id in company_ids:
+            company = await self.get_company(company_id)
+            if company:
+                accessible_companies.append(company)
+                
+        return accessible_companies
+
+    async def get_user_role_in_company(self, user_id: str, company_id: str) -> Optional[Dict]:
+        """Get user's primary role in a specific company"""
+        user_roles = await self.get_user_roles_by_company(user_id, company_id)
+        if not user_roles:
+            return None
+            
+        # Find default role or first active role
+        for user_role in user_roles:
+            if user_role.get("is_default", False) and user_role.get("status") == "active":
+                role_id = user_role.get("role_id")
+                if role_id:
+                    role = await self.get_role(role_id)
+                    if role:
+                        return {**user_role, "role_details": role}
+        
+        # If no default, return first active role
+        for user_role in user_roles:
+            if user_role.get("status") == "active":
+                role_id = user_role.get("role_id")
+                if role_id:
+                    role = await self.get_role(role_id)
+                    if role:
+                        return {**user_role, "role_details": role}
+        
+        return None
+
+    async def check_content_access_permission(self, user_id: str, content_owner_id: str, action: str = "view") -> bool:
+        """Check if user can access content based on company isolation"""
+        # Get content owner's company
+        owner = await self.get_user(content_owner_id)
+        if not owner:
+            return False
+            
+        # Get companies that own this content
+        owner_roles = await self.get_user_roles(content_owner_id)
+        content_company_ids = set()
+        for role in owner_roles:
+            company_id = role.get("company_id")
+            if company_id and company_id != "global":
+                content_company_ids.add(company_id)
+        
+        # Check if requesting user has access to any of these companies
+        for company_id in content_company_ids:
+            if await self.check_user_company_access(user_id, company_id):
+                # Additional permission check based on action
+                if action in ["edit", "delete"]:
+                    # For edit/delete, check if user has appropriate permissions
+                    has_permission = await self.check_user_permission(user_id, company_id, "content", action)
+                    if has_permission:
+                        return True
+                else:
+                    # For view, just company access is enough
+                    return True
+        
+        return False
 
 
 # Global repository instance
