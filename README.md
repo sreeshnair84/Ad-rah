@@ -122,7 +122,7 @@ uv run python seed_data.py
 ### 4. Login with Sample Accounts
 
 **Super User (Platform Administrator):**
-- Email: `admin@openkiosk.com`
+- Email: `admin@adara.com`
 - Password: `adminpass`
 - Access: Full platform administration
 
@@ -215,7 +215,7 @@ uv run python seed_data.py
 ### Testing the Platform
 
 **Login Credentials:**
-- **Admin**: admin@openkiosk.com / adminpass
+- **Admin**: admin@adara.com / adminpass
 - **Host**: host@techcorpsolutions.com / hostpass
 - **Advertiser**: director@creativeadsinc.com / advertiserpass
 
@@ -350,7 +350,7 @@ This creates:
 - **AdVantage Media** (ADVERTISER) - ORG-XXXXXXX
 
 ### Default Users
-- `admin@openkiosk.com` / `adminpass` (System Administrator)
+- `admin@adara.com` / `adminpass` (System Administrator)
 - `host@techcorpsolutions.com` / `hostpass` (Host Manager)
 - `operator@techcorpsolutions.com` / `hostpass` (Screen Operator)
 - `director@creativeadsinc.com` / `advertiserpass` (Advertiser Director)
@@ -491,7 +491,7 @@ For support and questions:
 **Note**: This platform is designed to work with popular digital signage systems like Yodeck and Xibo. Integration details are available in the [API Documentation](docs/api.md).
 # Ad-rah
 
- ✓ Created SUPER_USER user: admin@openkiosk.com (Role: None)
+ ✓ Created SUPER_USER user: admin@adara.com (Role: None)
   ✓ Created COMPANY_USER user: admin@techcorpsolutions.com (Role: ADMIN)
   ✓ Created COMPANY_USER user: reviewer@techcorpsolutions.com (Role: REVIEWER)        
   ✓ Created COMPANY_USER user: editor@techcorpsolutions.com (Role: EDITOR)

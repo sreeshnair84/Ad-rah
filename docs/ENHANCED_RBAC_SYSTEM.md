@@ -287,7 +287,7 @@ If migrating from an existing system:
 
 ```env
 # Super user configuration
-SUPER_USER_EMAIL=admin@openkiosk.com
+SUPER_USER_EMAIL=admin@adara.com
 SUPER_USER_PASSWORD=secure_password_here
 
 # Company limits

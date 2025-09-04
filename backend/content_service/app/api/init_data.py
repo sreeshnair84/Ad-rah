@@ -370,7 +370,7 @@ async def initialize_users():
         {
             "id": "user_001",
             "name": "System Admin",
-            "email": "admin@openkiosk.com",
+            "email": "admin@adara.com",
             "phone": "+1-555-0001",
             "status": "active",
             "hashed_password": get_password_hash("adminpass"),

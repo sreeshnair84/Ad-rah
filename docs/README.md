@@ -42,9 +42,9 @@ When you start the backend for the first time, it automatically creates mock dat
 - Brand Solutions UAE (ADVERTISER)
 
 **Default Users for Testing:**
-- `admin@openkiosk.com` / `adminpass` (System Administrator)
-- `host@openkiosk.com` / `hostpass` (Host Manager)
-- `advertiser@openkiosk.com` / `advertiserpass` (Advertiser Manager)
+- `admin@adara.com` / `adminpass` (System Administrator)
+- `host@adara.com` / `hostpass` (Host Manager)
+- `advertiser@adara.com` / `advertiserpass` (Advertiser Manager)
 
 **Sample Content:**
 - Dubai Mall promotional video advertisement

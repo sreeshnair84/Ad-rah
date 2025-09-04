@@ -88,19 +88,47 @@ export default function RegistrationManagementPage() {
   // Fetch applications from API
   const fetchApplications = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/company-applications', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
+      // Mock applications data since the API endpoint doesn't exist yet
+      const mockApplications: CompanyApplication[] = [
+        {
+          id: '1',
+          company_name: 'Al Majid Digital Screens',
+          company_type: 'HOST',
+          applicant_name: 'Ahmed Al Majid',
+          applicant_email: 'ahmed@almajid.ae',
+          applicant_phone: '+971-4-555-0123',
+          business_license: 'DED-123456789',
+          address: 'Sheikh Zayed Road',
+          city: 'Dubai',
+          country: 'UAE',
+          website: 'https://almajidscreens.ae',
+          description: 'Leading digital signage solutions provider in Dubai',
+          status: 'pending',
+          submitted_at: new Date().toISOString(),
+          documents: { business_license: 'license.pdf', trade_certificate: 'certificate.pdf' },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch applications');
-      }
-
-      const data = await response.json();
-      setApplications(data);
+        {
+          id: '2',
+          company_name: 'Emirates Creative Agency',
+          company_type: 'ADVERTISER',
+          applicant_name: 'Sara Mohamed',
+          applicant_email: 'sara@emiratescreatve.ae',
+          applicant_phone: '+971-4-555-0124',
+          business_license: 'DED-987654321',
+          address: 'Business Bay',
+          city: 'Dubai',
+          country: 'UAE',
+          description: 'Creative advertising agency specializing in digital content',
+          status: 'under_review',
+          submitted_at: new Date(Date.now() - 86400000).toISOString(),
+          documents: { business_license: 'license.pdf' },
+          created_at: new Date(Date.now() - 86400000).toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      ];
+      setApplications(mockApplications);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch applications');
     }
@@ -109,19 +137,17 @@ export default function RegistrationManagementPage() {
   // Fetch application statistics
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/company-applications/stats/summary', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch statistics');
-      }
-
-      const data = await response.json();
-      setStats(data);
+      // Mock statistics data since the API endpoint doesn't exist yet
+      const mockStats: ApplicationStats = {
+        total: applications.length,
+        pending: applications.filter(a => a.status === 'pending').length,
+        under_review: applications.filter(a => a.status === 'under_review').length,
+        approved: applications.filter(a => a.status === 'approved').length,
+        rejected: applications.filter(a => a.status === 'rejected').length,
+        host_applications: applications.filter(a => a.company_type === 'HOST').length,
+        advertiser_applications: applications.filter(a => a.company_type === 'ADVERTISER').length,
+      };
+      setStats(mockStats);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }

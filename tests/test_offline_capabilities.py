@@ -29,7 +29,7 @@ class OfflineCapabilitiesValidator:
         
         # Test data
         self.test_device_id = f"test_device_{int(time.time())}"
-        self.test_user_email = "admin@openkiosk.com"
+        self.test_user_email = "admin@adara.com"
         self.test_user_password = "adminpass"
         self.auth_token = None
         

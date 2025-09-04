@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Search, User, Building2, Shield, ChevronDown, Menu } from 'lucide-react';
+import { Bell, Search, User, Building2, Shield, Menu } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { useCompanies } from '@/hooks/useCompanies';
-import { Company } from '@/types';
 
 interface HeaderProps {
   showSidebarToggle?: boolean;
@@ -30,91 +28,35 @@ export function Header({
   onToggleSidebar 
 }: HeaderProps) {
   const router = useRouter();
-  const { user, logout, switchRole } = useAuth();
-  const { companies } = useCompanies();
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
     logout();
     router.push('/login');
   };
 
-  const handleRoleSwitch = async (companyId: string, roleId: string) => {
-    try {
-      await switchRole(companyId, roleId);
-    } catch (error) {
-      console.error('Failed to switch role:', error);
-    }
-  };
-
+  // Clean RBAC: Simple role and company access
   const getCurrentRole = () => {
-    if (!user?.roles || user.roles.length === 0) return null;
+    if (!user) return null;
     
-    // First try to find using active_role and active_company
-    if (user.active_role && user.active_company) {
-      const activeRole = user.roles.find(r => 
-        r.company_id === user.active_company && r.role_id === user.active_role
-      );
-      if (activeRole) return activeRole;
-    }
-    
-    // Fallback to default role or first role
-    return user.roles.find(r => r.is_default) || user.roles[0];
+    // Return user's single role information
+    return {
+      role_name: user.role_display,
+      role: user.company_role || user.user_type,
+      company_id: user.company_id
+    };
   };
 
   const getCurrentCompany = () => {
-    const currentRole = getCurrentRole();
-    if (!currentRole) return null;
+    if (!user || !user.company) return null;
     
-    // For super admin or system roles, return null (no company should be shown)
-    if (currentRole.role === 'ADMIN' && currentRole.company_id === '1-c') {
+    // For super users, don't show company
+    if (user.user_type === 'SUPER_USER') {
       return null;
     }
     
-    // First try to find in companies array from useCompanies
-    let company = companies.find(c => c.id === currentRole.company_id);
-    if (company) return company;
-    
-    // Fallback: try to find in user.companies array if available
-    if (user?.companies) {
-      company = user.companies.find(c => c.id === currentRole.company_id) as Company | undefined;
-      if (company) return company;
-    }
-    
-    // Enhanced fallback mapping for known company IDs
-    const getCompanyNameById = (companyId: string) => {
-      switch (companyId) {
-        case '1-c':
-        case 'global':
-        case 'system':
-          return null; // No company name for super admin
-        case 'company_001':
-          return 'TechCorp Solutions';
-        case 'company_002':
-          return 'Creative Ads Inc';
-        case 'company_003':
-          return 'Digital Displays LLC';
-        case 'company_004':
-          return 'AdVantage Media';
-        default:
-          return companyId ? `Company ${companyId.slice(-3)}` : null;
-      }
-    };
-    
-    // If still not found, create a placeholder company object with meaningful names
-    const companyName = getCompanyNameById(currentRole.company_id);
-    if (!companyName) return null;
-    
-    return {
-      id: currentRole.company_id,
-      name: companyName,
-      type: currentRole.role === 'ADMIN' ? 'HOST' as const : 'HOST' as const,
-      address: '',
-      city: '',
-      country: '',
-      status: 'active' as const,
-      created_at: '',
-      updated_at: ''
-    };
+    // Return the user's company
+    return user.company;
   };
 
   const getRoleDisplayName = (role: string) => {
@@ -208,66 +150,7 @@ export function Header({
           </div>
         )}
 
-        {/* Role Switcher */}
-        {user && user.roles.length > 1 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="hidden md:flex">
-                Switch Role
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {user.roles.map((role, index) => {
-    // Helper function to get company name by ID - simplified without hardcoded data
-    const getCompanyNameById = (companyId: string) => {
-      // For super admin roles, don't show company
-      if (companyId === '1-c' || companyId === 'global' || companyId === 'system') {
-        return null;
-      }
-      // Return a generic name based on company ID
-      return companyId ? `Company ${companyId.slice(-3)}` : null;
-    };                // Try to find company in companies array first, then user.companies, then use fallback
-                let company = companies.find(c => c.id === role.company_id);
-                if (!company && user.companies) {
-                  company = user.companies.find(c => c.id === role.company_id) as Company | undefined;
-                }
-                
-                const companyName = company?.name || getCompanyNameById(role.company_id);
-                   
-                const isActive = (role.company_id === user.active_company && role.role_id === user.active_role) ||
-                                 (role.is_default && !user.active_company);
-                
-                return (
-                  <DropdownMenuItem
-                    key={index}
-                    onClick={() => handleRoleSwitch(role.company_id, role.role_id)}
-                    className="flex items-center justify-between p-3"
-                  >
-                    <div className="flex items-center space-x-3">
-                      {companyName ? <Building2 className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
-                      <div>
-                        <div className="font-medium">
-                          {companyName || 'System Administrator'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {role.role_name || getRoleDisplayName(role.role)}
-                        </div>
-                      </div>
-                    </div>
-                    {isActive && (
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
-                        Active
-                      </span>
-                    )}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {/* Role Switcher - Removed: Clean RBAC system uses single role per user */}
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
@@ -283,18 +166,18 @@ export function Header({
             <Button variant="ghost" className="flex items-center space-x-2 h-9">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="text-xs">
-                  {user?.name?.[0] || user?.email[0] || 'U'}
+                  {user?.display_name?.[0] || user?.first_name?.[0] || user?.email[0] || 'U'}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden md:block text-sm font-medium max-w-24 truncate">
-                {user?.name || user?.email || 'User'}
+                {user?.display_name || user?.email || 'User'}
               </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
+                <p className="text-sm font-medium leading-none">{user?.display_name || 'User'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.email}
                 </p>

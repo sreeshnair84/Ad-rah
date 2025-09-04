@@ -534,9 +534,9 @@ class EnterpriseAuthService:
             else:
                 # Fallback for development
                 test_users = {
-                    "admin@openkiosk.com": {
+                    "admin@adara.com": {
                         "id": "admin-001",
-                        "email": "admin@openkiosk.com",
+                        "email": "admin@adara.com",
                         "name": "Admin User",
                         "password": "adminpass",
                         "company_roles": []
@@ -627,7 +627,7 @@ class EnterpriseAuthService:
                 if user_id == "admin-001":
                     return {
                         "id": "admin-001",
-                        "email": "admin@openkiosk.com",
+                        "email": "admin@adara.com",
                         "name": "Admin User",
                         "company_roles": []
                     }

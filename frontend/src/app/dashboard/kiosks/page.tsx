@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
+import { PermissionGate } from '@/components/PermissionGate';
 import {
   MonitorSmartphone,
   Plus,
@@ -268,8 +269,8 @@ export default function KiosksPage() {
     }
   };
 
-  // Check if user can edit screens
-  const canEditScreens = user?.roles?.some(role => 
+  // Legacy permission check (keeping for backwards compatibility)
+  const canEditScreens = user?.user_type === 'SUPER_USER' || user?.roles?.some(role => 
     ['ADMIN', 'HOST'].includes(role.role)
   ) || false;
 
@@ -295,7 +296,7 @@ export default function KiosksPage() {
             Manage your digital kiosk displays and monitor their status
           </p>
         </div>
-        {canEditScreens && (
+        <PermissionGate permission={{ resource: "screens", action: "create" }}>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
@@ -404,7 +405,7 @@ export default function KiosksPage() {
               </div>
             </DialogContent>
           </Dialog>
-        )}
+        </PermissionGate>
       </div>
 
       {/* Error Alert */}
@@ -541,8 +542,8 @@ export default function KiosksPage() {
                 )}
               </div>
 
-              {canEditScreens && (
-                <div className="flex space-x-2 mt-4 pt-4 border-t border-gray-100">
+              <div className="flex space-x-2 mt-4 pt-4 border-t border-gray-100">
+                <PermissionGate permission={{ resource: "screens", action: "edit" }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -552,6 +553,8 @@ export default function KiosksPage() {
                     <Edit2 className="h-3 w-3 mr-1" />
                     Edit
                   </Button>
+                </PermissionGate>
+                <PermissionGate permission={{ resource: "screens", action: "delete" }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -561,8 +564,8 @@ export default function KiosksPage() {
                     <Trash2 className="h-3 w-3 mr-1" />
                     Delete
                   </Button>
-                </div>
-              )}
+                </PermissionGate>
+              </div>
             </div>
           </div>
         ))}
@@ -578,17 +581,20 @@ export default function KiosksPage() {
               : 'Get started by creating your first digital screen'
             }
           </p>
-          {canEditScreens && !searchTerm && statusFilter === 'all' && (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add First Screen
-            </Button>
-          )}
+          <PermissionGate permission={{ resource: "screens", action: "create" }}>
+            {!searchTerm && statusFilter === 'all' && (
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Screen
+              </Button>
+            )}
+          </PermissionGate>
         </div>
       )}
 
       {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <PermissionGate permission={{ resource: "screens", action: "edit" }}>
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Digital Screen</DialogTitle>
@@ -685,6 +691,7 @@ export default function KiosksPage() {
           </div>
         </DialogContent>
       </Dialog>
+      </PermissionGate>
     </div>
   );
 }

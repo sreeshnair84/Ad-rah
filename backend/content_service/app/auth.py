@@ -176,12 +176,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Get user roles
-    user_roles = await repo.get_user_roles(user_data["id"])
+    # Get user roles - handle both 'id' and '_id' field names
+    user_id = user_data.get("id") or user_data.get("_id")
+    if not user_id:
+        print(f"[AUTH] ERROR: No user ID found in user data: {list(user_data.keys())}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user data",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user_roles = await repo.get_user_roles(str(user_id))
     print(f"[AUTH] DEBUG: User roles found: {len(user_roles)} roles")
     user_data["roles"] = user_roles
+    
+    # Add JWT payload data to user_data for easier access
+    user_data["user_type"] = payload.get("user_type", "COMPANY_USER")
+    user_data["permissions"] = payload.get("permissions", [])
+    user_data["is_super_admin"] = payload.get("is_super_admin", False)
+    user_data["active_company"] = payload.get("active_company")
+    user_data["active_role"] = payload.get("active_role")
 
     print(f"[AUTH] SUCCESS: Authentication successful for user: {user_email}")
+    print(f"[AUTH] DEBUG: User type: {user_data.get('user_type')}")
+    print(f"[AUTH] DEBUG: Is super admin: {user_data.get('is_super_admin')}")
+    print(f"[AUTH] DEBUG: Permissions count: {len(user_data.get('permissions', []))}")
     return user_data
 
 
@@ -511,7 +530,7 @@ async def get_user_company_context(user=Depends(get_current_user)):
     print(f"[AUTH] DEBUG: Checking user context for {user_email}, user_type: {user_type}")
     
     # SUPER_USER gets access to everything
-    if user_type == "SUPER_USER" or user_email == "admin@openkiosk.com":
+    if user_type == "SUPER_USER" or user_email == "admin@adara.com":
         print(f"[AUTH] DEBUG: SUPER_USER detected - granting platform access")
         all_companies = await repo.list_companies()
         return {"is_platform_admin": True, "accessible_companies": all_companies}

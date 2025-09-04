@@ -13,7 +13,7 @@ from app.auth import get_current_user, get_user_company_context, get_current_use
 from app.repo import repo
 from app.utils.serialization import safe_json_response
 
-router = APIRouter(prefix="/screens", tags=["screens"])
+router = APIRouter(tags=["screens"])
 
 
 # Mock data initialization is handled by startup lifecycle in main.py

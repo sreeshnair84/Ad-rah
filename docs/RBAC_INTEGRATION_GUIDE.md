@@ -82,7 +82,7 @@ async def initialize_rbac():
     
     # Create Super User
     super_user = await rbac_service.create_super_user({
-        "email": "admin@openkiosk.com",
+        "email": "admin@adara.com",
         "password": "SecurePassword123!",
         "first_name": "Super",
         "last_name": "Admin"
@@ -302,7 +302,7 @@ async def test_rbac_integration():
     
     # Test 1: Super User Login
     print("\n1. Testing Super User Authentication")
-    super_user = await authenticate_user("admin@openkiosk.com", "SecurePassword123!", repo)
+    super_user = await authenticate_user("admin@adara.com", "SecurePassword123!", repo)
     assert super_user is not None, "Super user authentication failed"
     print("✓ Super user authentication successful")
     

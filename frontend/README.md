@@ -58,7 +58,7 @@ This will create sample companies, users, and registration keys for testing.
 
 After running the backend seeding script, use these credentials to test the application:
 
-- **System Admin**: `admin@openkiosk.com` / `adminpass`
+- **System Admin**: `admin@adara.com` / `adminpass`
 - **Host Manager**: `host@techcorpsolutions.com` / `hostpass`
 - **Screen Operator**: `operator@techcorpsolutions.com` / `hostpass`
 - **Advertiser Director**: `director@creativeadsinc.com` / `advertiserpass`

@@ -170,9 +170,9 @@ pytest              # Run tests
 ```
 
 ### Default Test Accounts
-- **Admin**: admin@openkiosk.com / adminpass
-- **Host**: host@openkiosk.com / hostpass  
-- **Advertiser**: advertiser@openkiosk.com / advertiserpass
+- **Admin**: admin@adara.com / adminpass
+- **Host**: host@adara.com / hostpass  
+- **Advertiser**: advertiser@adara.com / advertiserpass
 
 ## Environment Configuration
 

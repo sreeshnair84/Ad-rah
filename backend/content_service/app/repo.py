@@ -129,9 +129,23 @@ class InMemoryRepo:
     async def save_company(self, company: Company) -> dict:
         async with self._lock:
             companies = self._store.setdefault("__companies__", {})
+            
+            # Check for existing company with same name or organization code
+            for existing_id, existing_company in companies.items():
+                if existing_company.get("name") == company.name:
+                    logger.warning(f"Company with name '{company.name}' already exists (ID: {existing_id})")
+                    return existing_company  # Return existing instead of creating duplicate
+                
+                if existing_company.get("organization_code") == company.organization_code:
+                    logger.warning(f"Company with organization code '{company.organization_code}' already exists (ID: {existing_id})")
+                    return existing_company  # Return existing instead of creating duplicate
+            
+            # Generate ID for new company
             company.id = company.id or str(len(companies) + 1) + "-c"
-            companies[company.id] = company.model_dump(exclude_none=True)
-            return companies[company.id]
+            company_data = company.model_dump(exclude_none=True)
+            companies[company.id] = company_data
+            logger.info(f"Created new company: {company.name} (ID: {company.id})")
+            return company_data
 
     async def get_company(self, _id: str) -> Optional[dict]:
         return self._store.get("__companies__", {}).get(_id)
@@ -923,6 +937,72 @@ class MongoRepo:
         cursor = self._content_meta_col.find({})
         return [d async for d in cursor]
 
+    # ContentCategory operations
+    @property
+    def _content_category_col(self):
+        return self._db["content_categories"]
+
+    async def save_content_category(self, category: ContentCategory) -> dict:
+        data = category.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._content_category_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_content_category(self, _id: str) -> Optional[dict]:
+        return await self._content_category_col.find_one({"id": _id})
+
+    async def list_content_categories(self, active_only: bool = True) -> List[Dict]:
+        query = {"is_active": True} if active_only else {}
+        cursor = self._content_category_col.find(query)
+        return [d async for d in cursor]
+
+    async def update_content_category(self, _id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._content_category_col.update_one(
+            {"id": _id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_content_category(self, _id: str) -> bool:
+        result = await self._content_category_col.delete_one({"id": _id})
+        return result.deleted_count > 0
+
+    # ContentTag operations
+    @property
+    def _content_tag_col(self):
+        return self._db["content_tags"]
+
+    async def save_content_tag(self, tag: ContentTag) -> dict:
+        data = tag.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._content_tag_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_content_tag(self, _id: str) -> Optional[dict]:
+        return await self._content_tag_col.find_one({"id": _id})
+
+    async def list_content_tags(self, active_only: bool = True) -> List[Dict]:
+        query = {"is_active": True} if active_only else {}
+        cursor = self._content_tag_col.find(query)
+        return [d async for d in cursor]
+
+    async def update_content_tag(self, _id: str, updates: dict) -> bool:
+        updates["updated_at"] = datetime.utcnow()
+        result = await self._content_tag_col.update_one(
+            {"id": _id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+
+    async def delete_content_tag(self, _id: str) -> bool:
+        result = await self._content_tag_col.delete_one({"id": _id})
+        return result.deleted_count > 0
+
     # Role operations
     @property
     def _role_col(self):
@@ -995,10 +1075,26 @@ class MongoRepo:
 
     async def save_company(self, company: Company) -> dict:
         data = company.model_dump(exclude_none=True)
+        
+        # Check for existing company with same name or organization code
+        existing_by_name = await self._company_col.find_one({"name": data["name"]})
+        existing_by_org_code = await self._company_col.find_one({"organization_code": data["organization_code"]})
+        
+        if existing_by_name:
+            logger.warning(f"Company with name '{data['name']}' already exists (ID: {existing_by_name.get('id')})")
+            return existing_by_name  # Return existing instead of creating duplicate
+        
+        if existing_by_org_code:
+            logger.warning(f"Company with organization code '{data['organization_code']}' already exists (ID: {existing_by_org_code.get('id')})")
+            return existing_by_org_code  # Return existing instead of creating duplicate
+        
+        # Generate ID for new company
         if not data.get("id"):
             import uuid
             data["id"] = str(uuid.uuid4())
+        
         await self._company_col.replace_one({"id": data["id"]}, data, upsert=True)
+        logger.info(f"Created new company: {data['name']} (ID: {data['id']})")
         return data
 
     async def get_company(self, _id: str) -> Optional[dict]:

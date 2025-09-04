@@ -610,7 +610,7 @@ flutter build apk --release       # Build Android APK
 python seed_data.py
 
 # Demo Credentials:
-admin@openkiosk.com / adminpass           # System Administrator
+admin@adara.com / adminpass           # System Administrator
 host@techcorpsolutions.com / hostpass     # Host Manager
 operator@techcorpsolutions.com / hostpass # Screen Operator
 director@creativeadsinc.com / advertiserpass # Advertiser Director

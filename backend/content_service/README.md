@@ -205,7 +205,7 @@ This creates:
 ### Default Users
 
 After seeding, these accounts are available:
-- `admin@openkiosk.com` / `adminpass` (System Administrator)
+- `admin@adara.com` / `adminpass` (System Administrator)
 - `host@techcorpsolutions.com` / `hostpass` (Host Manager)
 - `operator@techcorpsolutions.com` / `hostpass` (Screen Operator)
 - `director@creativeadsinc.com` / `advertiserpass` (Advertiser Director)

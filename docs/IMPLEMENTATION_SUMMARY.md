@@ -416,9 +416,9 @@ CREATE TABLE registration_requests (
 http://localhost:3000/dashboard
 
 # Use demo credentials:
-admin@openkiosk.com / adminpass
-host@openkiosk.com / hostpass
-advertiser@openkiosk.com / advertiserpass
+admin@adara.com / adminpass
+host@adara.com / hostpass
+advertiser@adara.com / advertiserpass
 ```
 
 ### **2. Role Management**

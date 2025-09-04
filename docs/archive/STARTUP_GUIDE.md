@@ -61,7 +61,7 @@ curl http://localhost:8000/api/analytics/health
 
 ### **3. Real-Time Analytics Dashboard**
 1. Open: `http://localhost:3000/dashboard/analytics/real-time`
-2. Login with: `admin@openkiosk.com / adminpass`
+2. Login with: `admin@adara.com / adminpass`
 3. Watch live metrics update every 10 seconds
 4. Test WebSocket connection status indicator
 

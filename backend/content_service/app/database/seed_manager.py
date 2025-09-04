@@ -252,7 +252,7 @@ class SeedManager:
             users = [
                 {
                     "name": "Super Administrator",
-                    "email": "admin@openkiosk.com",
+                    "email": "admin@adara.com",
                     "phone": "+1-555-0001",
                     "hashed_password": self._hash_password("adminpass123"),
                     "user_type": "SUPER_USER",
@@ -364,7 +364,7 @@ class SeedManager:
             role_assignments = [
                 # Super Admin
                 {
-                    "user_email": "admin@openkiosk.com",
+                    "user_email": "admin@adara.com",
                     "company_id": None,  # Global
                     "role": Role.SUPER_ADMIN.value,
                     "is_primary": True

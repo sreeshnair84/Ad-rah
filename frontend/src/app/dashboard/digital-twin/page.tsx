@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
+import { PermissionGate } from '@/components/PermissionGate';
 import {
   Monitor,
   Play,
@@ -272,8 +273,8 @@ export default function DigitalTwinPage() {
     }
   };
 
-  // Check if user can manage digital twins
-  const canManageTwins = user?.roles?.some(role => 
+  // Legacy permission check (keeping for backwards compatibility)
+  const canManageTwins = user?.user_type === 'SUPER_USER' || user?.roles?.some(role => 
     ['ADMIN', 'HOST', 'ADVERTISER'].includes(role.role)
   ) || false;
 
@@ -299,7 +300,7 @@ export default function DigitalTwinPage() {
             Test and preview content in virtual screen environments
           </p>
         </div>
-        {canManageTwins && (
+        <PermissionGate permission={{ resource: "digital_twin", action: "create" }}>
           <div className="flex items-center space-x-4">
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
@@ -373,7 +374,7 @@ export default function DigitalTwinPage() {
               </DialogContent>
             </Dialog>
           </div>
-        )}
+        </PermissionGate>
       </div>
 
       {/* Error Alert */}
@@ -433,8 +434,8 @@ export default function DigitalTwinPage() {
                   )}
                 </div>
 
-                {canManageTwins && (
-                  <div className="flex space-x-1 mt-3 pt-3 border-t border-gray-100">
+                <div className="flex space-x-1 mt-3 pt-3 border-t border-gray-100">
+                  <PermissionGate permission={{ resource: "digital_twin", action: "edit" }}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -447,6 +448,8 @@ export default function DigitalTwinPage() {
                       <Edit2 className="h-3 w-3 mr-1" />
                       Edit
                     </Button>
+                  </PermissionGate>
+                  <PermissionGate permission={{ resource: "digital_twin", action: "delete" }}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -459,8 +462,8 @@ export default function DigitalTwinPage() {
                       <Trash2 className="h-3 w-3 mr-1" />
                       Delete
                     </Button>
-                  </div>
-                )}
+                  </PermissionGate>
+                </div>
               </div>
             ))}
           </div>
@@ -469,12 +472,12 @@ export default function DigitalTwinPage() {
             <div className="text-center py-8">
               <TestTube2 className="h-8 w-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500 mb-4">No digital twins yet</p>
-              {canManageTwins && (
+              <PermissionGate permission={{ resource: "digital_twin", action: "create" }}>
                 <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create First Twin
                 </Button>
-              )}
+              </PermissionGate>
             </div>
           )}
         </div>
@@ -486,14 +489,15 @@ export default function DigitalTwinPage() {
               {/* Twin Controls */}
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-4">
-                  <Button
-                    onClick={handleToggleTwin}
-                    className={`${
-                      twinStatus === 'running' 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-green-600 hover:bg-green-700'
-                    } text-white`}
-                  >
+                  <PermissionGate permission={{ resource: "digital_twin", action: "control" }}>
+                    <Button
+                      onClick={handleToggleTwin}
+                      className={`${
+                        twinStatus === 'running' 
+                          ? 'bg-red-600 hover:bg-red-700' 
+                          : 'bg-green-600 hover:bg-green-700'
+                      } text-white`}
+                    >
                     {twinStatus === 'running' ? (
                       <>
                         <Square className="h-4 w-4 mr-2" />
@@ -506,11 +510,14 @@ export default function DigitalTwinPage() {
                       </>
                     )}
                   </Button>
+                  </PermissionGate>
 
-                  <Button variant="outline" disabled={twinStatus !== 'running'}>
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Restart
-                  </Button>
+                  <PermissionGate permission={{ resource: "digital_twin", action: "control" }}>
+                    <Button variant="outline" disabled={twinStatus !== 'running'}>
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Restart
+                    </Button>
+                  </PermissionGate>
 
                   <div className="flex items-center space-x-2">
                     <Button
@@ -696,12 +703,14 @@ export default function DigitalTwinPage() {
                   : 'Select a digital twin from the list to begin testing'
                 }
               </p>
-              {canManageTwins && twins.length === 0 && (
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Digital Twin
-                </Button>
-              )}
+              <PermissionGate permission={{ resource: "digital_twin", action: "create" }}>
+                {twins.length === 0 && (
+                  <Button onClick={() => setIsCreateDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Digital Twin
+                  </Button>
+                )}
+              </PermissionGate>
             </div>
           )}
         </div>

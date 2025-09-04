@@ -1,56 +1,63 @@
+// Clean useAuth Hook
 import { useState, useCallback, useEffect } from 'react';
-import { User, LoginCredentials } from '@/types';
+import { UserProfile, LoginCredentials, LoginResponse, UserType, CompanyType, CompanyRole } from '@/types/auth';
+
+const API_BASE_URL = '/api/auth';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const getCurrentUser = useCallback(async () => {
+  const apiCall = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+    const token = localStorage.getItem('token');
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        setUser(null);
+        throw new Error('Unauthorized');
+      }
+      
+      throw new Error(errorData.detail || `Request failed: ${response.status}`);
+    }
+
+    return response.json();
+  };
+
+  const getCurrentUser = useCallback(async (): Promise<UserProfile | null> => {
     const token = localStorage.getItem('token');
     if (!token) {
-      console.log('No token found, user not authenticated');
       setUser(null);
-      setLoading(false);
       setIsInitialized(true);
       return null;
     }
 
     setLoading(true);
     setError(null);
-    try {
-      const response = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user || data);
-        setIsInitialized(true);
-        console.log('User data loaded successfully:', data.user || data);
-        return data.user || data;
-      } else if (response.status === 401) {
-        console.log('Token expired or invalid, clearing token');
-        localStorage.removeItem('token');
-        setUser(null);
-        setError('Authentication token expired');
-        setIsInitialized(true);
-        return null;
-      } else {
-        console.error(`Failed to get user: ${response.status}`);
-        setUser(null);
-        setError(`Failed to authenticate: ${response.status}`);
-        setIsInitialized(true);
-        return null;
-      }
+    try {
+      const userData = await apiCall<UserProfile>('/me');
+      setUser(userData);
+      setIsInitialized(true);
+      return userData;
     } catch (err) {
       console.error('Failed to get user:', err);
-      setError(err instanceof Error ? err.message : 'Failed to get user');
-      setUser(null);
       localStorage.removeItem('token');
+      setUser(null);
+      setError(err instanceof Error ? err.message : 'Failed to get user');
       setIsInitialized(true);
       return null;
     } finally {
@@ -58,62 +65,25 @@ export function useAuth() {
     }
   }, []);
 
-  // Initialize authentication state on mount
   useEffect(() => {
-    const initializeAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        console.log('Found existing token, validating user session');
-        await getCurrentUser();
-      } else {
-        console.log('No token found, user not authenticated');
-        setIsInitialized(true);
-      }
-    };
-
-    initializeAuth();
+    getCurrentUser();
   }, [getCurrentUser]);
 
-  const login = useCallback(async (credentials: LoginCredentials): Promise<User | null> => {
+  const login = useCallback(async (credentials: LoginCredentials): Promise<UserProfile | null> => {
     setLoading(true);
     setError(null);
+
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiCall<LoginResponse>('/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(credentials),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Login failed');
-      }
-
-      const data = await response.json();
-      localStorage.setItem('token', data.access_token);
-
-      // Set user data from login response
-      if (data.user) {
-        setUser(data.user);
-        return data.user;
-      }
-
-      // Fetch user info if not included in login response
-      const userResponse = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${data.access_token}`,
-        },
-      });
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setUser(userData.user || userData);
-        return userData.user || userData;
-      }
-      return null;
+      localStorage.setItem('token', response.access_token);
+      setUser(response.user);
+      return response.user;
     } catch (err) {
+      console.error('Login failed:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
       return null;
     } finally {
@@ -121,129 +91,126 @@ export function useAuth() {
     }
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (): Promise<void> => {
     try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-      }
+      await apiCall('/logout', { method: 'POST' });
     } catch (err) {
       console.error('Error during logout:', err);
     } finally {
       localStorage.removeItem('token');
       setUser(null);
-      setIsInitialized(true);
+      setError(null);
     }
   }, []);
 
-  // Check if user has a specific permission
+  // Permission checking functions
   const hasPermission = useCallback((resource: string, action: string): boolean => {
     if (!user) return false;
-    if (user.user_type === 'SUPER_USER') return true;
-    return user.permissions.includes(`${resource}_${action}`);
+    if (user.user_type === UserType.SUPER_USER) return true;
+    const permissionKey = `${resource}_${action}`;
+    return user.permissions.includes(permissionKey);
   }, [user]);
 
-  // Check if user has any of the specified permissions
-  const hasAnyPermission = useCallback((permissions: Array<{resource: string, action: string}>): boolean => {
+  const hasRole = useCallback((role: CompanyRole): boolean => {
     if (!user) return false;
-    if (user.user_type === 'SUPER_USER') return true;
-    return permissions.some(({resource, action}) => user.permissions.includes(`${resource}_${action}`));
-  }, [user]);
-
-  // Check if user has a specific company role
-  const hasRole = useCallback((role: 'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER'): boolean => {
-    if (!user) return false;
-    if (user.user_type === 'SUPER_USER') return true;
+    if (user.user_type === UserType.SUPER_USER) return true;
     return user.company_role === role;
   }, [user]);
 
-  // Check if user has any of the specified roles
-  const hasAnyRole = useCallback((roles: Array<'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER'>): boolean => {
-    if (!user) return false;
-    if (user.user_type === 'SUPER_USER') return true;
-    return user.company_role ? roles.includes(user.company_role) : false;
-  }, [user]);
-
-  // Check if user is super user
   const isSuperUser = useCallback((): boolean => {
-    return user?.user_type === 'SUPER_USER';
+    return user?.user_type === UserType.SUPER_USER;
   }, [user]);
 
-  // Check if user is company user
   const isCompanyUser = useCallback((): boolean => {
-    return user?.user_type === 'COMPANY_USER';
+    return user?.user_type === UserType.COMPANY_USER;
   }, [user]);
 
-  // Check if user can access component
+  const isHostCompany = useCallback((): boolean => {
+    return user?.company?.company_type === CompanyType.HOST;
+  }, [user]);
+
+  const isAdvertiserCompany = useCallback((): boolean => {
+    return user?.company?.company_type === CompanyType.ADVERTISER;
+  }, [user]);
+
+  const canAccessNavigation = useCallback((navigationKey: string): boolean => {
+    if (!user) return false;
+    return user.accessible_navigation.includes(navigationKey);
+  }, [user]);
+
   const canAccess = useCallback((component: string): boolean => {
     if (!user) return false;
-    if (user.user_type === 'SUPER_USER') return true;
+    if (user.user_type === UserType.SUPER_USER) return true;
 
-    switch (component) {
-      case 'user_management':
-        return hasPermission('user', 'view');
-      case 'device_management':
-        return hasPermission('device', 'view');
-      case 'content_creation':
-        return hasPermission('content', 'create');
-      case 'content_approval':
-        return hasPermission('content', 'approve');
-      case 'content_sharing':
-        return hasPermission('content', 'share');
-      case 'analytics':
-        return hasPermission('analytics', 'view');
-      case 'platform_admin':
-        return hasPermission('platform', 'admin');
-      case 'company_admin':
-        return hasRole('ADMIN');
-      default:
-        return false;
+    const componentPermissionMap: Record<string, {resource: string, action: string}> = {
+      'user_management': { resource: 'user', action: 'read' },
+      'device_management': { resource: 'device', action: 'read' },
+      'content_creation': { resource: 'content', action: 'create' },
+      'content_approval': { resource: 'content', action: 'approve' },
+      'analytics': { resource: 'analytics', action: 'read' }
+    };
+
+    const permission = componentPermissionMap[component];
+    if (permission) {
+      return hasPermission(permission.resource, permission.action);
     }
-  }, [user, hasPermission, hasRole]);
 
-  // Get user's display name
+    return canAccessNavigation(component);
+  }, [user, hasPermission, canAccessNavigation]);
+
   const getDisplayName = useCallback((): string => {
     if (!user) return 'Guest';
-    return `${user.first_name} ${user.last_name}`.trim() || user.email;
+    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    return fullName || user.email;
   }, [user]);
 
-  // Get user's role display
   const getRoleDisplay = useCallback((): string => {
     if (!user) return 'No Role';
-    if (user.user_type === 'SUPER_USER') return 'Super User';
+    if (user.user_type === UserType.SUPER_USER) return 'Super User';
+    
     if (user.company_role) {
       const roleLabels = {
-        'ADMIN': 'Administrator',
-        'REVIEWER': 'Reviewer',
-        'EDITOR': 'Editor',
-        'VIEWER': 'Viewer'
+        [CompanyRole.ADMIN]: 'Administrator',
+        [CompanyRole.REVIEWER]: 'Reviewer',
+        [CompanyRole.EDITOR]: 'Editor',
+        [CompanyRole.VIEWER]: 'Viewer'
       };
       return roleLabels[user.company_role];
     }
+    
     return 'Company User';
   }, [user]);
 
+  const getDefaultRole = useCallback(() => {
+    if (!user) return null;
+    
+    if (user.user_type === UserType.SUPER_USER) {
+      return { role_name: 'Super Administrator', role: 'SUPER_USER', company_name: 'Platform' };
+    }
+    
+    if (user.company_role) {
+      const roleLabels = {
+        [CompanyRole.ADMIN]: 'Administrator',
+        [CompanyRole.REVIEWER]: 'Reviewer', 
+        [CompanyRole.EDITOR]: 'Editor',
+        [CompanyRole.VIEWER]: 'Viewer'
+      };
+      
+      return {
+        role_name: roleLabels[user.company_role] || user.company_role,
+        role: user.company_role,
+        company_name: user.company?.name || 'Unknown Company'
+      };
+    }
+    
+    return { role_name: 'Company User', role: 'USER', company_name: user.company?.name || 'Unknown Company' };
+  }, [user]);
+
   return {
-    user,
-    loading,
-    error,
-    isInitialized,
-    login,
-    logout,
-    getCurrentUser,
-    hasPermission,
-    hasAnyPermission,
-    hasRole,
-    hasAnyRole,
-    isSuperUser,
-    isCompanyUser,
-    canAccess,
-    getDisplayName,
-    getRoleDisplay,
+    user, loading, error, isInitialized,
+    login, logout, getCurrentUser,
+    hasPermission, hasRole, isSuperUser, isCompanyUser, 
+    isHostCompany, isAdvertiserCompany, canAccess, canAccessNavigation,
+    getDisplayName, getRoleDisplay, getDefaultRole,
   };
 }

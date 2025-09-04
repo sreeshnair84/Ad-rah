@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from app.models import Company
-from app.database import get_db_service
+from app.repo import repo
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -13,18 +13,15 @@ async def list_companies(current_user: Dict[str, Any] = Depends(get_current_user
     """List companies accessible to the current user"""
     
     try:
-        db = get_db_service()
-        
         # For SUPER_USER, return all companies
         if current_user.get("user_type") == "SUPER_USER":
-            companies_result = await db.list_records("companies")
-            companies = companies_result.data if companies_result.success else []
+            companies = await repo.list_companies()
         else:
             # For regular users, return only their companies
             user_company_id = current_user.get("company_id")
             if user_company_id:
-                company_result = await db.get_record("companies", user_company_id)
-                companies = [company_result.data] if company_result.success else []
+                company = await repo.get_company(user_company_id)
+                companies = [company] if company else []
             else:
                 companies = []
         
@@ -51,13 +48,9 @@ async def get_company(company_id: str, current_user: Dict[str, Any] = Depends(ge
     """Get a specific company by ID"""
     
     try:
-        db = get_db_service()
-        company_result = await db.get_record("companies", company_id)
-        
-        if not company_result.success:
+        company = await repo.get_company(company_id)
+        if not company:
             raise HTTPException(status_code=404, detail="Company not found")
-        
-        company = company_result.data
         
         # Check access permissions
         if current_user.get("user_type") != "SUPER_USER":

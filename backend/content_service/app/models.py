@@ -167,6 +167,7 @@ class UserProfile(BaseModel):
     status: str = "active"  # Keep for backward compatibility
     roles: List[Dict] = []  # Expanded role information
     companies: List[Dict] = []  # Company information
+    company: Optional[Dict] = None  # Primary company information
     active_company: Optional[str] = None
     active_role: Optional[str] = None
     email_verified: bool = False

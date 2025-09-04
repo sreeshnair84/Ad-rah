@@ -95,11 +95,11 @@ async def debug_test_login():
         
         # Test common admin credentials
         test_credentials = [
-            {"email": "admin@openkiosk.com", "password": "admin123"},
-            {"email": "admin@openkiosk.com", "password": "password"},
-            {"email": "admin@openkiosk.com", "password": "admin"},
+            {"email": "admin@adara.com", "password": "admin123"},
+            {"email": "admin@adara.com", "password": "password"},
+            {"email": "admin@adara.com", "password": "admin"},
             {"email": "admin@example.com", "password": "admin123"},
-            {"email": "super@openkiosk.com", "password": "admin123"},
+            {"email": "super@adara.com", "password": "admin123"},
         ]
         
         results = []

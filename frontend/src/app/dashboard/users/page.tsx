@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
+import { PermissionGate } from '@/components/PermissionGate';
 import {
   UserPlus,
   Edit2,
@@ -71,20 +72,18 @@ interface Role {
 }
 
 interface UserFormData {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
   password: string;
-  status: string;
-  roles: Array<{
-    company_id: string;
-    role_id: string;
-    is_default: boolean;
-  }>;
+  user_type: string;
+  company_id: string;
+  company_role: string;
 }
 
 export default function UsersPage() {
-  const { user } = useAuth();
+  const { user, isSuperUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -99,12 +98,14 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const [formData, setFormData] = useState<UserFormData>({
-    name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     phone: '',
     password: '',
-    status: 'active',
-    roles: []
+    user_type: 'COMPANY_USER',
+    company_id: '',
+    company_role: 'VIEWER'
   });
 
   // Fetch users from API
@@ -112,7 +113,7 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/users/', {
+      const response = await fetch('/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -123,8 +124,41 @@ export default function UsersPage() {
       }
 
       const data = await response.json();
-      setUsers(data);
-      setFilteredUsers(data);
+      // Transform the RBAC user data to match the expected format
+      const transformedUsers = data.map((user: any) => ({
+        id: user.id,
+        name: user.display_name || `${user.first_name} ${user.last_name}`.trim(),
+        email: user.email,
+        phone: user.phone || '',
+        status: user.is_active ? 'active' : 'inactive',
+        roles: [{
+          id: user.company_role || 'USER',
+          user_id: user.id,
+          company_id: user.company_id || 'global',
+          role_id: user.company_role || 'USER',
+          role: user.company_role || 'USER',
+          role_name: user.role_display || user.company_role || 'User',
+          company_name: user.company?.name || 'Platform',
+          is_default: true,
+          status: 'active',
+          created_at: user.created_at,
+          updated_at: user.updated_at
+        }],
+        companies: user.company ? [{
+          id: user.company.id,
+          name: user.company.name,
+          type: user.company.company_type,
+          status: user.company.status
+        }] : [],
+        active_company: user.company_id,
+        active_role: user.company_role,
+        email_verified: user.email_verified,
+        last_login: user.last_login,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      }));
+      setUsers(transformedUsers);
+      setFilteredUsers(transformedUsers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch users');
     } finally {
@@ -132,22 +166,17 @@ export default function UsersPage() {
     }
   };
 
-  // Fetch roles for dropdown
+  // Fetch roles for dropdown - using hardcoded RBAC roles
   const fetchRoles = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/users/roles/dropdown', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch roles');
-      }
-
-      const data = await response.json();
-      setRoles(data);
+      // For now, use the hardcoded RBAC roles from the system
+      const roleData = [
+        { id: 'ADMIN', name: 'Administrator', role_group: 'ADMIN', company_id: 'global', company_name: 'Global', is_default: false },
+        { id: 'REVIEWER', name: 'Reviewer', role_group: 'REVIEWER', company_id: 'global', company_name: 'Global', is_default: false },
+        { id: 'EDITOR', name: 'Editor', role_group: 'EDITOR', company_id: 'global', company_name: 'Global', is_default: false },
+        { id: 'VIEWER', name: 'Viewer', role_group: 'VIEWER', company_id: 'global', company_name: 'Global', is_default: false }
+      ];
+      setRoles(roleData);
     } catch (err) {
       console.error('Failed to fetch roles:', err);
     }
@@ -157,7 +186,7 @@ export default function UsersPage() {
   const fetchCompanies = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/users/companies/dropdown', {
+      const response = await fetch('/api/auth/companies', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -168,7 +197,14 @@ export default function UsersPage() {
       }
 
       const data = await response.json();
-      setCompanies(data);
+      // Transform the data to match expected format
+      const transformedData = data.map((company: any) => ({
+        id: company.id,
+        name: company.name,
+        type: company.company_type,
+        status: company.status
+      }));
+      setCompanies(transformedData);
     } catch (err) {
       console.error('Failed to fetch companies:', err);
     }
@@ -215,7 +251,7 @@ export default function UsersPage() {
   const handleCreateUser = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/users/', {
+      const response = await fetch('/api/auth/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,7 +261,8 @@ export default function UsersPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create user');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to create user');
       }
 
       await fetchUsers();
@@ -291,12 +328,14 @@ export default function UsersPage() {
 
   const resetForm = () => {
     setFormData({
-      name: '',
+      first_name: '',
+      last_name: '',
       email: '',
       phone: '',
       password: '',
-      status: 'active',
-      roles: []
+      user_type: 'COMPANY_USER',
+      company_id: user?.company_id || '',
+      company_role: 'VIEWER'
     });
   };
 
@@ -317,28 +356,6 @@ export default function UsersPage() {
     setIsEditDialogOpen(true);
   };
 
-  const addRole = () => {
-    setFormData(prev => ({
-      ...prev,
-      roles: [...prev.roles, { company_id: '', role_id: '', is_default: false }]
-    }));
-  };
-
-  const updateRole = (index: number, field: keyof typeof formData.roles[0], value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      roles: prev.roles.map((role, i) => 
-        i === index ? { ...role, [field]: value } : role
-      )
-    }));
-  };
-
-  const removeRole = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      roles: prev.roles.filter((_, i) => i !== index)
-    }));
-  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -375,8 +392,8 @@ export default function UsersPage() {
     }
   };
 
-  // Check if user can edit users
-  const canEditUsers = user?.roles?.some(role => role.role === 'ADMIN') || false;
+  // Legacy permission check (keeping for backwards compatibility)
+  const canEditUsers = isSuperUser() || user?.roles?.some(role => role.role === 'ADMIN') || false;
 
   if (loading) {
     return (
@@ -400,7 +417,7 @@ export default function UsersPage() {
             Manage system users, roles, and permissions
           </p>
         </div>
-        {canEditUsers && (
+        <PermissionGate permission={{ resource: "users", action: "create" }}>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
@@ -415,24 +432,34 @@ export default function UsersPage() {
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="first_name">First Name *</Label>
                     <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="John Doe"
+                      id="first_name"
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      placeholder="John"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="email">Email *</Label>
+                    <Label htmlFor="last_name">Last Name *</Label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="john@company.com"
+                      id="last_name"
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                      placeholder="Doe"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="john@company.com"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -457,83 +484,46 @@ export default function UsersPage() {
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <select
-                    id="status"
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="company_id">Company *</Label>
+                    <select
+                      id="company_id"
+                      className="w-full p-2 border border-gray-300 rounded-md"
+                      value={formData.company_id}
+                      onChange={(e) => setFormData({ ...formData, company_id: e.target.value })}
+                    >
+                      <option value="">Select Company</option>
+                      {companies
+                        .filter(company => {
+                          // Super admin can select any company
+                          if (user?.user_type === 'SUPER_USER') return true;
+                          // Company admin can only select their own company
+                          return company.id === user?.company_id;
+                        })
+                        .map(company => (
+                        <option key={company.id} value={company.id}>
+                          {company.name} ({company.type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="company_role">Role *</Label>
+                    <select
+                      id="company_role"
+                      className="w-full p-2 border border-gray-300 rounded-md"
+                      value={formData.company_role}
+                      onChange={(e) => setFormData({ ...formData, company_role: e.target.value })}
+                    >
+                      <option value="VIEWER">Viewer</option>
+                      <option value="EDITOR">Editor</option>
+                      <option value="REVIEWER">Reviewer</option>
+                      <option value="ADMIN">Administrator</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <Label>User Roles</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addRole}>
-                      <Shield className="h-4 w-4 mr-2" />
-                      Add Role
-                    </Button>
-                  </div>
-                  
-                  {formData.roles.map((role, index) => (
-                    <div key={index} className="flex items-center space-x-2 mb-2 p-3 border rounded-lg">
-                      <select
-                        className="flex-1 p-2 border border-gray-300 rounded-md"
-                        value={role.company_id}
-                        onChange={(e) => updateRole(index, 'company_id', e.target.value)}
-                      >
-                        <option value="">Select Company</option>
-                        {companies.map(company => (
-                          <option key={company.id} value={company.id}>
-                            {company.name} ({company.type})
-                          </option>
-                        ))}
-                      </select>
-                      
-                      <select
-                        className="flex-1 p-2 border border-gray-300 rounded-md"
-                        value={role.role_id}
-                        onChange={(e) => updateRole(index, 'role_id', e.target.value)}
-                      >
-                        <option value="">Select Role</option>
-                        {roles
-                          .filter(r => r.company_id === role.company_id)
-                          .map(r => (
-                            <option key={r.id} value={r.id}>
-                              {r.name} ({r.role_group})
-                            </option>
-                          ))}
-                      </select>
-                      
-                      <label className="flex items-center space-x-1">
-                        <input
-                          type="checkbox"
-                          checked={role.is_default}
-                          onChange={(e) => updateRole(index, 'is_default', e.target.checked)}
-                        />
-                        <span className="text-sm">Default</span>
-                      </label>
-                      
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeRole(index)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  
-                  {formData.roles.length === 0 && (
-                    <p className="text-sm text-gray-500 italic">No roles assigned. Click &quot;Add Role&quot; to assign roles.</p>
-                  )}
-                </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button variant="outline" onClick={() => {
@@ -542,18 +532,18 @@ export default function UsersPage() {
                   }}>
                     Cancel
                   </Button>
-                  <Button onClick={handleCreateUser} disabled={!formData.name || !formData.email || !formData.password || formData.roles.length === 0}>
+                  <Button onClick={handleCreateUser} disabled={!formData.first_name || !formData.last_name || !formData.email || !formData.password || !formData.company_id}>
                     Create User
                   </Button>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
-        )}
+        </PermissionGate>
       </div>
 
       {/* Edit User Dialog */}
-      {canEditUsers && (
+      <PermissionGate permission={{ resource: "users", action: "edit" }}>
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -607,68 +597,22 @@ export default function UsersPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label>User Roles</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addRole}>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Add Role
-                  </Button>
-                </div>
-                
-                {formData.roles.map((role, index) => (
-                  <div key={index} className="flex items-center space-x-2 mb-2 p-3 border rounded-lg">
-                    <select
-                      className="flex-1 p-2 border border-gray-300 rounded-md"
-                      value={role.company_id}
-                      onChange={(e) => updateRole(index, 'company_id', e.target.value)}
-                    >
-                      <option value="">Select Company</option>
-                      {companies.map(company => (
-                        <option key={company.id} value={company.id}>
-                          {company.name} ({company.type})
-                        </option>
-                      ))}
-                    </select>
-                    
-                    <select
-                      className="flex-1 p-2 border border-gray-300 rounded-md"
-                      value={role.role_id}
-                      onChange={(e) => updateRole(index, 'role_id', e.target.value)}
-                    >
-                      <option value="">Select Role</option>
-                      {roles
-                        .filter(r => r.company_id === role.company_id)
-                        .map(r => (
-                          <option key={r.id} value={r.id}>
-                            {r.name} ({r.role_group})
-                          </option>
-                        ))}
-                    </select>
-                    
-                    <label className="flex items-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={role.is_default}
-                        onChange={(e) => updateRole(index, 'is_default', e.target.checked)}
-                      />
-                      <span className="text-sm">Default</span>
-                    </label>
-                    
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeRole(index)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                
-                {formData.roles.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No roles assigned. Click &quot;Add Role&quot; to assign roles.</p>
-                )}
+                <Label htmlFor="edit-company-role">Company Role</Label>
+                <select
+                  id="edit-company-role"
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  value={formData.company_role}
+                  onChange={(e) => setFormData({ ...formData, company_role: e.target.value })}
+                >
+                  <option value="">Select Role</option>
+                  <option value="ADMIN">Administrator - Full company access</option>
+                  <option value="REVIEWER">Reviewer - Content approval and user management</option>
+                  <option value="EDITOR">Editor - Content creation and editing</option>
+                  <option value="VIEWER">Viewer - Read access with upload capability</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Role determines what permissions and navigation items this user can access
+                </p>
               </div>
 
               <div className="flex justify-end space-x-2 pt-4">
@@ -686,7 +630,7 @@ export default function UsersPage() {
             </div>
           </DialogContent>
         </Dialog>
-      )}
+      </PermissionGate>
 
       {/* Error Alert */}
       {error && (
@@ -844,8 +788,8 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {canEditUsers && (
-                <div className="flex space-x-2 pt-4 border-t border-gray-100">
+              <div className="flex space-x-2 pt-4 border-t border-gray-100">
+                <PermissionGate permission={{ resource: "users", action: "edit" }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -855,6 +799,8 @@ export default function UsersPage() {
                     <Edit2 className="h-3 w-3 mr-1" />
                     Edit
                   </Button>
+                </PermissionGate>
+                <PermissionGate permission={{ resource: "users", action: "delete" }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -864,8 +810,8 @@ export default function UsersPage() {
                     <Trash2 className="h-3 w-3 mr-1" />
                     Delete
                   </Button>
-                </div>
-              )}
+                </PermissionGate>
+              </div>
             </div>
           </div>
         ))}
@@ -881,12 +827,14 @@ export default function UsersPage() {
               : 'Get started by creating your first user'
             }
           </p>
-          {canEditUsers && !searchTerm && statusFilter === 'all' && roleFilter === 'all' && (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add First User
-            </Button>
-          )}
+          <PermissionGate permission={{ resource: "users", action: "create" }}>
+            {!searchTerm && statusFilter === 'all' && roleFilter === 'all' && (
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add First User
+              </Button>
+            )}
+          </PermissionGate>
         </div>
       )}
     </div>

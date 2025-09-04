@@ -1,141 +1,114 @@
+// Clean PermissionGate Component
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { UserType, CompanyType, CompanyRole } from '@/types/auth';
 
 interface PermissionGateProps {
   children: React.ReactNode;
-  // Permission-based access
-  permission?: {
-    resource: string;
-    action: string;
-  };
-  // Role-based access
-  role?: 'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER';
-  roles?: Array<'ADMIN' | 'REVIEWER' | 'EDITOR' | 'VIEWER'>;
-  // User type access
-  userType?: 'SUPER_USER' | 'COMPANY_USER' | 'DEVICE_USER';
-  userTypes?: Array<'SUPER_USER' | 'COMPANY_USER' | 'DEVICE_USER'>;
-  // Component-based access
+  permission?: { resource: string; action: string; };
+  roles?: CompanyRole[];
+  userTypes?: UserType[];
+  companyTypes?: CompanyType[];
+  navigationKey?: string;
   component?: string;
-  // Fallback content when access denied
   fallback?: React.ReactNode;
-  // Show loading state
   showLoading?: boolean;
 }
 
 export function PermissionGate({
   children,
   permission,
-  role,
   roles,
-  userType,
   userTypes,
+  companyTypes,
+  navigationKey,
   component,
   fallback = null,
   showLoading = false
 }: PermissionGateProps) {
-  const { user, loading, hasPermission, hasRole, hasAnyRole, canAccess } = useAuth();
+  const {
+    user, loading, isInitialized, hasPermission, hasRole,
+    isSuperUser, canAccessNavigation, canAccess
+  } = useAuth();
 
-  // Show loading state if requested and auth is loading
-  if (loading && showLoading) {
-    return <div className="flex items-center justify-center p-4">Loading...</div>;
+  if (showLoading && (loading || !isInitialized)) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+        <span className="ml-2 text-sm text-gray-500">Loading...</span>
+      </div>
+    );
   }
 
-  // If no user, deny access
-  if (!user) {
+  if (!isInitialized || !user) {
     return <>{fallback}</>;
   }
 
-  // Check permission-based access
+  if (isSuperUser()) {
+    return <>{children}</>;
+  }
+
+  // Check user type requirements
+  if (userTypes && userTypes.length > 0) {
+    if (!userTypes.includes(user.user_type)) {
+      return <>{fallback}</>;
+    }
+  }
+
+  // Check company type requirements
+  if (companyTypes && companyTypes.length > 0) {
+    const userCompanyType = user.company?.company_type as CompanyType;
+    if (!userCompanyType || !companyTypes.includes(userCompanyType)) {
+      return <>{fallback}</>;
+    }
+  }
+
+  // Check role requirements
+  if (roles && roles.length > 0) {
+    if (!user.company_role || !roles.some(role => hasRole(role))) {
+      return <>{fallback}</>;
+    }
+  }
+
+  // Check single permission
   if (permission) {
     if (!hasPermission(permission.resource, permission.action)) {
       return <>{fallback}</>;
     }
   }
 
-  // Check single role access
-  if (role) {
-    if (!hasRole(role)) {
+  // Check navigation access
+  if (navigationKey) {
+    if (!canAccessNavigation(navigationKey)) {
       return <>{fallback}</>;
     }
   }
 
-  // Check multiple roles access
-  if (roles) {
-    if (!hasAnyRole(roles)) {
-      return <>{fallback}</>;
-    }
-  }
-
-  // Check single user type access
-  if (userType) {
-    if (user.user_type !== userType) {
-      return <>{fallback}</>;
-    }
-  }
-
-  // Check multiple user types access
-  if (userTypes) {
-    if (!userTypes.includes(user.user_type)) {
-      return <>{fallback}</>;
-    }
-  }
-
-  // Check component-based access
+  // Check component access (legacy)
   if (component) {
     if (!canAccess(component)) {
       return <>{fallback}</>;
     }
   }
 
-  // All checks passed, render children
   return <>{children}</>;
 }
 
-// Convenience components for common use cases
+// Convenience components
 export function SuperUserOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate userType="SUPER_USER" fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
+  return <PermissionGate userTypes={[UserType.SUPER_USER]} fallback={fallback}>{children}</PermissionGate>;
 }
 
-export function CompanyAdminOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate role="ADMIN" fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
+export function HostCompanyOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+  return <PermissionGate companyTypes={[CompanyType.HOST]} fallback={fallback}>{children}</PermissionGate>;
 }
 
-export function ContentManagerOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate roles={['ADMIN', 'REVIEWER', 'EDITOR']} fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
+export function AdminOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+  return <PermissionGate roles={[CompanyRole.ADMIN]} fallback={fallback}>{children}</PermissionGate>;
 }
 
-export function ContentCreatorOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate permission={{ resource: 'content', action: 'create' }} fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
-}
-
-export function ContentApproverOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate permission={{ resource: 'content', action: 'approve' }} fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
-}
-
-export function DeviceManagerOnly({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  return (
-    <PermissionGate permission={{ resource: 'device', action: 'view' }} fallback={fallback}>
-      {children}
-    </PermissionGate>
-  );
+export function RequirePermission({ children, resource, action, fallback }: {
+  children: React.ReactNode; resource: string; action: string; fallback?: React.ReactNode;
+}) {
+  return <PermissionGate permission={{ resource, action }} fallback={fallback}>{children}</PermissionGate>;
 }

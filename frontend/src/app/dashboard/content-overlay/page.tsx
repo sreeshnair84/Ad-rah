@@ -390,7 +390,7 @@ export default function ContentOverlayPage() {
   };
 
   // Check if user can edit overlays
-  const canEditOverlays = user?.roles?.some(role => 
+  const canEditOverlays = user?.user_type === 'SUPER_USER' || user?.roles?.some(role => 
     ['ADMIN', 'HOST'].includes(role.role)
   ) || false;
 

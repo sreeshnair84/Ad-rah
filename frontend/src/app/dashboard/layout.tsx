@@ -6,6 +6,7 @@ import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Home } from 'lucide-react';
+import { Toaster } from "@/components/ui/sonner";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -176,6 +177,7 @@ export default function DashboardLayout({
           </div>
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

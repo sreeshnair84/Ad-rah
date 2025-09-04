@@ -53,29 +53,52 @@ class AuthService:
                 return auth_result
             
             user_profile = auth_result.data
-            user_id = user_profile["id"]
+            user_id = user_profile.id
+            
+            # Convert UserProfile to dictionary for token generation
+            user_profile_dict = {
+                "id": user_profile.id,
+                "email": user_profile.email,
+                "name": user_profile.name,
+                "user_type": user_profile.user_type,
+                "permissions": user_profile.permissions,
+                "active_company": user_profile.active_company,
+                "active_role": user_profile.active_role,
+                "status": user_profile.status
+            }
             
             # Generate tokens
-            access_token = self._generate_access_token(user_profile)
+            access_token = self._generate_access_token(user_profile_dict)
             refresh_token = self._generate_refresh_token(user_id)
             
             # Store refresh token
-            await self._store_refresh_token(user_id, refresh_token, device_info)
+            try:
+                await self._store_refresh_token(user_id, refresh_token, device_info)
+            except Exception as token_error:
+                logger.warning(f"Failed to store refresh token, continuing: {token_error}")
             
             # Get user permissions for active company
-            permissions_result = await self.user_service.get_user_permissions(
-                user_id, 
-                user_profile.get("active_company")
-            )
-            
-            permissions_data = permissions_result.data if permissions_result.success else {"permissions": [], "is_super_admin": False}
+            try:
+                permissions_result = await self.user_service.get_user_permissions(
+                    user_id, 
+                    user_profile.active_company
+                )
+                permissions_data = permissions_result.data if permissions_result.success else {"permissions": [], "is_super_admin": False}
+            except Exception as perm_error:
+                logger.warning(f"Failed to get user permissions, using basic permissions: {perm_error}")
+                # Use basic permissions from profile when database service is unavailable
+                is_super_admin = user_profile.user_type == "SUPER_USER"
+                permissions_data = {
+                    "permissions": user_profile.permissions if user_profile.permissions else (["*"] if is_super_admin else []),
+                    "is_super_admin": is_super_admin
+                }
             
             return DatabaseResult(success=True, data={
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
                 "expires_in": self.access_token_expire_minutes * 60,
-                "user": user_profile,
+                "user": user_profile_dict,
                 "permissions": permissions_data["permissions"],
                 "is_super_admin": permissions_data["is_super_admin"]
             })
@@ -167,7 +190,7 @@ class AuthService:
             user_profile = profile_result.data
             
             # Check if user is still active
-            if user_profile.get("status") != "active":
+            if user_profile.status != "active":
                 return DatabaseResult(success=False, error="User account is not active")
             
             return DatabaseResult(success=True, data={
@@ -348,10 +371,17 @@ class AuthService:
     def _generate_access_token(self, user_profile: Dict[str, Any]) -> str:
         """Generate JWT access token"""
         now = datetime.now(timezone.utc)
+        
+        # Determine if user is super admin
+        is_super_user = user_profile.get("user_type") == "SUPER_USER"
+        
         payload = {
             "sub": user_profile["id"],
             "email": user_profile["email"],
             "name": user_profile.get("name"),
+            "user_type": user_profile.get("user_type", "COMPANY_USER"),
+            "permissions": user_profile.get("permissions", []),
+            "is_super_admin": is_super_user,
             "active_company": user_profile.get("active_company"),
             "active_role": user_profile.get("active_role"),
             "iat": int(now.timestamp()),

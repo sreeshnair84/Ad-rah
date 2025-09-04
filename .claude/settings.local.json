@@ -13,7 +13,10 @@
       "Bash(mongosh:*)",
       "Bash(mongo:*)",
       "Bash(docker rm:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(grep:*)",
+      "Bash(docker run:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

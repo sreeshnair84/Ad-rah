@@ -157,13 +157,16 @@ class MongoDBService(IDatabaseService):
         return self._database[table]
 
     def _convert_id_fields(self, document: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert MongoDB ObjectId to string ID"""
+        """Convert MongoDB ObjectId to string ID, preserving existing UUID id fields"""
         if not document:
             return document
             
-        # Convert _id to id
-        if '_id' in document:
+        # Only convert _id to id if there's no existing id field (preserve UUIDs)
+        if '_id' in document and 'id' not in document:
             document['id'] = str(document['_id'])
+        
+        # Always remove _id since we use 'id' field
+        if '_id' in document:
             del document['_id']
         
         # Convert any ObjectId fields to strings

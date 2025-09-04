@@ -82,7 +82,7 @@ async def create_registration_key(
     """Create a new registration key for a company"""
     logger.info(f"Creating registration key for company: {key_request.company_id}")
     try:
-        # Verify the company exists
+        # Verify the company exists and is a HOST company
         companies = await repo.list_companies()
         company = next((c for c in companies if c.get("id") == key_request.company_id), None)
         
@@ -91,6 +91,14 @@ async def create_registration_key(
             raise HTTPException(
                 status_code=400,
                 detail="Company not found"
+            )
+        
+        # Only HOST companies can generate registration keys for devices
+        if company.get("type") != "HOST":
+            logger.warning(f"Registration key generation denied for non-HOST company: {company.get('name')} (type: {company.get('type')})")
+            raise HTTPException(
+                status_code=400,
+                detail="Registration keys can only be generated for HOST companies"
             )
 
         # Generate a secure registration key
@@ -517,16 +525,20 @@ async def get_registration_keys():
         companies = await repo.list_companies()
         company_lookup = {c.get("id"): c for c in companies}
         
-        # Enhance keys with company information
+        # Enhance keys with company information, skipping orphaned keys
         enhanced_keys = []
         for key in keys:
             company = company_lookup.get(key.get("company_id"))
-            enhanced_key = {
-                **key,
-                "company_name": company.get("name") if company else "Unknown Company",
-                "organization_code": company.get("organization_code") if company else None,
-            }
-            enhanced_keys.append(convert_objectid_to_str(enhanced_key))
+            if company:  # Only include keys with valid company associations
+                enhanced_key = {
+                    **key,
+                    "company_name": company.get("name"),
+                    "organization_code": company.get("organization_code"),
+                }
+                enhanced_keys.append(convert_objectid_to_str(enhanced_key))
+            else:
+                # Log orphaned key for monitoring
+                logger.warning(f"Skipping orphaned registration key {key.get('key')} with invalid company_id {key.get('company_id')}")
         
         return enhanced_keys
         
@@ -554,11 +566,19 @@ async def get_registration_key_by_id(key_id: str):
         companies = await repo.list_companies()
         company = next((c for c in companies if c.get("id") == key.get("company_id")), None)
         
+        if not company:
+            # Key has invalid company_id - return 404 as the key is effectively orphaned
+            logger.warning(f"Registration key {key_id} has invalid company_id {key.get('company_id')}")
+            raise HTTPException(
+                status_code=404,
+                detail="Registration key has invalid company association"
+            )
+        
         # Enhance key with company information
         enhanced_key = {
             **key,
-            "company_name": company.get("name") if company else "Unknown Company",
-            "organization_code": company.get("organization_code") if company else None,
+            "company_name": company.get("name"),
+            "organization_code": company.get("organization_code"),
         }
         
         return convert_objectid_to_str(enhanced_key)
@@ -730,3 +750,254 @@ async def unblock_ip_address(request_data: Dict):
     except Exception as e:
         logger.error(f"Error unblocking IP: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to unblock IP: {str(e)}")
+
+
+# === DEVICE CONTENT MANAGEMENT ===
+
+@router.get("/content/pull/{device_id}")
+async def pull_device_content(
+    device_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Pull content for a specific device based on its company and permissions.
+    This endpoint is used by devices to get their assigned content.
+    """
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=401,
+                detail="Device authentication required"
+            )
+        
+        # Authenticate device
+        device_token = credentials.credentials
+        device = await device_auth_service.authenticate_device(device_id, device_token)
+        
+        if not device:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid device credentials"
+            )
+        
+        # Get device's company
+        device_company_id = device.get("company_id")
+        if not device_company_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Device not associated with a company"
+            )
+        
+        # Get company information
+        companies = await repo.list_companies()
+        device_company = next((c for c in companies if c.get("id") == device_company_id), None)
+        
+        if not device_company:
+            raise HTTPException(
+                status_code=404,
+                detail="Device company not found"
+            )
+        
+        # Determine content access based on company type
+        accessible_content = []
+        
+        if device_company.get("company_type") == "HOST":
+            # HOST devices can display:
+            # 1. Their own content
+            # 2. Shared content from ADVERTISER companies they allow
+            
+            # Get own content
+            own_content = await repo.get_content_by_company(device_company_id, status="approved")
+            accessible_content.extend(own_content)
+            
+            # Get shared content (if sharing is enabled)
+            if device_company.get("sharing_settings", {}).get("allow_content_sharing", True):
+                shared_content = await repo.get_shared_content_for_company(device_company_id)
+                accessible_content.extend(shared_content)
+        
+        elif device_company.get("company_type") == "ADVERTISER":
+            # ADVERTISER devices typically only display their own content
+            own_content = await repo.get_content_by_company(device_company_id, status="approved")
+            accessible_content = own_content
+        
+        # Update device last seen timestamp
+        await repo.update_device_last_seen(device_id, datetime.utcnow())
+        
+        # Return content list with metadata
+        return {
+            "success": True,
+            "device_id": device_id,
+            "company_id": device_company_id,
+            "company_type": device_company.get("company_type"),
+            "content_count": len(accessible_content),
+            "content": [convert_objectid_to_str(content) for content in accessible_content],
+            "last_updated": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to pull content for device {device_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve device content"
+        )
+
+
+@router.post("/heartbeat/{device_id}")
+async def device_heartbeat(
+    device_id: str,
+    heartbeat_data: DeviceHeartbeat,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Device health check and status reporting endpoint.
+    Devices use this to report their status and receive updates.
+    """
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=401,
+                detail="Device authentication required"
+            )
+        
+        # Authenticate device
+        device_token = credentials.credentials
+        device = await device_auth_service.authenticate_device(device_id, device_token)
+        
+        if not device:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid device credentials"
+            )
+        
+        # Update device status
+        status_update = {
+            "last_heartbeat": datetime.utcnow(),
+            "status": "active",
+            "health_data": {
+                "cpu_usage": heartbeat_data.cpu_usage,
+                "memory_usage": heartbeat_data.memory_usage,
+                "disk_usage": heartbeat_data.disk_usage,
+                "network_status": heartbeat_data.network_status,
+                "display_status": heartbeat_data.display_status,
+                "current_content": heartbeat_data.current_content_id,
+                "performance_score": heartbeat_data.performance_score,
+                "errors": heartbeat_data.errors or []
+            }
+        }
+        
+        await repo.update_device_status(device_id, status_update)
+        
+        # Check for any pending commands/notifications for this device
+        pending_commands = await repo.get_device_pending_commands(device_id)
+        
+        return {
+            "success": True,
+            "device_id": device_id,
+            "status": "acknowledged",
+            "server_time": datetime.utcnow().isoformat(),
+            "pending_commands": pending_commands,
+            "next_heartbeat_seconds": 300  # 5 minutes
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Device heartbeat failed for {device_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Heartbeat processing failed"
+        )
+
+
+@router.post("/analytics/{device_id}")
+async def report_device_analytics(
+    device_id: str,
+    analytics_data: Dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Device analytics reporting endpoint.
+    Devices report content performance and user interaction data.
+    """
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=401,
+                detail="Device authentication required"
+            )
+        
+        # Authenticate device
+        device_token = credentials.credentials
+        device = await device_auth_service.authenticate_device(device_id, device_token)
+        
+        if not device:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid device credentials"
+            )
+        
+        # Store analytics data
+        analytics_record = {
+            "device_id": device_id,
+            "company_id": device.get("company_id"),
+            "timestamp": datetime.utcnow(),
+            "analytics_data": analytics_data,
+            "data_type": "device_analytics"
+        }
+        
+        await repo.store_device_analytics(analytics_record)
+        
+        return {
+            "success": True,
+            "device_id": device_id,
+            "message": "Analytics data recorded successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Analytics reporting failed for device {device_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Analytics reporting failed"
+        )
+
+
+@router.delete("/keys/cleanup", response_model=Dict)
+async def cleanup_orphaned_keys():
+    """Clean up registration keys with invalid company associations"""
+    try:
+        # Get all registration keys and companies
+        keys = await repo.list_device_registration_keys()
+        companies = await repo.list_companies()
+        
+        company_ids = {c.get("id") for c in companies}
+        
+        # Find orphaned keys
+        orphaned_keys = []
+        for key in keys:
+            company_id = key.get("company_id")
+            if company_id not in company_ids:
+                orphaned_keys.append(key)
+        
+        # Delete orphaned keys
+        deleted_count = 0
+        for key in orphaned_keys:
+            await repo.delete_device_registration_key(key.get("id"))
+            deleted_count += 1
+            logger.info(f"Deleted orphaned registration key {key.get('key')} with invalid company_id {key.get('company_id')}")
+        
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "message": f"Cleaned up {deleted_count} orphaned registration keys"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to cleanup orphaned keys: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cleanup orphaned keys: {str(e)}"
+        )

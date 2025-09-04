@@ -5,7 +5,8 @@ import logging
 
 from app.models import Role, RolePermission, User, RoleGroup
 from app.repo import repo
-from app.api.auth import get_current_user, check_permission
+from app.auth_service import get_current_user
+from app.rbac_service import check_permission
 from app.rbac.permissions import Page, Permission
 from bson import ObjectId
 

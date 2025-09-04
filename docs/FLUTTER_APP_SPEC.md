@@ -383,7 +383,7 @@ class ApiService {
   final Dio _dio;
 
   ApiService() : _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.openkiosk.com/api/v1',
+    baseUrl: 'https://api.adara.com/api/v1',
     connectTimeout: Duration(seconds: 10),
     receiveTimeout: Duration(seconds: 30),
   )) {

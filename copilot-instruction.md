@@ -346,7 +346,7 @@ AZURE_STORAGE_CONNECTION_STRING=...
 ### **Demo Credentials**
 ```bash
 # System Administrator
-admin@openkiosk.com / adminpass
+admin@adara.com / adminpass
 
 # Host Company
 host@techcorpsolutions.com / hostpass

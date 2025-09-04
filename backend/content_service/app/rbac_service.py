@@ -17,13 +17,10 @@ from datetime import datetime, timedelta
 import logging
 
 from app.rbac_models import (
-    UserType, CompanyType, CompanyRole, Permission, ContentDeleteType,
-    ContentVisibility, EnhancedUser, EnhancedCompany, EnhancedRole,
-    EnhancedUserRole, ContentShare, EnhancedContent, DeviceRole,
-    PermissionContext, PermissionResult, AuditLog,
-    get_default_permissions, check_permission_compatibility
+    UserType, CompanyType, CompanyRole, Permission,
+    User, Company, UserProfile, get_permissions_for_role
 )
-from app.database import get_db_service, QueryFilter, FilterOperation, QueryOptions
+from app.database_service import db_service
 
 logger = logging.getLogger(__name__)
 

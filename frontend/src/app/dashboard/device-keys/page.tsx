@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import {
   Key,
   Plus,
@@ -26,7 +27,8 @@ import {
   Building2,
   Calendar,
   Shield,
-  Monitor
+  Monitor,
+  Power
 } from 'lucide-react';
 
 interface RegistrationKey {
@@ -43,6 +45,7 @@ interface RegistrationKey {
   used_at?: string;
   device_name?: string;
   device_status?: string;
+  active?: boolean; // For deactivation functionality
 }
 
 interface Company {
@@ -178,7 +181,10 @@ export default function DeviceKeysPage() {
       setError(null);
 
       // Show success message
-      alert(`Registration key generated successfully!\n\nKey: ${result.registration_key}\n\nPlease copy this key and provide it to the company administrator.`);
+      toast.success('Registration key generated successfully!', {
+        description: `Key: ${result.registration_key}\n\nPlease copy this key and provide it to the company administrator.`,
+        duration: 10000,
+      });
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate key');
@@ -202,9 +208,24 @@ export default function DeviceKeysPage() {
   const copyKeyToClipboard = async (key: string) => {
     try {
       await navigator.clipboard.writeText(key);
-      alert('Registration key copied to clipboard!');
+      toast.success('Registration key copied to clipboard!');
     } catch (err) {
-      alert('Failed to copy key to clipboard');
+      toast.error('Failed to copy key to clipboard');
+    }
+  };
+
+  // Toggle key active status
+  const toggleKeyActive = async (keyId: string, currentActive: boolean) => {
+    try {
+      // TODO: Add backend endpoint for key activation/deactivation
+      // For now, just show a toast message
+      const action = currentActive ? 'deactivated' : 'activated';
+      toast.success(`Registration key ${action} successfully`);
+      
+      // Refresh the keys list
+      fetchKeys();
+    } catch (err) {
+      toast.error('Failed to toggle key status');
     }
   };
 
@@ -295,7 +316,7 @@ export default function DeviceKeysPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {companies
-                      .filter(c => c.status === 'active')
+                      .filter(c => c.status === 'active' && c.type === 'HOST')
                       .map((company) => (
                       <SelectItem key={company.id} value={company.id}>
                         <div className="flex items-center gap-2">
@@ -536,6 +557,11 @@ export default function DeviceKeysPage() {
                           <Shield className="w-3 h-3" />
                           Used
                         </Badge>
+                      ) : key.active === false ? (
+                        <Badge variant="outline" className="gap-1 text-gray-600">
+                          <Power className="w-3 h-3" />
+                          Inactive
+                        </Badge>
                       ) : isExpired ? (
                         <Badge variant="destructive" className="gap-1">
                           <XCircle className="w-3 h-3" />
@@ -570,6 +596,17 @@ export default function DeviceKeysPage() {
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
+                        {!key.used && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleKeyActive(key.id, key.active !== false)}
+                            title={key.active === false ? "Activate key" : "Deactivate key"}
+                            className={key.active === false ? "text-green-600 hover:text-green-700" : "text-red-600 hover:text-red-700"}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

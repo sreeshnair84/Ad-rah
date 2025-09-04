@@ -41,6 +41,7 @@ Package Management: UV (fast Python package installer and resolver)
                          │   Isolation     │
                          │ - Content       │
                          │   Sharing       │
+                         │ - Device Auth   │
                          └─────────────────┘
                                  │
                     ┌─────────────────┐
@@ -154,6 +155,231 @@ const deviceHeaders = {
   "X-Device-ID": device.id,
   "X-API-Key": device.api_key
 };
+```
+
+## 🎯 **COMPREHENSIVE ROLE-BASED ACCESS CONTROL SYSTEM**
+
+### **User Types and Company Roles Matrix**
+
+The platform implements a sophisticated RBAC system with three user types and four company roles:
+
+#### **User Types:**
+1. **SUPER_USER** - Platform administrators with global access
+2. **COMPANY_USER** - Users belonging to specific companies
+3. **DEVICE_USER** - Devices for content pulling and reporting
+
+#### **Company Types:**
+1. **HOST** - Companies that own physical screens/kiosks and display content
+2. **ADVERTISER** - Companies that create content for distribution
+
+#### **Company Roles (for COMPANY_USER):**
+1. **ADMIN** - Full company management access
+2. **REVIEWER** - Content approval and device monitoring
+3. **EDITOR** - Content creation and editing
+4. **VIEWER** - View access with upload capability
+
+### **Role-Based Navigation Access**
+
+```typescript
+// Navigation Access Matrix
+const navigationAccess = {
+  "SUPER_USER": {
+    access: "ALL_PAGES",
+    description: "Complete platform access"
+  },
+  "COMPANY_USER": {
+    "HOST": {
+      "ADMIN": [
+        "dashboard", "users", "content", "upload", "content-share", 
+        "moderation", "content-approval", "content-overlay", "devices", 
+        "device-control", "device-keys", "analytics/*", "settings"
+      ],
+      "REVIEWER": [
+        "dashboard", "users", "content", "moderation", "content-approval", 
+        "device-control", "analytics/real-time", "analytics/reports"
+      ],
+      "EDITOR": [
+        "dashboard", "content", "upload", "analytics/real-time", "analytics/reports"
+      ],
+      "VIEWER": [
+        "dashboard", "content", "upload", "analytics/real-time", "analytics/reports"
+      ]
+    },
+    "ADVERTISER": {
+      "ADMIN": [
+        "dashboard", "users", "content", "upload", "moderation", 
+        "content-approval", "analytics/*", "settings"
+      ],
+      "REVIEWER": [
+        "dashboard", "users", "content", "moderation", "content-approval", 
+        "analytics/real-time", "analytics/reports"
+      ],
+      "EDITOR": [
+        "dashboard", "content", "upload", "analytics/real-time", "analytics/reports"
+      ],
+      "VIEWER": [
+        "dashboard", "content", "upload", "analytics/real-time", "analytics/reports"
+      ]
+    }
+  }
+};
+```
+
+### **Company Type Restrictions**
+
+#### **HOST Company Capabilities:**
+- ✅ Manage physical devices (screens/kiosks)
+- ✅ Create and manage their own content
+- ✅ Share content with ADVERTISER companies
+- ✅ View shared content from approved ADVERTISER companies
+- ✅ Control device playback and scheduling
+- ✅ Generate device registration QR codes
+- ✅ Monitor device health and performance
+- ✅ Access full analytics for their devices
+
+#### **ADVERTISER Company Capabilities:**
+- ✅ Create and manage advertising content
+- ✅ Submit content for approval/review
+- ✅ View performance analytics for their content
+- ✅ Manage company users and roles
+- ❌ Cannot manage devices
+- ❌ Cannot share content with other companies
+- ❌ Cannot control device playback
+- ❌ No device registration capabilities
+
+### **Permission-Based Feature Access**
+
+```typescript
+// Permission Requirements for Key Features
+const featurePermissions = {
+  "User Management": {
+    permission: { resource: "user", action: "view" },
+    requiredRoles: ["ADMIN", "REVIEWER"],
+    description: "Manage company users"
+  },
+  "Device Registration": {
+    permission: { resource: "device", action: "create" },
+    companyTypes: ["HOST"],
+    requiredRoles: ["ADMIN"],
+    description: "HOST admins only"
+  },
+  "Content Sharing": {
+    permission: { resource: "content", action: "share" },
+    companyTypes: ["HOST"],
+    requiredRoles: ["ADMIN"],
+    description: "HOST admins can share with ADVERTISER companies"
+  },
+  "Content Review": {
+    permission: { resource: "content", action: "approve" },
+    requiredRoles: ["ADMIN", "REVIEWER"],
+    description: "Review and approve content"
+  },
+  "Device Control": {
+    permission: { resource: "device", action: "control" },
+    companyTypes: ["HOST"],
+    requiredRoles: ["ADMIN", "REVIEWER"],
+    description: "Control device playback"
+  },
+  "Analytics Export": {
+    permission: { resource: "analytics", action: "export" },
+    requiredRoles: ["ADMIN"],
+    description: "Export analytics data"
+  }
+};
+```
+
+### **Device Authentication and Content Access**
+
+#### **Device Role Capabilities:**
+- ✅ Pull approved content based on company type and sharing rules
+- ✅ Report device health and status via heartbeat
+- ✅ Send analytics data for content performance
+- ✅ Receive commands and notifications from company admins
+- ❌ Cannot access user management functions
+- ❌ Cannot modify content or approve submissions
+
+#### **Content Access Rules for Devices:**
+```typescript
+const deviceContentAccess = {
+  "HOST_DEVICE": [
+    "own_approved_content",           // Company's own approved content
+    "shared_content_from_advertisers" // Content shared by ADVERTISER companies
+  ],
+  "ADVERTISER_DEVICE": [
+    "own_approved_content"            // Only company's own approved content
+  ]
+};
+```
+
+### **API Endpoints for Device Management**
+
+```bash
+# Device Authentication & Content
+GET /api/device/content/pull/{device_id}     # Pull content for device
+POST /api/device/heartbeat/{device_id}       # Device health reporting  
+POST /api/device/analytics/{device_id}       # Analytics reporting
+
+# Device Registration (HOST companies only)
+POST /api/device/register                    # Register new device
+GET /api/device/generate-qr/{company_id}     # Generate registration QR
+GET /api/device/keys                         # List registration keys
+```
+
+### **Security Implementation**
+
+#### **Authentication Flow:**
+1. **Web Users:** JWT tokens with role-based permissions
+2. **Devices:** API key authentication with company association
+3. **SUPER_USER:** Bypass mechanism for platform administration
+
+#### **Permission Checking:**
+```typescript
+// Frontend permission checking
+const hasAccess = (item) => {
+  if (isSuperUser()) return true;
+  
+  // Check permission requirements
+  if (item.permission && !hasPermission(item.permission.resource, item.permission.action)) {
+    return false;
+  }
+  
+  // Check company type restrictions
+  if (item.companyTypes && !item.companyTypes.includes(user.company?.company_type)) {
+    return false;
+  }
+  
+  // Check role requirements
+  if (item.requiredRoles && !item.requiredRoles.includes(user.company_role)) {
+    return false;
+  }
+  
+  return true;
+};
+```
+
+#### **Backend Authorization:**
+```python
+# Backend permission verification
+async def check_permission(user_id: str, company_id: str, resource: str, action: str):
+    user = await get_user_profile(user_id)
+    
+    # Super users have all permissions
+    if user.user_type == "SUPER_USER":
+        return True
+    
+    # Check user's role permissions
+    permissions = await get_user_permissions(user_id, company_id)
+    required_permission = f"{resource}_{action}"
+    
+    return required_permission in permissions
+```
+
+This comprehensive RBAC system ensures:
+- **Company Isolation:** Users only see data from their company
+- **Role-Based Access:** Different roles have appropriate permissions
+- **Company Type Restrictions:** HOST and ADVERTISER companies have different capabilities
+- **Device Security:** Secure device authentication and content access
+- **Scalable Permissions:** Easy to add new roles and permissions as needed
 ```
 
 ## 🚀 **DEVELOPMENT SETUP WITH UV**
