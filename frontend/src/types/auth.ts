@@ -53,6 +53,7 @@ export interface UserProfile {
   accessible_navigation: string[];
   display_name: string;
   role_display: string;
+  is_super_admin?: boolean;
 }
 
 export interface LoginCredentials {

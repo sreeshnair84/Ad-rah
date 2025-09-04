@@ -27,7 +27,7 @@ export default function DebugAuth() {
           <strong>User Type:</strong> {user?.user_type || 'N/A'}
         </div>
         <div>
-          <strong>Is Super User:</strong> {isSuperUser() ? 'Yes' : 'No'}
+          <strong>Is Super Admin:</strong> {user?.is_super_admin ? 'Yes' : 'No'}
         </div>
         <div>
           <strong>User Email:</strong> {user?.email || 'N/A'}

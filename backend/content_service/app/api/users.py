@@ -2,16 +2,22 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from datetime import datetime
 import uuid
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    try:
+        from pymongo import ObjectId
+    except ImportError:
+        ObjectId = None
 from app.models import User, UserCreate, UserUpdate, UserRole, UserProfile, Role, RoleCreate, RoleUpdate, PermissionCheck
 from app.repo import repo
 from app.auth import require_roles, get_password_hash, get_user_company_context, get_current_user_with_super_admin_bypass
-from app.api.auth import get_current_user
+from app.auth_service import get_current_user
 # Data initialization is handled at server startup
 
 def convert_objectid_to_str(data: Any) -> Any:
     """Recursively convert ObjectId to string in nested data structures"""
-    if isinstance(data, ObjectId):
+    if ObjectId and isinstance(data, ObjectId):
         return str(data)
     elif isinstance(data, dict):
         return {key: convert_objectid_to_str(value) for key, value in data.items()}
@@ -34,19 +40,19 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/", response_model=List[Dict])
 @router.get("", response_model=List[Dict])  # Add route without trailing slash
 async def list_users(
-    current_user: dict = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """List users with company-scoped access control"""
     try:
         # Initialize variables
-        current_user_id = current_user.get("id")
+        current_user_id = current_user.id
         is_platform_admin = False
         accessible_companies = []
         can_manage_users = False
         
         # SUPER_USER bypass
-        if current_user.get("user_type") == "SUPER_USER":
+        if current_user.user_type == "SUPER_USER":
             print(f"[USERS] SUPER_USER detected, granting full access")
             is_platform_admin = True  # SUPER_USER has platform admin privileges
             accessible_companies = []  # Will be populated with all companies later
@@ -61,7 +67,7 @@ async def list_users(
             print(f"[USERS] DEBUG: accessible_companies count: {len(accessible_companies)}")
             
             # Check if user has admin role (platform or company level)
-            user_roles = current_user.get("roles", [])
+            user_roles = current_user.roles or []
             can_manage_users = is_platform_admin
             
             # Also check if the user has an ADMIN role directly (fallback for platform admin detection)
@@ -234,7 +240,7 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=Dict)
-async def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_user(user_id: str, current_user: UserProfile = Depends(get_current_user)):
     """Get a specific user by ID"""
     try:
 # Mock data initialization is handled at server startup
@@ -315,12 +321,12 @@ async def get_user_profile(user_id: str, current_user=Depends(require_roles("ADM
 
 @router.get("/roles/dropdown", response_model=List[Dict])
 async def get_roles_dropdown(
-    current_user: dict = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """Get roles for dropdown selection with company filtering"""
     try:
-        print(f"[ROLES] DEBUG: Getting roles dropdown for user {current_user.get('id')}")
+        print(f"[ROLES] DEBUG: Getting roles dropdown for user {current_user.id}")
         
         is_platform_admin = company_context["is_platform_admin"]
         accessible_companies = company_context["accessible_companies"]
@@ -406,12 +412,12 @@ async def get_roles_dropdown(
 
 @router.get("/companies/dropdown", response_model=List[Dict])
 async def get_companies_dropdown(
-    current_user: dict = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """Get companies for dropdown selection with company filtering"""
     try:
-        print(f"[COMPANIES] DEBUG: Getting companies dropdown for user {current_user.get('id')}")
+        print(f"[COMPANIES] DEBUG: Getting companies dropdown for user {current_user.id}")
         
         is_platform_admin = company_context["is_platform_admin"]
         accessible_companies = company_context["accessible_companies"]
@@ -439,7 +445,7 @@ async def get_companies_dropdown(
 @router.post("/", response_model=Dict)
 async def create_user(
     user_data: Dict, 
-    current_user: dict = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """Create a new user"""
@@ -447,7 +453,7 @@ async def create_user(
 # Mock data initialization is handled at server startup
         
         # Check permissions - Platform admins and Company admins can create users
-        current_user_id = current_user.get("id")
+        current_user_id = current_user.id
         is_platform_admin = company_context["is_platform_admin"]
         accessible_companies = company_context["accessible_companies"]
         
@@ -583,13 +589,13 @@ async def create_user(
 async def update_user(
     user_id: str,
     user_update: UserUpdate,
-    current_user=Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """Update a user (Platform admins and Company admins only)"""
     try:
         # Check permissions - Platform admins and Company admins can update users
-        current_user_id = current_user.get("id")
+        current_user_id = current_user.id
         is_platform_admin = company_context["is_platform_admin"]
         accessible_companies = company_context["accessible_companies"]
         
@@ -719,32 +725,33 @@ async def update_user(
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: str, 
-    current_user=Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context=Depends(get_user_company_context)
 ):
     """Delete a user (Platform admins and Company admins only)"""
     try:
         # Check permissions - Platform admins and Company admins can delete users
-        current_user_id = current_user.get("id")
+        current_user_id = current_user.id
         is_platform_admin = company_context["is_platform_admin"]
         accessible_companies = company_context["accessible_companies"]
         
         user_can_delete = is_platform_admin
         
         if not is_platform_admin:
-            # Check if user is company admin in any of their companies
+            # Check if user is HOST company admin
             for company in accessible_companies:
                 company_id = company.get("id")
                 if company_id:
                     user_role = await repo.get_user_role_in_company(current_user_id, company_id)
                     if user_role:
                         role_details = user_role.get("role_details", {})
-                        if role_details.get("company_role_type") == "COMPANY_ADMIN":
+                        company_type = company.get("type", "").upper()
+                        if role_details.get("company_role_type") == "COMPANY_ADMIN" and company_type == "HOST":
                             user_can_delete = True
                             break
         
         if not user_can_delete:
-            raise HTTPException(status_code=403, detail="Only platform admins and company admins can delete users")
+            raise HTTPException(status_code=403, detail="Only platform admins and HOST company admins can delete users")
         
         # Check if repo has _store (InMemoryRepo) or use MongoDB methods
         if hasattr(repo, '_store'):

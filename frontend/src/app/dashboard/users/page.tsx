@@ -341,17 +341,16 @@ export default function UsersPage() {
 
   const openEditDialog = (user: User) => {
     setSelectedUser(user);
+    const nameParts = user.name.split(' ');
     setFormData({
-      name: user.name,
+      first_name: nameParts[0] || '',
+      last_name: nameParts.slice(1).join(' ') || '',
       email: user.email,
       phone: user.phone || '',
       password: '',
-      status: user.status,
-      roles: user.roles.map(role => ({
-        company_id: role.company_id,
-        role_id: role.role_id,
-        is_default: role.is_default
-      }))
+      user_type: 'COMPANY_USER',
+      company_id: user.active_company || '',
+      company_role: user.active_role || user.roles[0]?.role || 'VIEWER'
     });
     setIsEditDialogOpen(true);
   };
@@ -393,7 +392,7 @@ export default function UsersPage() {
   };
 
   // Legacy permission check (keeping for backwards compatibility)
-  const canEditUsers = isSuperUser() || user?.roles?.some(role => role.role === 'ADMIN') || false;
+  const canEditUsers = isSuperUser() || user?.company_role === 'ADMIN' || false;
 
   // Check if user has permission to access user management
   if (!user || (user.user_type !== 'SUPER_USER' && user.company_role !== 'ADMIN')) {
@@ -565,22 +564,21 @@ export default function UsersPage() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="edit-name">Full Name *</Label>
+                  <Label htmlFor="edit-first-name">First Name *</Label>
                   <Input
-                    id="edit-name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="John Doe"
+                    id="edit-first-name"
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    placeholder="John"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="edit-email">Email *</Label>
+                  <Label htmlFor="edit-last-name">Last Name *</Label>
                   <Input
-                    id="edit-email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="john@company.com"
+                    id="edit-last-name"
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    placeholder="Doe"
                   />
                 </div>
               </div>
@@ -596,16 +594,14 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="edit-status">Status</Label>
-                  <select
-                    id="edit-status"
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  <Label htmlFor="edit-email">Email *</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="john@company.com"
+                  />
                 </div>
               </div>
 
@@ -628,6 +624,22 @@ export default function UsersPage() {
                 </p>
               </div>
 
+              {/* Show company for super users (read-only) */}
+              {user?.user_type === 'SUPER_USER' && selectedUser && (
+                <div>
+                  <Label htmlFor="edit-company">Company (Read-only)</Label>
+                  <Input
+                    id="edit-company"
+                    value={selectedUser.companies.length > 0 ? selectedUser.companies[0].name : 'No company assigned'}
+                    readOnly
+                    className="bg-gray-50 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Company assignment cannot be changed for existing users
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-2 pt-4">
                 <Button variant="outline" onClick={() => {
                   setIsEditDialogOpen(false);
@@ -636,7 +648,7 @@ export default function UsersPage() {
                 }}>
                   Cancel
                 </Button>
-                <Button onClick={handleEditUser} disabled={!formData.name || !formData.email || formData.roles.length === 0}>
+                <Button onClick={handleEditUser} disabled={!formData.first_name || !formData.last_name || !formData.email || !formData.company_role}>
                   Update User
                 </Button>
               </div>

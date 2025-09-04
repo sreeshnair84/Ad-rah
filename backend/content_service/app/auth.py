@@ -15,6 +15,7 @@ except ImportError as e:
     logging.error(f"Passlib not available: {e}. Password hashing will use fallback SHA256.")
 import hashlib
 
+from app.auth_service import get_current_user as get_current_user_service
 from app.repo import repo
 from app.models import User, UserRole, Company
 from app.config import settings
@@ -194,6 +195,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     user_data["user_type"] = payload.get("user_type", "COMPANY_USER")
     user_data["permissions"] = payload.get("permissions", [])
     user_data["is_super_admin"] = payload.get("is_super_admin", False)
+    
+    # Compute is_super_admin based on user_type if not explicitly set in token
+    if user_data["user_type"] == "SUPER_USER":
+        user_data["is_super_admin"] = True
+    
     user_data["active_company"] = payload.get("active_company")
     user_data["active_role"] = payload.get("active_role")
 
@@ -405,12 +411,12 @@ async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)):
 
 
 def require_roles(*allowed_roles):
-    async def role_checker(user=Depends(get_current_user)):
-        user_roles = user.get("roles", [])
+    async def role_checker(user=Depends(get_current_user_service)):
+        user_roles = user.get("roles", []) if isinstance(user, dict) else (user.roles or [])
 
         # Get role details for each user role
         for user_role in user_roles:
-            role_id = user_role.get("role_id")
+            role_id = user_role.get("role_id") if isinstance(user_role, dict) else user_role.role_id
             if role_id:
                 role = await repo.get_role(role_id)
                 if role and role.get("role_group") in allowed_roles:
@@ -421,14 +427,20 @@ def require_roles(*allowed_roles):
 
 
 def require_company_role(company_id: str, *allowed_roles):
-    async def company_role_checker(user=Depends(get_current_user)):
-        user_roles = user.get("roles", [])
+    async def company_role_checker(user=Depends(get_current_user_service)):
+        user_roles = user.get("roles", []) if isinstance(user, dict) else (user.roles or [])
 
         # Check if user has required role for the specific company
         for user_role in user_roles:
-            if (user_role.get("company_id") == company_id and
-                user_role.get("role_id")):
-                role = await repo.get_role(user_role.get("role_id"))
+            if isinstance(user_role, dict):
+                role_company_id = user_role.get("company_id")
+                role_id = user_role.get("role_id")
+            else:
+                role_company_id = user_role.company_id
+                role_id = user_role.role_id
+            
+            if (role_company_id == company_id and role_id):
+                role = await repo.get_role(role_id)
                 if role and role.get("role_group") in allowed_roles:
                     return user
 
@@ -437,8 +449,12 @@ def require_company_role(company_id: str, *allowed_roles):
 
 
 def require_permission(company_id: str, screen: str, permission: str):
-    async def permission_checker(user=Depends(get_current_user)):
-        user_id = user.get("id")
+    async def permission_checker(user=Depends(get_current_user_service)):
+        if isinstance(user, dict):
+            user_id = user.get("id")
+        else:
+            user_id = user.id
+            
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
 
@@ -453,8 +469,12 @@ def require_permission(company_id: str, screen: str, permission: str):
 # New company-scoped authorization functions
 def require_company_access(company_id: str):
     """Require user to have access to a specific company"""
-    async def company_access_checker(user=Depends(get_current_user)):
-        user_id = user.get("id")
+    async def company_access_checker(user=Depends(get_current_user_service)):
+        if isinstance(user, dict):
+            user_id = user.get("id")
+        else:
+            user_id = user.id
+            
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
         
@@ -468,8 +488,12 @@ def require_company_access(company_id: str):
 
 def require_company_role_type(company_id: str, *allowed_role_types):
     """Require user to have specific role types within a company"""
-    async def company_role_type_checker(user=Depends(get_current_user)):
-        user_id = user.get("id")
+    async def company_role_type_checker(user=Depends(get_current_user_service)):
+        if isinstance(user, dict):
+            user_id = user.get("id")
+        else:
+            user_id = user.id
+            
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
         
@@ -495,8 +519,12 @@ def require_company_role_type(company_id: str, *allowed_role_types):
 
 def require_content_access(content_owner_id: str, action: str = "view"):
     """Require user to have access to content based on company isolation"""
-    async def content_access_checker(user=Depends(get_current_user)):
-        user_id = user.get("id")
+    async def content_access_checker(user=Depends(get_current_user_service)):
+        if isinstance(user, dict):
+            user_id = user.get("id")
+        else:
+            user_id = user.id
+            
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
         
@@ -508,24 +536,39 @@ def require_content_access(content_owner_id: str, action: str = "view"):
     return content_access_checker
 
 
-async def get_user_accessible_companies(user=Depends(get_current_user)):
+async def get_user_accessible_companies(user=Depends(get_current_user_service)):
     """Get list of companies the current user can access"""
-    user_id = user.get("id")
+    if isinstance(user, dict):
+        user_id = user.get("id")
+    else:
+        user_id = user.id
+        
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
         
     return await repo.get_user_accessible_companies(user_id)
 
 
-async def get_user_company_context(user=Depends(get_current_user)):
+async def get_user_company_context(user=Depends(get_current_user_service)):
     """Get user's company context for filtering data"""
-    user_id = user.get("id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if user is SUPER_USER
-    user_type = user.get("user_type")
-    user_email = user.get("email", "").lower()
+    # Handle both UserProfile objects and dictionaries
+    if hasattr(user, 'user_type'):
+        # This is a UserProfile object
+        user_type = user.user_type.value
+        user_email = user.email.lower()
+        user_id = user.id
+        user_roles = user.roles or []
+        user_company_id = user.company_id
+    else:
+        # This is a dictionary
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        user_type = user.get("user_type")
+        user_email = user.get("email", "").lower()
+        user_roles = user.get("roles", [])
+        user_company_id = user.get("company_id")
     
     print(f"[AUTH] DEBUG: Checking user context for {user_email}, user_type: {user_type}")
     
@@ -536,26 +579,34 @@ async def get_user_company_context(user=Depends(get_current_user)):
         return {"is_platform_admin": True, "accessible_companies": all_companies}
     
     # Check roles for admin privileges
-    user_roles = user.get("roles", [])
     is_platform_admin = False
     
     for user_role in user_roles:
-        role_id = user_role.get("role_id")
-        role_name = user_role.get("role")
+        if hasattr(user_role, 'role'):
+            # This is a UserRole object
+            role_name = user_role.role.value if hasattr(user_role.role, 'value') else str(user_role.role)
+            role_id = user_role.role_id
+            company_id = user_role.company_id
+        else:
+            # This is a dictionary
+            role_name = user_role.get("role")
+            role_id = user_role.get("role_id")
+            company_id = user_role.get("company_id")
         
-        print(f"[AUTH] DEBUG: Checking role - role_name: {role_name}, role_id: {role_id}")
+        print(f"[AUTH] DEBUG: Checking role - role_name: {role_name}, role_id: {role_id}, company_id: {company_id}")
         
-        if role_name == "ADMIN" or role_name == "Super Administrator":
+        # Only ADMIN role_group should grant platform admin access
+        if role_name == "ADMIN":
             is_platform_admin = True
-            print(f"[AUTH] DEBUG: Found admin role!")
+            print(f"[AUTH] DEBUG: Found ADMIN role group - granting platform access!")
             break
         elif role_id:
             # Fallback: check role details from database
             role = await repo.get_role(role_id)
             print(f"[AUTH] DEBUG: Role from DB: {role}")
-            if role and (role.get("name") == "Super Administrator" or role.get("name") == "Administrator"):
+            if role and role.get("role_group") == "ADMIN":
                 is_platform_admin = True
-                print(f"[AUTH] DEBUG: Found admin role via DB lookup!")
+                print(f"[AUTH] DEBUG: Found ADMIN role group via DB lookup - granting platform access!")
                 break
     
     print(f"[AUTH] DEBUG: is_platform_admin: {is_platform_admin}")
@@ -566,7 +617,6 @@ async def get_user_company_context(user=Depends(get_current_user)):
         return {"is_platform_admin": True, "accessible_companies": all_companies}
     else:
         # Regular user - get their company
-        user_company_id = user.get("company_id")
         if user_company_id:
             company = await repo.get_company(user_company_id)
             accessible_companies = [company] if company else []
@@ -584,7 +634,7 @@ async def get_current_user_with_super_admin_bypass(token: str = Depends(oauth2_s
     """Get current user with SUPER_USER bypass for authentication failures"""
     try:
         # First try normal authentication
-        return await get_current_user(token)
+        return await get_current_user_service(token)
     except HTTPException as e:
         # If authentication fails, check if this might be a SUPER_USER
         if e.status_code == 401:

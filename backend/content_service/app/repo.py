@@ -879,15 +879,31 @@ class InMemoryRepo:
         overlays = self._store.get("__content_overlays__", {})
         return [overlay for overlay in overlays.values() if overlay.get("host_id") == host_id]
 
-    async def get_active_overlays_for_content(self, content_id: str, screen_id: str) -> List[dict]:
-        """Get active overlays for specific content on a screen"""
-        overlays = self._store.get("__content_overlays__", {})
-        return [
-            overlay for overlay in overlays.values() 
-            if (overlay.get("screen_id") == screen_id and 
-                overlay.get("is_active") == True and
-                (overlay.get("content_id") == content_id or overlay.get("content_id") is None))
-        ]
+    async def get_user_role_in_company(self, user_id: str, company_id: str) -> Optional[Dict]:
+        """Get user's primary role in a specific company"""
+        user_roles = await self.get_user_roles_by_company(user_id, company_id)
+        if not user_roles:
+            return None
+            
+        # Find default role or first active role
+        for user_role in user_roles:
+            if user_role.get("is_default", False) and user_role.get("status") == "active":
+                role_id = user_role.get("role_id")
+                if role_id:
+                    role = await self.get_role(role_id)
+                    if role:
+                        return {**user_role, "role_details": role}
+        
+        # If no default, return first active role
+        for user_role in user_roles:
+            if user_role.get("status") == "active":
+                role_id = user_role.get("role_id")
+                if role_id:
+                    role = await self.get_role(role_id)
+                    if role:
+                        return {**user_role, "role_details": role}
+        
+        return None
 
 
 class MongoRepo:

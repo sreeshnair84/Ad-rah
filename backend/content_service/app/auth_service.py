@@ -66,6 +66,7 @@ class AuthService:
             "company_id": user_profile.company_id,
             "company_role": user_profile.company_role.value if user_profile.company_role else None,
             "permissions": user_profile.permissions,
+            "is_super_admin": user_profile.user_type == UserType.SUPER_USER,
             "exp": expire,
             "iat": datetime.utcnow(),
             "type": "access_token"
