@@ -72,7 +72,7 @@ export default function DeviceKeysPage() {
   // Fetch registration keys
   const fetchKeys = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/device/keys', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -121,8 +121,8 @@ export default function DeviceKeysPage() {
   // Fetch companies
   const fetchCompanies = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/companies', {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/auth/companies', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -148,7 +148,7 @@ export default function DeviceKeysPage() {
 
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expirationDays);
 

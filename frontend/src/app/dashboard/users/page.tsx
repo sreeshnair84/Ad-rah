@@ -395,6 +395,19 @@ export default function UsersPage() {
   // Legacy permission check (keeping for backwards compatibility)
   const canEditUsers = isSuperUser() || user?.roles?.some(role => role.role === 'ADMIN') || false;
 
+  // Check if user has permission to access user management
+  if (!user || (user.user_type !== 'SUPER_USER' && user.company_role !== 'ADMIN')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Restricted</h3>
+          <p className="text-gray-600">Only administrators can manage users.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
