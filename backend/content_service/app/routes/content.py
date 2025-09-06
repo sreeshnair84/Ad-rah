@@ -161,10 +161,23 @@ async def upload_file(
     """Accept a file upload and simulate quarantine + AI moderation trigger."""
     
     # Verify user has permission to upload content for this owner
-    current_user_id = current_user.get("id")
+    # Handle both UserProfile objects and dictionaries
+    if isinstance(current_user, dict):
+        current_user_id = current_user.get("id")
+    else:
+        current_user_id = current_user.id if hasattr(current_user, 'id') else None
+    
+    print(f"[UPLOAD DEBUG] current_user_id: {current_user_id} (type: {type(current_user_id)})")
+    print(f"[UPLOAD DEBUG] owner_id: {owner_id} (type: {type(owner_id)})")
+    print(f"[UPLOAD DEBUG] current_user type: {type(current_user)}")
+    print(f"[UPLOAD DEBUG] current_user: {current_user}")
+    
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="User authentication failed")
     
     # If owner_id is different from current user, verify they belong to same company
     if owner_id != current_user_id:
+        print(f"[UPLOAD DEBUG] IDs don't match, checking permission...")
         can_access_content = await repo.check_content_access_permission(
             current_user_id, owner_id, "edit"
         )
@@ -173,21 +186,36 @@ async def upload_file(
                 status_code=403,
                 detail="Access denied: Cannot upload content for users outside your company"
             )
+    else:
+        print(f"[UPLOAD DEBUG] IDs match, skipping permission check")
     
     # Check if user has EDITOR or higher role
     accessible_companies = company_context["accessible_companies"]
     user_can_upload = False
     
-    for company in accessible_companies:
-        company_id = company.get("id")
-        if company_id:
-            user_role = await repo.get_user_role_in_company(current_user_id, company_id)
-            if user_role:
-                role_details = user_role.get("role_details", {})
-                company_role_type = role_details.get("company_role_type")
-                if company_role_type in ["COMPANY_ADMIN", "APPROVER", "EDITOR"]:
-                    user_can_upload = True
-                    break
+    # Check user's company role from the current_user object directly
+    if isinstance(current_user, dict):
+        user_role = current_user.get("company_role")
+    else:
+        user_role = current_user.company_role if hasattr(current_user, 'company_role') else None
+    
+    print(f"[UPLOAD DEBUG] User company role: {user_role}")
+    if user_role in ["ADMIN", "REVIEWER", "EDITOR"]:
+        user_can_upload = True
+        print(f"[UPLOAD DEBUG] User has upload permission via company role: {user_role}")
+    
+    # Fallback: check via database lookup
+    if not user_can_upload:
+        for company in accessible_companies:
+            company_id = company.get("id")
+            if company_id:
+                user_role_data = await repo.get_user_role_in_company(current_user_id, company_id)
+                if user_role_data:
+                    role_details = user_role_data.get("role_details", {})
+                    company_role_type = role_details.get("company_role_type")
+                    if company_role_type in ["COMPANY_ADMIN", "APPROVER", "EDITOR"]:
+                        user_can_upload = True
+                        break
     
     if not user_can_upload and not company_context["is_platform_admin"]:
         raise HTTPException(

@@ -27,4 +27,5 @@ dependencies = [
     "qrcode[pil]>=8.2",
     "supabase>=2.10.0",
     "uvicorn>=0.35.0",
+    "websockets>=15.0.1",
 ]

@@ -397,6 +397,7 @@ dependencies = [
     { name = "qrcode", extra = ["pil"] },
     { name = "supabase" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -423,6 +424,7 @@ requires-dist = [
     { name = "qrcode", extras = ["pil"], specifier = ">=8.2" },
     { name = "supabase", specifier = ">=2.10.0" },
     { name = "uvicorn", specifier = ">=0.35.0" },
+    { name = "websockets", specifier = ">=15.0.1" },
 ]
 
 [[package]]

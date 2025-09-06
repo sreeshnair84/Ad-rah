@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/useAuth';
 import {
   Layers,
@@ -18,7 +21,20 @@ import {
   Save,
   Search,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Calendar,
+  Clock,
+  CheckCircle2,
+  Play,
+  Pause,
+  Settings,
+  Target,
+  FileImage,
+  FileVideo,
+  FileText,
+  File,
+  ArrowRight,
+  Send
 } from 'lucide-react';
 
 interface DigitalScreen {
@@ -27,6 +43,19 @@ interface DigitalScreen {
   resolution_width: number;
   resolution_height: number;
   orientation: 'landscape' | 'portrait';
+}
+
+interface ApprovedContent {
+  id: string;
+  title: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  status: 'approved';
+  created_at: string;
+  categories?: string[];
+  description?: string;
+  content_url?: string;
 }
 
 interface ContentOverlay {
@@ -48,6 +77,7 @@ interface ContentOverlay {
   created_by: string;
   created_at: string;
   updated_at: string;
+  content?: ApprovedContent;
 }
 
 interface OverlayFormData {
@@ -68,16 +98,18 @@ interface OverlayFormData {
 }
 
 export default function ContentOverlayPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [screens, setScreens] = useState<DigitalScreen[]>([]);
   const [overlays, setOverlays] = useState<ContentOverlay[]>([]);
+  const [approvedContent, setApprovedContent] = useState<ApprovedContent[]>([]);
   const [selectedScreen, setSelectedScreen] = useState<DigitalScreen | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<ContentOverlay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [zoomLevel, setZoomLevel] = useState(0.5);
@@ -85,9 +117,9 @@ export default function ContentOverlayPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   const [formData, setFormData] = useState<OverlayFormData>({
-    content_id: 'content_001', // Mock content ID
+    content_id: '',
     screen_id: '',
-    company_id: user?.companies?.[0]?.id || '',
+    company_id: user?.company_id || '',
     name: '',
     position_x: 100,
     position_y: 100,
@@ -98,6 +130,34 @@ export default function ContentOverlayPage() {
     rotation: 0,
     status: 'draft'
   });
+
+  // Check if user can edit overlays
+  const canEditOverlays = hasPermission('overlay', 'create') || hasPermission('overlay', 'edit');
+
+  // Check for selected content from review queue
+  useEffect(() => {
+    const selectedContentId = sessionStorage.getItem('selectedContentId');
+    if (selectedContentId) {
+      setFormData(prev => ({ ...prev, content_id: selectedContentId }));
+      sessionStorage.removeItem('selectedContentId');
+      setIsCreateDialogOpen(true);
+    }
+  }, []);
+
+  // Fetch approved content
+  const fetchApprovedContent = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/content/approved', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch approved content');
+      const data = await response.json();
+      setApprovedContent(data.approved_content || []);
+    } catch (err) {
+      console.error('Failed to fetch approved content:', err);
+    }
+  }, []);
 
   // Fetch screens
   const fetchScreens = useCallback(async () => {
@@ -135,11 +195,11 @@ export default function ContentOverlayPage() {
   useEffect(() => {
     const initializeData = async () => {
       setLoading(true);
-      await fetchScreens();
+      await Promise.all([fetchScreens(), fetchApprovedContent()]);
       setLoading(false);
     };
     initializeData();
-  }, [fetchScreens]);
+  }, [fetchScreens, fetchApprovedContent]);
 
   useEffect(() => {
     if (selectedScreen) {
@@ -333,6 +393,45 @@ export default function ContentOverlayPage() {
     }
   };
 
+  // Deploy overlay to digital twin
+  const handleDeployToDigitalTwin = async (overlayId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/screens/${selectedScreen?.id}/overlays/${overlayId}/deploy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          environment: 'digital_twin'
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to deploy to digital twin');
+
+      // Update overlay status to active
+      setOverlays(prev => prev.map(overlay => 
+        overlay.id === overlayId 
+          ? { ...overlay, status: 'active' as const }
+          : overlay
+      ));
+
+      // Show success message
+      console.log('Overlay deployed to digital twin successfully');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to deploy to digital twin');
+    }
+  };
+
+  // Get file icon for content type
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) return <FileImage className="h-4 w-4 text-blue-500" />;
+    if (contentType.startsWith('video/')) return <FileVideo className="h-4 w-4 text-purple-500" />;
+    if (contentType === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />;
+    return <File className="h-4 w-4 text-gray-500" />;
+  };
+
   // Delete overlay
   const handleDeleteOverlay = async (overlayId: string) => {
     if (!confirm('Are you sure you want to delete this overlay?')) return;
@@ -357,9 +456,9 @@ export default function ContentOverlayPage() {
 
   const resetForm = () => {
     setFormData({
-      content_id: 'content_001',
+      content_id: '',
       screen_id: selectedScreen?.id || '',
-      company_id: user?.companies?.[0]?.id || '',
+      company_id: user?.company_id || '',
       name: '',
       position_x: 100,
       position_y: 100,
@@ -388,11 +487,6 @@ export default function ContentOverlayPage() {
         return 'text-gray-700 bg-gray-50 border-gray-200';
     }
   };
-
-  // Check if user can edit overlays
-  const canEditOverlays = user?.user_type === 'SUPER_USER' || user?.roles?.some(role => 
-    ['ADMIN', 'HOST'].includes(role.role)
-  ) || false;
 
   if (loading) {
     return (
@@ -466,10 +560,29 @@ export default function ContentOverlayPage() {
                         value={formData.content_id}
                         onChange={(e) => setFormData({ ...formData, content_id: e.target.value })}
                       >
-                        <option value="content_001">Welcome Image</option>
-                        <option value="content_002">Event Announcement</option>
-                        <option value="content_003">Company Logo</option>
+                        <option value="">Select approved content...</option>
+                        {approvedContent.map(content => (
+                          <option key={content.id} value={content.id}>
+                            {content.title || content.filename}
+                          </option>
+                        ))}
                       </select>
+                      {formData.content_id && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded border text-sm">
+                          {(() => {
+                            const selectedContent = approvedContent.find(c => c.id === formData.content_id);
+                            return selectedContent ? (
+                              <div className="flex items-center gap-2">
+                                {getFileIcon(selectedContent.content_type)}
+                                <span className="font-medium">{selectedContent.title || selectedContent.filename}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {selectedContent.content_type}
+                                </Badge>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -545,12 +658,56 @@ export default function ContentOverlayPage() {
                     </div>
                   </div>
 
+                  {/* Scheduling */}
+                  <div className="space-y-4 border-t pt-4">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Schedule (Optional)
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="start-time">Start Time</Label>
+                        <Input
+                          id="start-time"
+                          type="datetime-local"
+                          value={formData.start_time || ''}
+                          onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="end-time">End Time</Label>
+                        <Input
+                          id="end-time"
+                          type="datetime-local"
+                          value={formData.end_time || ''}
+                          onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleCreateOverlay}>
+                    <Button onClick={handleCreateOverlay} disabled={!formData.content_id || !formData.name}>
                       Create Overlay
+                    </Button>
+                    <Button 
+                      onClick={async () => {
+                        await handleCreateOverlay();
+                        // Auto-deploy to digital twin for testing
+                        const newOverlay = overlays[overlays.length - 1];
+                        if (newOverlay) {
+                          setTimeout(() => handleDeployToDigitalTwin(newOverlay.id), 500);
+                        }
+                      }}
+                      disabled={!formData.content_id || !formData.name}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      Create & Deploy
+                      <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
                   </div>
                 </div>
@@ -700,13 +857,42 @@ export default function ContentOverlayPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Open edit dialog
+                          setSelectedOverlay(overlay);
+                          setIsEditDialogOpen(true);
                         }}
                         className="flex-1 text-xs"
                       >
                         <Edit2 className="h-3 w-3 mr-1" />
                         Edit
                       </Button>
+                      {overlay.status === 'draft' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeployToDigitalTwin(overlay.id);
+                          }}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 text-xs"
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Deploy
+                        </Button>
+                      )}
+                      {overlay.status === 'active' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Pause overlay
+                          }}
+                          className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 text-xs"
+                        >
+                          <Pause className="h-3 w-3 mr-1" />
+                          Pause
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"

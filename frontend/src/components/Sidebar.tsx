@@ -1,5 +1,6 @@
 // Clean Sidebar with RBAC
 import React from "react";
+import Image from "next/image";
 import {
   LayoutDashboard, Upload, ShieldCheck, MonitorSmartphone, BarChart3,
   Settings, Users, Shield, Building2, UserPlus, FileImage, PlayCircle,
@@ -81,6 +82,34 @@ const navigationGroups = [
         permission: { resource: "content", action: "read" }
       },
       { 
+        key: "content/upload", 
+        label: "Upload Content", 
+        icon: <Upload className="h-5 w-5" />, 
+        description: "Upload new content",
+        permission: { resource: "content", action: "upload" }
+      },
+      { 
+        key: "content/review", 
+        label: "Review Queue", 
+        icon: <Eye className="h-5 w-5" />, 
+        description: "Review AI-analyzed content",
+        permission: { resource: "content", action: "approve" }
+      },
+      { 
+        key: "content-overlay", 
+        label: "Overlay Designer", 
+        icon: <Layers className="h-5 w-5" />, 
+        description: "Design content overlays",
+        permission: { resource: "overlay", action: "create" }
+      },
+      { 
+        key: "digital-twin", 
+        label: "Digital Twin", 
+        icon: <Smartphone className="h-5 w-5" />, 
+        description: "Test in virtual environment",
+        permission: { resource: "digital_twin", action: "view" }
+      },
+      { 
         key: "my-content", 
         label: "My Content", 
         icon: <Layers className="h-5 w-5" />, 
@@ -94,13 +123,6 @@ const navigationGroups = [
         description: "Manage advertisements",
         permission: { resource: "content", action: "read" },
         companyTypes: ["ADVERTISER"]
-      },
-      { 
-        key: "upload", 
-        label: "Upload", 
-        icon: <Upload className="h-5 w-5" />, 
-        description: "Upload content",
-        permission: { resource: "content", action: "upload" }
       },
       { 
         key: "moderation", 
@@ -125,14 +147,6 @@ const navigationGroups = [
         permission: { resource: "content", action: "approve" },
         companyTypes: ["HOST"]
       },
-      { 
-        key: "content-overlay", 
-        label: "Content Overlay", 
-        icon: <Layers className="h-5 w-5" />, 
-        description: "Manage content overlays",
-        permission: { resource: "content", action: "update" },
-        companyTypes: ["HOST"]
-      },
     ]
   },
   {
@@ -152,14 +166,6 @@ const navigationGroups = [
         icon: <Key className="h-5 w-5" />, 
         description: "Manage device keys",
         permission: { resource: "device", action: "register" },
-        companyTypes: ["HOST"]
-      },
-      { 
-        key: "digital-twin", 
-        label: "Digital Twin", 
-        icon: <Smartphone className="h-5 w-5" />, 
-        description: "Digital twin management",
-        permission: { resource: "device", action: "monitor" },
         companyTypes: ["HOST"]
       },
     ]
@@ -304,7 +310,21 @@ export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarPr
         {!isCollapsed && (
           <div className="border-b px-6 py-4">
             <div className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
+              <Image
+                src="/images/logo.png"
+                alt="Adara Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain"
+                onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                  // Fallback to gradient icon if logo fails to load
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) fallback.classList.remove('hidden');
+                }}
+              />
+              <div className="hidden flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
                 <span className="text-sm font-bold text-white">A</span>
               </div>
               <div>

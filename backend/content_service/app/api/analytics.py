@@ -3,13 +3,20 @@ Analytics API endpoints for real-time metrics and analytics data
 Provides REST API endpoints that connect to the real-time analytics service
 """
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
 import json
 import asyncio
 from datetime import datetime, timedelta
 import logging
+
+# Custom JSON encoder for datetime objects
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 # Import dependencies
 try:
@@ -91,7 +98,12 @@ class AnalyticsConnectionManager:
     async def send_personal_message(self, message: dict, client_id: str):
         if client_id in self.active_connections:
             try:
-                await self.active_connections[client_id].send_text(json.dumps(message))
+                websocket = self.active_connections[client_id]
+                if websocket.client_state.value == 1:  # CONNECTED state
+                    await websocket.send_text(json.dumps(message, cls=DateTimeEncoder))
+                else:
+                    logger.warning(f"WebSocket for {client_id} is not in connected state")
+                    self.disconnect(client_id)
             except Exception as e:
                 logger.error(f"Failed to send message to {client_id}: {e}")
                 self.disconnect(client_id)
@@ -100,7 +112,10 @@ class AnalyticsConnectionManager:
         disconnected_clients = []
         for client_id, connection in self.active_connections.items():
             try:
-                await connection.send_text(json.dumps(message))
+                if connection.client_state.value == 1:  # CONNECTED state
+                    await connection.send_text(json.dumps(message, cls=DateTimeEncoder))
+                else:
+                    disconnected_clients.append(client_id)
             except Exception as e:
                 logger.error(f"Failed to broadcast to {client_id}: {e}")
                 disconnected_clients.append(client_id)
@@ -256,7 +271,7 @@ async def subscribe_to_real_time_updates(
         
         result = await analytics_service.subscribe_to_real_time_updates(
             subscription_request.subscriber_id,
-            metric_types
+            metric_types or []
         )
         
         return result
@@ -288,6 +303,48 @@ async def analytics_health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0"
     }
+
+@router.get("/dashboard")
+async def get_dashboard_analytics(
+    timeRange: str = Query("24h", description="Time range: 1h, 24h, 7d, 30d"),
+    device: str = Query("all", description="Device ID or 'all' for all devices"),
+    device_info: dict = Depends(authenticate_device)
+):
+    """Get comprehensive analytics dashboard data"""
+    
+    # Parse time range
+    time_delta_map = {
+        "1h": timedelta(hours=1),
+        "24h": timedelta(hours=24),
+        "7d": timedelta(days=7),
+        "30d": timedelta(days=30)
+    }
+    
+    if timeRange not in time_delta_map:
+        raise HTTPException(status_code=400, detail="Invalid time range")
+    
+    end_time = datetime.utcnow()
+    start_time = end_time - time_delta_map[timeRange]
+    
+    try:
+        # Get dashboard data from analytics service
+        dashboard_data = await analytics_service.get_dashboard_data(
+            device_filter=device if device != "all" else None,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        return {
+            "devices": dashboard_data.get("devices", []),
+            "summary": dashboard_data.get("summary", {}),
+            "timeSeriesData": dashboard_data.get("time_series", []),
+            "timeRange": timeRange,
+            "generatedAt": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching dashboard analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching analytics: {str(e)}")
 
 # WebSocket endpoint for real-time streaming
 @router.websocket("/stream")

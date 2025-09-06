@@ -101,15 +101,31 @@ export function Header({
           </Button>
         )}
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-25 h-10 rounded-lg shadow-sm">
+          <div className="flex items-center justify-center w-auto h-10 rounded-lg">
             <Image 
               src="/images/logo.png" 
-              alt="Adara from Hebron&trade;" 
-              width={24}
-              height={24}
-              className="w-20 h-10 object-contain filter brightness-0 color-blue"
+              alt="Adara from Hebron™" 
+              width={80}
+              height={40}
+              className="w-20 h-10 object-contain"
               priority
+              onError={(e) => {
+                // Fallback to text if logo fails to load
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.classList.remove('hidden');
+              }}
             />
+            <div className="hidden flex items-center space-x-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
+                <span className="text-sm font-bold text-white">A</span>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Adārah</h2>
+                <p className="text-xs text-muted-foreground">Platform</p>
+              </div>
+            </div>
           </div>
           
         </div>

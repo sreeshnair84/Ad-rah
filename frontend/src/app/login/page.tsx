@@ -131,13 +131,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-white rounded-xl flex items-center justify-center mb-4 shadow-lg">
+          <div className="mx-auto w-16 h-16 bg-white rounded-xl flex items-center justify-center mb-4 shadow-lg border border-gray-100">
             <Image
               src="/images/logo.png"
               alt="Adara Logo"
-              width={48}
-              height={48}
-              className="w-12 h-12 object-contain"
+              width={56}
+              height={56}
+              className="w-14 h-14 object-contain"
+              priority
               onError={(e) => {
                 // Fallback to icon if logo fails to load
                 const target = e.currentTarget as HTMLImageElement;
@@ -146,7 +147,7 @@ export default function LoginPage() {
                 if (fallback) fallback.classList.remove('hidden');
               }}
             />
-            <div className="hidden w-12 h-12 flex items-center justify-center text-blue-600">
+            <div className="hidden w-14 h-14 flex items-center justify-center text-blue-600">
               <User className="w-8 h-8" />
             </div>
           </div>

@@ -16,7 +16,9 @@
       "Bash(uv run:*)",
       "Bash(grep:*)",
       "Bash(docker run:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Read(/C:\\Users\\Srees\\Workarea\\Open_kiosk/**)",
+      "Read(/C:\\Users\\Srees\\Workarea\\Open_kiosk\\backend\\content_service/**)"
     ],
     "deny": [],
     "ask": []

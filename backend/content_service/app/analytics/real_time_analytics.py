@@ -44,6 +44,7 @@ class AnalyticsEvent(Enum):
     ERROR_OCCURRED = "error_occurred"
     PERFORMANCE_ALERT = "performance_alert"
     CONVERSION_TRACKED = "conversion_tracked"
+    SYSTEM_METRICS = "system_metrics"
 
 class AggregationPeriod(Enum):
     """Data aggregation periods"""
@@ -190,17 +191,30 @@ class RealTimeAnalyticsService:
         # of an async runtime (for example during unit tests or static analysis).
         if self.processing_task is not None:
             return
+        
+        # Don't start background tasks during import time
+        # The task will be started when needed by the first API call
+        logger.info("Analytics processing will start on first API call")
+        
+    def _ensure_processing_started(self):
+        """Ensure background processing is started (called by API endpoints)"""
+        if self.processing_task is not None:
+            return
+            
         try:
             loop = asyncio.get_running_loop()
+            # Schedule the processing loop on the running loop
+            self.processing_task = loop.create_task(self._process_metrics_loop())
+            logger.info("Started analytics background processing")
         except RuntimeError:
-            logger.info("Event loop not running; deferring background processing start until runtime.")
+            logger.warning("Event loop not running; analytics processing not started")
             return
-
-        # Schedule the processing loop on the running loop
-        self.processing_task = loop.create_task(self._process_metrics_loop())
     
     async def record_metric(self, metric_data: Dict[str, Any]) -> Dict[str, Any]:
         """Record a single analytics metric"""
+        # Ensure background processing is started
+        self._ensure_processing_started()
+        
         try:
             # Create metric object
             metric = AnalyticsMetric(
@@ -294,6 +308,9 @@ class RealTimeAnalyticsService:
     async def get_real_time_metrics(self, device_ids: Optional[List[str]] = None, 
                                   period: AggregationPeriod = AggregationPeriod.MINUTE) -> Dict[str, Any]:
         """Get real-time aggregated metrics"""
+        # Ensure background processing is started
+        self._ensure_processing_started()
+        
         try:
             # Get current timestamp for period
             now = datetime.utcnow()
@@ -784,6 +801,133 @@ class RealTimeAnalyticsService:
         """Analyze content effectiveness"""
         # Implementation for content effectiveness analysis
         return {}
+    
+    async def get_dashboard_data(self, device_filter: Optional[str] = None, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Get comprehensive dashboard analytics data"""
+        # Ensure background processing is started
+        self._ensure_processing_started()
+        
+        try:
+            if not start_time:
+                start_time = datetime.utcnow() - timedelta(hours=24)
+            if not end_time:
+                end_time = datetime.utcnow()
+            
+            # Filter metrics by time range and device
+            filtered_metrics = [
+                metric for metric in self.metric_buffer
+                if start_time <= metric.timestamp <= end_time
+                and (not device_filter or metric.device_id == device_filter)
+            ]
+            
+            # Get unique devices
+            device_ids = list(set(metric.device_id for metric in filtered_metrics))
+            
+            # Build device analytics
+            devices_data = []
+            for device_id in device_ids:
+                device_metrics = [m for m in filtered_metrics if m.device_id == device_id]
+                
+                # Calculate device-level analytics
+                impressions = len([m for m in device_metrics if m.metric_type == MetricType.IMPRESSION])
+                interactions = len([m for m in device_metrics if m.metric_type == MetricType.INTERACTION])
+                revenue = sum(m.revenue_impact or 0 for m in device_metrics)
+                proximity_detections = len([m for m in device_metrics if m.metric_type == MetricType.AUDIENCE])
+                
+                device_data = {
+                    "deviceId": device_id,
+                    "deviceName": f"Device {device_id}",
+                    "isOnline": True,  # Simplified - would check actual device status
+                    "lastSeen": end_time.isoformat(),
+                    "runtime": {
+                        "totalHours": (end_time - start_time).total_seconds() / 3600,
+                        "activeHours": (end_time - start_time).total_seconds() / 3600 * 0.8,  # Estimate
+                        "idleHours": (end_time - start_time).total_seconds() / 3600 * 0.2
+                    },
+                    "contentMetrics": {
+                        "impressions": impressions,
+                        "interactions": interactions,
+                        "completions": len([m for m in device_metrics if m.event_type == "content_completion"]),
+                        "errors": len([m for m in device_metrics if m.metric_type == MetricType.ERROR])
+                    },
+                    "proximityData": {
+                        "totalDetections": proximity_detections,
+                        "uniqueUsers": len(set(m.demographic_data.get("user_id") for m in device_metrics if m.demographic_data and m.demographic_data.get("user_id"))),
+                        "averageEngagementTime": sum(m.duration_seconds or 0 for m in device_metrics) / len(device_metrics) if device_metrics else 0,
+                        "peakHours": ["12:00", "15:00", "18:00"]  # Simplified
+                    },
+                    "monetization": {
+                        "totalRevenue": revenue,
+                        "adImpressions": impressions,
+                        "clickthrough": (interactions / impressions * 100) if impressions > 0 else 0,
+                        "averageCPM": (revenue / impressions * 1000) if impressions > 0 else 0
+                    },
+                    "systemHealth": {
+                        "cpuUsage": 45.0,  # Simplified
+                        "memoryUsage": 60.0,
+                        "storageUsage": 30.0,
+                        "networkLatency": 25.0
+                    }
+                }
+                devices_data.append(device_data)
+            
+            # Calculate summary
+            total_devices = len(devices_data)
+            online_devices = len([d for d in devices_data if d["isOnline"]])
+            total_revenue = sum(d["monetization"]["totalRevenue"] for d in devices_data)
+            total_impressions = sum(d["contentMetrics"]["impressions"] for d in devices_data)
+            total_interactions = sum(d["contentMetrics"]["interactions"] for d in devices_data)
+            
+            summary = {
+                "totalDevices": total_devices,
+                "onlineDevices": online_devices,
+                "totalRevenue": total_revenue,
+                "totalImpressions": total_impressions,
+                "averageEngagement": (total_interactions / total_impressions * 100) if total_impressions > 0 else 0
+            }
+            
+            # Generate time series data
+            time_series = []
+            time_diff = end_time - start_time
+            bucket_size = timedelta(hours=1) if time_diff.days <= 1 else timedelta(hours=6)
+            
+            current_time = start_time
+            while current_time < end_time:
+                bucket_end = current_time + bucket_size
+                bucket_metrics = [
+                    m for m in filtered_metrics
+                    if current_time <= m.timestamp < bucket_end
+                ]
+                
+                time_series.append({
+                    "timestamp": current_time.isoformat(),
+                    "impressions": len([m for m in bucket_metrics if m.metric_type == MetricType.IMPRESSION]),
+                    "interactions": len([m for m in bucket_metrics if m.metric_type == MetricType.INTERACTION]),
+                    "revenue": sum(m.revenue_impact or 0 for m in bucket_metrics),
+                    "proximityDetections": len([m for m in bucket_metrics if m.metric_type == MetricType.AUDIENCE])
+                })
+                
+                current_time = bucket_end
+            
+            return {
+                "devices": devices_data,
+                "summary": summary,
+                "time_series": time_series
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting dashboard data: {e}")
+            return {
+                "devices": [],
+                "summary": {
+                    "totalDevices": 0,
+                    "onlineDevices": 0,
+                    "totalRevenue": 0,
+                    "totalImpressions": 0,
+                    "averageEngagement": 0
+                },
+                "time_series": []
+            }
 
 # Global analytics service instance
 analytics_service = RealTimeAnalyticsService()
