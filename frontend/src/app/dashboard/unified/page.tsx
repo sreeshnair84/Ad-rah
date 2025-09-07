@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { CompanyRole } from '@/types/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,11 +29,12 @@ import {
 import UnifiedUploadPage from '@/components/upload/UnifiedUploadPage';
 import OverlayManagement from '../overlays/overlay-management';
 import ContentApproval from '../approval/content-approval';
+import { ContentManager } from '@/components/content/ContentManager';
 
 interface UnifiedDashboardProps {}
 
 export default function UnifiedDashboard({}: UnifiedDashboardProps) {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, isHostCompany, isAdvertiserCompany } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState({
     totalContent: 0,
@@ -74,7 +76,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalContent}</div>
             <p className="text-xs text-muted-foreground">
-              {hasRole('ADVERTISER') ? 'Your ads' : 'All content'}
+              {isAdvertiserCompany() ? 'Your ads' : 'All content'}
             </p>
           </CardContent>
         </Card>
@@ -87,7 +89,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
           <CardContent>
             <div className="text-2xl font-bold">{stats.pendingApprovals}</div>
             <p className="text-xs text-muted-foreground">
-              {hasRole('HOST') ? 'Awaiting your review' : 'Under review'}
+              {isHostCompany() ? 'Awaiting your review' : 'Under review'}
             </p>
           </CardContent>
         </Card>
@@ -126,7 +128,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {hasRole('ADVERTISER') && (
+            {isAdvertiserCompany() && (
               <Button 
                 onClick={() => setActiveTab('upload')} 
                 className="h-20 flex flex-col gap-2"
@@ -136,7 +138,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
               </Button>
             )}
             
-            {hasRole('HOST') && (
+            {isHostCompany() && (
               <>
                 <Button 
                   onClick={() => setActiveTab('approve')} 
@@ -157,7 +159,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
               </>
             )}
             
-            {hasRole('ADMIN') && (
+            {hasRole(CompanyRole.ADMIN) && (
               <Button 
                 onClick={() => setActiveTab('manage')} 
                 className="h-20 flex flex-col gap-2"
@@ -303,22 +305,23 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
     <div className="container mx-auto py-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">
-          Welcome, {user.name || user.email}
+          Welcome, {user.display_name || user.email}
         </h1>
         <p className="text-muted-foreground">
-          {hasRole('ADMIN') && 'Manage the entire digital signage platform'}
-          {hasRole('HOST') && 'Manage your screens and approve advertiser content'}
-          {hasRole('ADVERTISER') && 'Upload and track your advertisement campaigns'}
+          {hasRole(CompanyRole.ADMIN) && 'Manage the entire digital signage platform'}
+          {isHostCompany() && 'Manage your screens and approve advertiser content'}
+          {isAdvertiserCompany() && 'Upload and track your advertisement campaigns'}
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          {hasRole('ADVERTISER') && (
+          <TabsTrigger value="content">Content</TabsTrigger>
+          {isAdvertiserCompany() && (
             <TabsTrigger value="upload">Upload</TabsTrigger>
           )}
-          {hasRole('HOST') && (
+          {isHostCompany() && (
             <>
               <TabsTrigger value="approve">Approve</TabsTrigger>
               <TabsTrigger value="overlay">Overlays</TabsTrigger>
@@ -331,13 +334,17 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
           {renderOverviewTab()}
         </TabsContent>
 
-        {hasRole('ADVERTISER') && (
+        <TabsContent value="content" className="mt-6">
+          <ContentManager mode="unified" />
+        </TabsContent>
+
+        {isAdvertiserCompany() && (
           <TabsContent value="upload" className="mt-6">
             {renderUploadTab()}
           </TabsContent>
         )}
 
-        {hasRole('HOST') && (
+        {isHostCompany() && (
           <>
             <TabsContent value="approve" className="mt-6">
               {renderApprovalTab()}

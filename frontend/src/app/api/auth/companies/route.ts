@@ -12,9 +12,22 @@ export async function GET(request: NextRequest) {
       headers.Authorization = authHeader;
     }
 
+    console.log(`Fetching companies from backend: ${BACKEND_URL}/api/companies/`);
+    
     const backendResponse = await fetch(`${BACKEND_URL}/api/companies/`, {
       headers,
     });
+
+    console.log(`Backend response status: ${backendResponse.status}`);
+    
+    if (!backendResponse.ok) {
+      const errorText = await backendResponse.text();
+      console.error(`Backend error: ${backendResponse.status} - ${errorText}`);
+      return NextResponse.json(
+        { error: `Backend error: ${backendResponse.status}`, details: errorText },
+        { status: backendResponse.status }
+      );
+    }
 
     const responseData = await backendResponse.json();
 
@@ -24,7 +37,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Companies proxy error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

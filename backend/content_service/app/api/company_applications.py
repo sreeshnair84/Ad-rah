@@ -14,8 +14,7 @@ from app.models import (
     UserRole
 )
 from app.repo import repo
-from app.api.auth import get_current_user
-# from app.services.auth_service import AuthService  # Removed - unused import
+from app.auth_service import get_current_user, UserProfile  # Fixed import path and added UserProfile
 from app.auth import get_password_hash  # Import password hashing function
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])
@@ -85,21 +84,21 @@ async def submit_company_application(application_data: CompanyApplicationCreate)
 async def list_company_applications(
     status_filter: Optional[str] = Query(None, description="Filter by status"),
     company_type: Optional[str] = Query(None, description="Filter by company type"),
-    current_user: dict = Depends(get_current_user)
+    current_user: UserProfile = Depends(get_current_user)
 ):
     """List company applications (Admin only)"""
     try:
-        print(f"[COMPANY_APPS] INFO: User {current_user.get('email')} requesting company applications list")
-        print(f"[COMPANY_APPS] DEBUG: Current user type: {current_user.get('user_type')}")
+        print(f"[COMPANY_APPS] INFO: User {current_user.email} requesting company applications list")
+        print(f"[COMPANY_APPS] DEBUG: Current user type: {current_user.user_type}")
         
         # Check if user has SUPER_USER access (new authentication system)
-        user_type = current_user.get("user_type", "")
+        user_type = current_user.user_type
         is_admin = user_type == "SUPER_USER"
         
         print(f"[COMPANY_APPS] DEBUG: Is admin: {is_admin}")
         
         if not is_admin:
-            print(f"[COMPANY_APPS] WARNING: User {current_user.get('email')} denied company applications access - insufficient permissions")
+            print(f"[COMPANY_APPS] WARNING: User {current_user.email} denied company applications access - insufficient permissions")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only administrators can view company applications"
@@ -108,7 +107,7 @@ async def list_company_applications(
         print("[COMPANY_APPS] INFO: User has admin permissions, proceeding with application listing")
         
         applications = await repo.list_company_applications(status=status_filter, company_type=company_type)
-        print(f"[COMPANY_APPS] INFO: Retrieved {len(applications)} applications for user {current_user.get('email')}")
+        print(f"[COMPANY_APPS] INFO: Retrieved {len(applications)} applications for user {current_user.email}")
         
         return [convert_objectid_to_str(app) for app in applications]
         
@@ -128,12 +127,12 @@ async def list_company_applications(
 @router.get("/{application_id}", response_model=Dict)
 async def get_company_application(
     application_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserProfile = Depends(get_current_user)
 ):
     """Get specific company application details (Admin only)"""
     try:
         # Check if user has SUPER_USER access (new authentication system)
-        user_type = current_user.get("user_type", "")
+        user_type = current_user.user_type
         is_admin = user_type == "SUPER_USER"
         
         if not is_admin:
@@ -164,13 +163,13 @@ async def get_company_application(
 async def review_company_application(
     application_id: str,
     review_data: CompanyApplicationReview,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserProfile = Depends(get_current_user)
 ):
     """Review and approve/reject company application (Admin only)"""
     try:
         # Check if user has ADMIN role
         # Check if user has SUPER_USER access (new authentication system)
-        user_type = current_user.get("user_type", "")
+        user_type = current_user.user_type
         is_admin = user_type == "SUPER_USER"
         
         if not is_admin:
@@ -199,18 +198,18 @@ async def review_company_application(
         await repo.update_company_application_status(
             application_id=application_id,
             status=new_status,
-            reviewer_id=current_user["id"],
+            reviewer_id=current_user.id,
             notes=review_data.notes or ""
         )
         
         # If approved, create company and admin user
         if review_data.decision == "approved":
-            await _create_company_and_user(application, current_user["id"])
+            await _create_company_and_user(application, current_user.id)
         
         return {
             "message": f"Application {review_data.decision} successfully",
             "status": new_status,
-            "reviewer_id": current_user["id"]
+            "reviewer_id": current_user.id
         }
         
     except HTTPException:
@@ -303,11 +302,11 @@ async def _create_company_and_user(application: dict, reviewer_id: str):
 
 
 @router.get("/stats/summary", response_model=Dict)
-async def get_application_stats(current_user: dict = Depends(get_current_user)):
+async def get_application_stats(current_user: UserProfile = Depends(get_current_user)):
     """Get application statistics (Admin only)"""
     try:
         # Check if user has SUPER_USER access (new authentication system)
-        user_type = current_user.get("user_type", "")
+        user_type = current_user.user_type
         is_admin = user_type == "SUPER_USER"
         
         if not is_admin:

@@ -1139,7 +1139,7 @@ class MongoRepo:
         return data
 
     async def get_company(self, _id: str) -> Optional[dict]:
-        return await self._company_col.find_one({"id": _id})
+        return await self._company_col.find_one({"_id": _id})
 
     async def list_companies(self) -> List[Dict]:
         cursor = self._company_col.find({})
@@ -1152,7 +1152,7 @@ class MongoRepo:
         return companies
 
     async def delete_company(self, _id: str) -> bool:
-        result = await self._company_col.delete_one({"id": _id})
+        result = await self._company_col.delete_one({"_id": _id})
         return result.deleted_count > 0
 
     # User operations
@@ -1363,7 +1363,7 @@ class MongoRepo:
         return data
 
     async def get_company_application(self, application_id: str) -> Optional[dict]:
-        return await self._company_application_col.find_one({"id": application_id})
+        return await self._company_application_col.find_one({"_id": application_id})
 
     async def list_company_applications(self, 
                                        status: Optional[str] = None, 

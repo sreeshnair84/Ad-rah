@@ -10,6 +10,84 @@ You are working on **Adara Screen Digital Signage Platform**, a comprehensive **
 - **Platform**: Advanced multi-tenant architecture with three-tier user system and permission-based access control
 - **Device Authentication**: Secure API key-based authentication for Flutter kiosk devices
 
+## 🧹 **CODE STANDARDS & CLEANUP GUIDELINES** *(Updated 2025-09-07)*
+
+### **✅ MANDATORY STANDARDS**
+
+#### **Frontend Component Standards**
+```typescript
+// ✅ CORRECT: Use shared components and consolidated patterns
+import { ContentManager } from '@/components/content/ContentManager';
+import { PageLayout } from '@/components/shared/PageLayout';
+
+export default function MyPage() {
+  return <ContentManager mode="all" />;  // Simple, reusable
+}
+
+// ❌ AVOID: Creating new duplicate pages with repeated UI logic
+export default function MyPage() {
+  const [content, setContent] = useState([]); // Duplicates ContentManager logic
+  // 400+ lines of repeated filtering, UI, and state management
+}
+```
+
+#### **Hook Consolidation Standards**
+```typescript
+// ✅ CORRECT: Use consolidated hooks
+import { useUploadConsolidated } from '@/hooks/useUploadConsolidated';
+// OR maintain existing manual edits
+import { useUpload } from '@/hooks/useUpload'; // Preserved due to manual edits
+
+// ❌ AVOID: Creating new duplicate hooks
+const useCustomUpload = () => { /* duplicate functionality */ };
+```
+
+#### **RBAC Integration Standards**
+```typescript
+// ✅ CORRECT: Proper RBAC usage
+import { CompanyRole, CompanyType } from '@/types/auth';
+const { hasRole, hasPermission, isHostCompany, isAdvertiserCompany } = useAuth();
+
+// Company type checks
+if (isHostCompany()) { /* HOST specific logic */ }
+if (isAdvertiserCompany()) { /* ADVERTISER specific logic */ }
+
+// Role checks
+if (hasRole(CompanyRole.ADMIN)) { /* Admin specific logic */ }
+
+// Permission checks
+if (hasPermission('content', 'create')) { /* Action allowed */ }
+
+// ❌ AVOID: String-based role checks
+if (hasRole('HOST')) { /* TypeScript error */ }
+if (hasRole('ADVERTISER')) { /* TypeScript error */ }
+```
+
+### **📋 COMPONENT CONSOLIDATION RULES**
+
+#### **Content Management**
+- **ALWAYS** use `ContentManager` component for content-related pages
+- **NEVER** create duplicate content filtering, listing, or management UI
+- **Modes available**: 'all', 'user', 'review', 'upload', 'unified'
+
+#### **Page Layout**
+- **ALWAYS** use `PageLayout` component for consistent page structure
+- **INCLUDES**: Loading states, error handling, consistent styling
+- **PROPS**: title, description, actions, loading, error
+
+#### **Upload Functionality**
+- **PREFER** `useUploadConsolidated` for new implementations
+- **PRESERVE** existing `useUpload` if manually edited
+- **NEVER** create new upload hooks without consolidating existing ones
+
+### **🚫 ANTI-PATTERNS TO AVOID**
+
+1. **Duplicate Function Names**: Always check for existing function names before creating new ones
+2. **Multiple Export Defaults**: Only one default export per file
+3. **Repeated UI Logic**: Use shared components instead of copying code
+4. **String-based RBAC**: Use proper enums and type-safe functions
+5. **Manual Permission Checks**: Use established permission helper functions
+
 ## 🏗️ **TECHNOLOGY STACK**
 
 ### **Backend - FastAPI with Advanced RBAC**
@@ -18,6 +96,11 @@ You are working on **Adara Screen Digital Signage Platform**, a comprehensive **
 # Location: backend/content_service/
 # Package Manager: UV (fast Python package installer)
 # Purpose: RBAC-enforced content management, authentication, and business logic
+
+# ⚠️ BACKEND CLEANUP IN PROGRESS:
+# - Consolidating auth.py (645 lines) and auth_service.py (206 lines)
+# - Moving /routes/ content to /api/ directory
+# - Standardizing authentication imports
 
 Key Dependencies (pyproject.toml):
 - fastapi[email,mail]>=0.116.1    # API framework with email support
@@ -35,6 +118,11 @@ Key Dependencies (pyproject.toml):
 // Technology: Next.js 15 + React 19 + TypeScript + Tailwind CSS + shadcn/ui
 // Location: frontend/
 // Purpose: Permission-based web dashboard with dynamic UI controls
+
+// ✅ CONSOLIDATED COMPONENTS:
+// - ContentManager.tsx - Unified content management
+// - PageLayout.tsx - Standardized page wrapper
+// - useUploadConsolidated.ts - Merged upload functionality
 
 Key Features:
 - PermissionGate.tsx - Conditional rendering based on permissions

@@ -1,4 +1,4 @@
-# Claude.md - Comprehensive Application Understanding
+# Claude.md - Comprehensive Application Understanding & Cleanup Guide
 
 ## 📋 **PROJECT OVERVIEW**
 
@@ -12,6 +12,84 @@
 - **HOST Companies**: Own physical screens/kiosks, manage devices and locations  
 - **ADVERTISER Companies**: Create content, participate in content sharing workflows
 - **Platform**: Facilitates secure content distribution with advanced permission controls and revenue sharing
+
+## 🧹 **CODE CLEANUP STATUS & STANDARDS** *(Updated 2025-09-07)*
+
+### **✅ COMPLETED CLEANUPS**
+
+#### **Frontend Consolidation**
+- **✅ Content Management Pages**: Eliminated 4 duplicate content pages
+  - `/dashboard/content/page.tsx` - Consolidated to use ContentManager (585 lines → 5 lines)
+  - `/dashboard/my-ads/page.tsx` - Consolidated to use ContentManager (103 lines → 5 lines)
+  - Created unified `ContentManager` component for all content operations
+  - **Before**: Separate duplicate pages with repeated UI, filters, and logic
+  - **After**: Single reusable ContentManager with mode-based rendering
+
+- **✅ Shared Components Created**:
+  - `PageLayout.tsx` - Standardized page wrapper with loading states and error handling
+  - `ContentManager.tsx` - Unified content management with RBAC integration
+  - Uses consistent shadcn/ui components and styling patterns
+
+- **✅ Upload Hook Consolidation**:
+  - Created `useUploadConsolidated.ts` merging functionality from duplicate hooks
+  - **Note**: Original `useUpload.ts` preserved due to manual edits, both coexist for now
+
+- **✅ Unified Dashboard Integration**:
+  - Added ContentManager to unified dashboard as new "Content" tab
+  - Fixed TypeScript errors related to company role checks
+  - Replaced string-based role checks with proper enum usage (`CompanyRole.ADMIN`)
+  - Used `isHostCompany()` and `isAdvertiserCompany()` for company type checks
+
+#### **Standards Established**
+- **Component Structure**: All new components use shadcn/ui with consistent props pattern
+- **RBAC Integration**: Proper use of `hasRole()`, `hasPermission()`, `isHostCompany()`, `isAdvertiserCompany()`
+- **TypeScript**: Strict typing with proper enum usage (`CompanyRole`, `CompanyType`, `UserType`)
+- **Error Handling**: Consistent error states and loading patterns across components
+
+### **🔄 IN PROGRESS**
+
+#### **Backend Auth Consolidation** *(Next Priority)*
+- **Issues Identified**:
+  - `/app/auth.py` (645 lines) - Large auth file with JWT and password handling
+  - `/app/auth_service.py` (206 lines) - Clean authentication service
+  - `/app/api/auth.py` (108 lines) - Authentication API endpoints
+  - Mixed imports across codebase using both auth systems
+
+- **Cleanup Strategy**:
+  - Keep `auth_service.py` as core service (cleaner, more focused)
+  - Migrate missing functionality from `auth.py` to `auth_service.py`
+  - Keep `/api/auth.py` for API endpoints
+  - Remove duplicate `auth.py`
+  - Update all imports to use consolidated system
+
+#### **API Structure Consolidation**
+- **Issues Identified**:
+  - `/app/api/` directory with most endpoints (20+ files)
+  - `/app/routes/` directory with only `content.py` and `overlay.py`
+  - Inconsistent import patterns
+
+- **Cleanup Strategy**:
+  - Move `content.py` and `overlay.py` from `/routes/` to `/api/`
+  - Remove `/routes/` directory
+  - Update all imports and main.py route registration
+  - Standardize API organization under single `/api/` structure
+
+### **📋 PENDING CLEANUP TASKS**
+
+1. **Flutter Architecture Cleanup**:
+   - Resolve `/screens/` vs `/pages/` directory confusion
+   - Implement consistent naming conventions
+   - Consolidate duplicate navigation patterns
+
+2. **Upload System Unification**:
+   - Fully replace `useUpload.ts` with `useUploadConsolidated.ts`
+   - Update all components to use consolidated hook
+   - Remove legacy upload implementations
+
+3. **ContentManager Enhancement**:
+   - Add remaining modes ('review', 'upload') to ContentManager
+   - Replace more duplicate content-related pages
+   - Implement consistent action handlers across all modes
 
 ## 🏗️ **ARCHITECTURE OVERVIEW**
 

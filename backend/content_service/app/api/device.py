@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.repo import repo
 from app.device_auth import device_auth_service
+from app.database_service import db_service
 # from app.enhanced_device_registration import enhanced_device_registration
 import secrets
 import string
@@ -92,9 +93,9 @@ async def create_registration_key(
     """Create a new registration key for a company"""
     logger.info(f"Creating registration key for company: {key_request.company_id}")
     try:
-        # Verify the company exists and is a HOST company
-        companies = await repo.list_companies()
-        company = next((c for c in companies if c.get("id") == key_request.company_id), None)
+        # Verify the company exists and is a HOST company using db_service
+        companies = await db_service.list_companies()
+        company = next((c for c in companies if c.id == key_request.company_id), None)
         
         if not company:
             logger.warning(f"Company not found: {key_request.company_id}")
@@ -104,8 +105,8 @@ async def create_registration_key(
             )
         
         # Only HOST companies can generate registration keys for devices
-        if company.get("type") != "HOST":
-            logger.warning(f"Registration key generation denied for non-HOST company: {company.get('name')} (type: {company.get('type')})")
+        if company.company_type != "HOST":
+            logger.warning(f"Registration key generation denied for non-HOST company: {company.name} (type: {company.company_type})")
             raise HTTPException(
                 status_code=400,
                 detail="Registration keys can only be generated for HOST companies"
@@ -134,7 +135,7 @@ async def create_registration_key(
             "success": True,
             "registration_key": key,
             "company_id": key_request.company_id,
-            "company_name": company.get("name"),
+            "company_name": company.name,
             "expires_at": key_request.expires_at.isoformat() if key_request.expires_at else None,
             "message": "Registration key generated successfully"
         }
@@ -554,12 +555,26 @@ async def generate_registration_qr(company_id: str, key_id: Optional[str] = None
 async def get_registration_keys():
     """Get all registration keys with company information"""
     try:
-        # Get all registration keys
-        keys = await repo.list_device_registration_keys()
+        # Connect to MongoDB directly to get registration keys
+        from motor.motor_asyncio import AsyncIOMotorClient
+        from app.config import settings
         
-        # Get all companies for lookup
-        companies = await repo.list_companies()
-        company_lookup = {c.get("id"): c for c in companies}
+        mongo_uri = settings.MONGO_URI
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.openkiosk
+        
+        # Get all registration keys directly from MongoDB
+        keys_collection = db.device_registration_keys
+        keys = []
+        async for key_doc in keys_collection.find():
+            # Convert ObjectIds to strings
+            if "_id" in key_doc:
+                key_doc["_id"] = str(key_doc["_id"])
+            keys.append(key_doc)
+        
+        # Get all companies for lookup using db_service
+        companies = await db_service.list_companies()
+        company_lookup = {c.id: c for c in companies}
         
         # Enhance keys with company information, skipping orphaned keys
         enhanced_keys = []
@@ -568,14 +583,15 @@ async def get_registration_keys():
             if company:  # Only include keys with valid company associations
                 enhanced_key = {
                     **key,
-                    "company_name": company.get("name"),
-                    "organization_code": company.get("organization_code"),
+                    "company_name": company.name,
+                    "organization_code": company.organization_code,
                 }
                 enhanced_keys.append(convert_objectid_to_str(enhanced_key))
             else:
                 # Log orphaned key for monitoring
                 logger.warning(f"Skipping orphaned registration key {key.get('key')} with invalid company_id {key.get('company_id')}")
         
+        client.close()
         return enhanced_keys
         
     except Exception as e:

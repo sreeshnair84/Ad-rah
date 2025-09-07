@@ -252,7 +252,7 @@ class DatabaseService:
         return Company(**company_doc)
     
     async def get_company(self, company_id: str) -> Optional[Company]:
-        company = await self.db.companies.find_one({"id": company_id})
+        company = await self.db.companies.find_one({"_id": company_id})
         if not company:
             return None
         company = self._object_id_to_str(company)
