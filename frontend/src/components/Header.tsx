@@ -122,7 +122,7 @@ export function Header({
                 <span className="text-sm font-bold text-white">A</span>
               </div>
               <div>
-                <h2 className="text-sm font-semibold">Adārah</h2>
+                <h2 className="text-sm font-semibold">Adara Screen</h2>
                 <p className="text-xs text-muted-foreground">Platform</p>
               </div>
             </div>

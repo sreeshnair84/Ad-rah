@@ -1,0 +1,22 @@
+{
+  "timestamp": "2025-09-07T18:32:29.119819",
+  "results": [
+    {
+      "user": "admin@adara.com",
+      "status": "SUCCESS",
+      "permissions": 27,
+      "navigation": 23
+    },
+    {
+      "user": "admin@dubaimall-displays.com",
+      "status": "SUCCESS",
+      "permissions": 27,
+      "navigation": 18
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "successful": 2,
+    "failed": 0
+  }
+}

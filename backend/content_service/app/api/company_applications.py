@@ -15,7 +15,7 @@ from app.models import (
 )
 from app.repo import repo
 from app.api.auth import get_current_user
-from app.services.auth_service import AuthService
+# from app.services.auth_service import AuthService  # Removed - unused import
 from app.auth import get_password_hash  # Import password hashing function
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])

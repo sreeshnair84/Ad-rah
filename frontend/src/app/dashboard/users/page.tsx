@@ -112,7 +112,7 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -185,7 +185,7 @@ export default function UsersPage() {
   // Fetch companies for dropdown
   const fetchCompanies = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/companies', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -250,7 +250,7 @@ export default function UsersPage() {
   // Create new user
   const handleCreateUser = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/users', {
         method: 'POST',
         headers: {
@@ -278,7 +278,7 @@ export default function UsersPage() {
     if (!selectedUser) return;
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
@@ -308,7 +308,7 @@ export default function UsersPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/users/${userId}`, {
         method: 'DELETE',
         headers: {

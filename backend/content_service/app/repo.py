@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from app.models import (
     ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, 
     UserInvitation, PasswordResetToken, CompanyApplication, CompanyApplicationStatus, 
-    DigitalScreen, DeviceRegistrationKey, ContentCategory, ContentTag, HostPreference,
+    DigitalScreen, DigitalTwin, DeviceRegistrationKey, ContentCategory, ContentTag, HostPreference,
     DeviceCredentials, DeviceHeartbeat, DeviceFingerprint, DeviceCapabilities
 )
 from app.config import settings
@@ -396,6 +396,31 @@ class InMemoryRepo:
 
     async def get_digital_screen(self, _id: str) -> Optional[dict]:
         return self._store.get("__digital_screens__", {}).get(_id)
+
+    async def save_digital_twin(self, twin: DigitalTwin) -> dict:
+        async with self._lock:
+            twins = self._store.setdefault("__digital_twins__", {})
+            twin.id = twin.id or str(len(twins) + 1) + "-dt"
+            twins[twin.id] = twin.model_dump(exclude_none=True)
+            return twins[twin.id]
+
+    async def get_digital_twin(self, _id: str) -> Optional[dict]:
+        return self._store.get("__digital_twins__", {}).get(_id)
+
+    async def list_digital_twins(self, company_id: Optional[str] = None) -> List[dict]:
+        async with self._lock:
+            twins = self._store.get("__digital_twins__", {}).values()
+            if company_id:
+                return [twin for twin in twins if twin.get("company_id") == company_id]
+            return list(twins)
+
+    async def get_digital_twin_by_screen(self, screen_id: str) -> Optional[dict]:
+        async with self._lock:
+            twins = self._store.get("__digital_twins__", {}).values()
+            for twin in twins:
+                if twin.get("screen_id") == screen_id:
+                    return twin
+            return None
 
     # Device operations (for new RBAC system)
     async def save_device(self, device_data: dict) -> dict:
@@ -1396,6 +1421,30 @@ class MongoRepo:
 
     async def get_digital_screen(self, _id: str) -> Optional[dict]:
         return await self._digital_screen_col.find_one({"id": _id})
+
+    # DigitalTwin operations
+    @property
+    def _digital_twin_col(self):
+        return self._db["digital_twins"]
+
+    async def save_digital_twin(self, twin: DigitalTwin) -> dict:
+        data = twin.model_dump(exclude_none=True)
+        if not data.get("id"):
+            import uuid
+            data["id"] = str(uuid.uuid4())
+        await self._digital_twin_col.replace_one({"id": data["id"]}, data, upsert=True)
+        return data
+
+    async def get_digital_twin(self, _id: str) -> Optional[dict]:
+        return await self._digital_twin_col.find_one({"id": _id})
+
+    async def list_digital_twins(self, company_id: Optional[str] = None) -> List[dict]:
+        query = {"company_id": company_id} if company_id else {}
+        cursor = self._digital_twin_col.find(query).sort("created_at", -1)
+        return [doc async for doc in cursor]
+
+    async def get_digital_twin_by_screen(self, screen_id: str) -> Optional[dict]:
+        return await self._digital_twin_col.find_one({"screen_id": screen_id})
 
     # Device operations (for new RBAC system)
     @property

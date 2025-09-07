@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive End-to-End RBAC Testing Script
-Adārah Digital Signage Platform - Enhanced RBAC System
+Adara Screen Digital Signage Platform - Enhanced RBAC System
 
 This script tests all persona-based access scenarios and API functionality
 """
@@ -31,42 +31,42 @@ TEST_PERSONAS = {
     "HOST_ADMIN": {
         "email": "admin@dubaimall-displays.com", 
         "password": "HostAdmin123!",
-        "expected_permissions": 27,  # Full company permissions
+        "expected_permissions": 23,  # HOST company admin permissions (no device sharing)
         "expected_navigation": ["dashboard", "users", "content", "upload", "analytics", "settings"],
         "description": "HOST Company Administrator"
     },
     "HOST_REVIEWER": {
         "email": "reviewer@dubaimall-displays.com",
         "password": "HostReviewer123!",
-        "expected_permissions": 11,  # Limited permissions
+        "expected_permissions": 9,   # HOST reviewer permissions
         "expected_navigation": ["dashboard", "users", "content", "analytics"],
         "description": "HOST Company Reviewer (Limited Access)"
     },
     "HOST_EDITOR": {
         "email": "editor@dubaimall-displays.com",
         "password": "HostEditor123!",
-        "expected_permissions": 7,  # Basic content permissions
+        "expected_permissions": 6,   # HOST editor permissions
         "expected_navigation": ["dashboard", "content", "upload", "analytics"],
         "description": "HOST Company Editor"
     },
     "HOST_VIEWER": {
         "email": "viewer@dubaimall-displays.com", 
         "password": "HostViewer123!",
-        "expected_permissions": 5,  # Minimal permissions
+        "expected_permissions": 3,   # HOST viewer permissions
         "expected_navigation": ["dashboard", "content", "upload", "analytics"],
         "description": "HOST Company Viewer (Read-only)"
     },
     "ADVERTISER_ADMIN": {
         "email": "admin@emirates-digital.ae",
         "password": "AdvAdmin123!",
-        "expected_permissions": 19,  # No device permissions
+        "expected_permissions": 15,  # ADVERTISER admin permissions (no device management)
         "expected_navigation": ["dashboard", "users", "content", "upload", "analytics", "settings"],
         "description": "ADVERTISER Company Administrator"
     },
     "ADVERTISER_REVIEWER": {
         "email": "reviewer@emirates-digital.ae",
         "password": "AdvReviewer123!",
-        "expected_permissions": 9,   # Limited permissions
+        "expected_permissions": 7,   # ADVERTISER reviewer permissions
         "expected_navigation": ["dashboard", "users", "content", "analytics"],
         "description": "ADVERTISER Company Reviewer"
     }
@@ -273,7 +273,7 @@ class RBACTester:
         """Run the complete RBAC test suite"""
         print(f"""
 {'='*80}
-🚀 ADĀRAH DIGITAL SIGNAGE PLATFORM - COMPREHENSIVE RBAC TEST SUITE
+🚀 Adara Screen DIGITAL SIGNAGE PLATFORM - COMPREHENSIVE RBAC TEST SUITE
 {'='*80}
 Testing {len(TEST_PERSONAS)} personas with enhanced RBAC system
 Base URL: {BASE_URL}

@@ -147,7 +147,7 @@ export default function ContentOverlayPage() {
   // Fetch approved content
   const fetchApprovedContent = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/content/approved', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -162,7 +162,7 @@ export default function ContentOverlayPage() {
   // Fetch screens
   const fetchScreens = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/screens', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -180,7 +180,7 @@ export default function ContentOverlayPage() {
   // Fetch overlays for selected screen
   const fetchOverlays = useCallback(async (screenId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${screenId}/overlays`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -349,7 +349,7 @@ export default function ContentOverlayPage() {
     if (isDragging && selectedOverlay) {
       // Save position to backend
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('access_token');
         await fetch(`/api/screens/${selectedScreen?.id}/overlays/${selectedOverlay.id}`, {
           method: 'PUT',
           headers: {
@@ -371,7 +371,7 @@ export default function ContentOverlayPage() {
   // Create overlay
   const handleCreateOverlay = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${selectedScreen?.id}/overlays`, {
         method: 'POST',
         headers: {
@@ -396,7 +396,7 @@ export default function ContentOverlayPage() {
   // Deploy overlay to digital twin
   const handleDeployToDigitalTwin = async (overlayId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${selectedScreen?.id}/overlays/${overlayId}/deploy`, {
         method: 'POST',
         headers: {
@@ -437,7 +437,7 @@ export default function ContentOverlayPage() {
     if (!confirm('Are you sure you want to delete this overlay?')) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${selectedScreen?.id}/overlays/${overlayId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }

@@ -32,16 +32,16 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required for upload');
       }
 
       const formData = new FormData();
       formData.append('owner_id', ownerId);
-      formData.append('files', file);
+      formData.append('file', file);  // Backend expects 'file' not 'files'
 
-      const response = await fetch('/api/uploads/media', {
+      const response = await fetch('/api/content/upload-file', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -74,7 +74,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -125,7 +125,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -156,7 +156,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -187,7 +187,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -231,7 +231,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -268,7 +268,7 @@ export function useContent() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Authentication required');
       }

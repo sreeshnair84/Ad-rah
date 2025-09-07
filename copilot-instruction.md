@@ -1,8 +1,8 @@
-# GitHub Copilot Instructions for Adārah Digital Signage Platform
+# GitHub Copilot Instructions for Adara Screen Digital Signage Platform
 
 ## 🎯 **PROJECT OVERVIEW**
 
-You are working on **Adārah Digital Signage Platform**, a comprehensive **multi-tenant digital signage and content management platform** with advanced **Role-Based Access Control (RBAC)**. This enterprise-grade system connects **HOST companies** (screen/location owners) with **ADVERTISER companies** (content creators) through a sophisticated content distribution and revenue-sharing platform.
+You are working on **Adara Screen Digital Signage Platform**, a comprehensive **multi-tenant digital signage and content management platform** with advanced **Role-Based Access Control (RBAC)**. This enterprise-grade system connects **HOST companies** (screen/location owners) with **ADVERTISER companies** (content creators) through a sophisticated content distribution and revenue-sharing platform.
 
 ### **Core Business Model**
 - **HOST Companies**: Own physical screens/kiosks with device management capabilities
@@ -355,4 +355,4 @@ host@techcorpsolutions.com / hostpass
 director@creativeadsinc.com / advertiserpass
 ```
 
-This focused instruction set provides everything needed to work effectively with the Adārah Digital Signage Platform's RBAC system and UV package management.
+This focused instruction set provides everything needed to work effectively with the Adara Screen Digital Signage Platform's RBAC system and UV package management.

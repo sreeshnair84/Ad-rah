@@ -11,7 +11,7 @@ export function useAuth() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   const apiCall = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('access_token');
     
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
@@ -26,7 +26,7 @@ export function useAuth() {
       const errorData = await response.json().catch(() => ({}));
       
       if (response.status === 401) {
-        localStorage.removeItem('token');
+        localStorage.removeItem('access_token');
         setUser(null);
         throw new Error('Unauthorized');
       }
@@ -38,7 +38,7 @@ export function useAuth() {
   };
 
   const getCurrentUser = useCallback(async (): Promise<UserProfile | null> => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('access_token');
     if (!token) {
       setUser(null);
       setIsInitialized(true);
@@ -55,7 +55,7 @@ export function useAuth() {
       return userData;
     } catch (err) {
       console.error('Failed to get user:', err);
-      localStorage.removeItem('token');
+      localStorage.removeItem('access_token');
       setUser(null);
       setError(err instanceof Error ? err.message : 'Failed to get user');
       setIsInitialized(true);
@@ -79,7 +79,7 @@ export function useAuth() {
         body: JSON.stringify(credentials),
       });
 
-      localStorage.setItem('token', response.access_token);
+      localStorage.setItem('access_token', response.access_token);
       setUser(response.user);
       return response.user;
     } catch (err) {
@@ -97,7 +97,7 @@ export function useAuth() {
     } catch (err) {
       console.error('Error during logout:', err);
     } finally {
-      localStorage.removeItem('token');
+      localStorage.removeItem('access_token');
       setUser(null);
       setError(null);
     }

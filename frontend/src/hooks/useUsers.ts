@@ -22,7 +22,7 @@ export function useUsers() {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -69,7 +69,7 @@ export function useUsers() {
     roles: Array<{ company_id: string; role: string; is_default: boolean }>;
   }) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -105,7 +105,7 @@ export function useUsers() {
 
   const deleteUser = async (userId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }

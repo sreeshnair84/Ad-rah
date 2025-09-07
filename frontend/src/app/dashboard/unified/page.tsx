@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 // Import existing components
-import ContentUploadForm from '../upload/content-upload-form';
+import UnifiedUploadPage from '@/components/upload/UnifiedUploadPage';
 import OverlayManagement from '../overlays/overlay-management';
 import ContentApproval from '../approval/content-approval';
 
@@ -50,7 +50,7 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
     try {
       const response = await fetch('/api/dashboard/stats', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
       });
       if (response.ok) {
@@ -202,16 +202,16 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
 
   const renderUploadTab = () => (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Upload Content</h2>
-        <p className="text-muted-foreground">
-          Upload your advertisement content for review and approval by the host
-        </p>
-      </div>
-      <ContentUploadForm onUploadComplete={() => {
-        fetchDashboardStats();
-        setActiveTab('overview');
-      }} />
+      <UnifiedUploadPage
+        mode="simple"
+        title="Upload Advertisement"
+        description="Upload your advertisement content for review and approval by the host"
+        redirectPath="/dashboard/unified"
+        onUploadComplete={() => {
+          fetchDashboardStats();
+          setActiveTab('overview');
+        }}
+      />
     </div>
   );
 

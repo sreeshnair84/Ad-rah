@@ -55,52 +55,79 @@ class Permission(str, Enum):
     SETTINGS_MANAGE = "settings_manage"
     DASHBOARD_VIEW = "dashboard_view"
 
-# Permission matrix for roles
+# Permission matrix for roles - Fixed for proper HOST/ADVERTISER differentiation
 ROLE_PERMISSIONS = {
     "SUPER_USER": list(Permission),
     "HOST": {
         CompanyRole.ADMIN: [
+            # User Management - Full control for admins
             Permission.USER_CREATE, Permission.USER_READ, Permission.USER_UPDATE, Permission.USER_DELETE,
+            # Content Management - Full control including sharing
             Permission.CONTENT_CREATE, Permission.CONTENT_READ, Permission.CONTENT_UPDATE, Permission.CONTENT_DELETE,
             Permission.CONTENT_UPLOAD, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT, Permission.CONTENT_SHARE,
-            Permission.CONTENT_MODERATE, Permission.DEVICE_CREATE, Permission.DEVICE_READ, Permission.DEVICE_UPDATE,
-            Permission.DEVICE_DELETE, Permission.DEVICE_REGISTER, Permission.DEVICE_CONTROL, Permission.DEVICE_MONITOR,
+            Permission.CONTENT_MODERATE,
+            # Device Management - Full control (HOST companies own devices)
+            Permission.DEVICE_CREATE, Permission.DEVICE_READ, Permission.DEVICE_UPDATE, Permission.DEVICE_DELETE,
+            Permission.DEVICE_REGISTER, Permission.DEVICE_CONTROL, Permission.DEVICE_MONITOR,
+            # Analytics and Settings - Full access
             Permission.ANALYTICS_READ, Permission.ANALYTICS_EXPORT, Permission.ANALYTICS_REPORTS,
-            Permission.SETTINGS_READ, Permission.SETTINGS_UPDATE, Permission.SETTINGS_MANAGE, Permission.DASHBOARD_VIEW
+            Permission.SETTINGS_READ, Permission.SETTINGS_UPDATE, Permission.SETTINGS_MANAGE, 
+            Permission.DASHBOARD_VIEW
         ],
         CompanyRole.REVIEWER: [
-            Permission.USER_READ, Permission.CONTENT_READ, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT,
-            Permission.CONTENT_MODERATE, Permission.DEVICE_READ, Permission.DEVICE_CONTROL, Permission.DEVICE_MONITOR,
+            # User Management - Read only
+            Permission.USER_READ, 
+            # Content Management - Review and moderate
+            Permission.CONTENT_READ, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT, Permission.CONTENT_MODERATE,
+            # Device Management - Monitor only
+            Permission.DEVICE_READ, Permission.DEVICE_MONITOR,
+            # Analytics - View reports
             Permission.ANALYTICS_READ, Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
         ],
         CompanyRole.EDITOR: [
+            # Content Management - Create and edit
             Permission.CONTENT_CREATE, Permission.CONTENT_READ, Permission.CONTENT_UPDATE, Permission.CONTENT_UPLOAD,
+            # Analytics - View basic analytics
             Permission.ANALYTICS_READ, Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
         ],
         CompanyRole.VIEWER: [
-            Permission.CONTENT_READ, Permission.CONTENT_UPLOAD, Permission.ANALYTICS_READ,
-            Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
+            # Content Management - View and upload only
+            Permission.CONTENT_READ, Permission.CONTENT_UPLOAD,
+            # Analytics - Basic viewing
+            Permission.ANALYTICS_READ, Permission.DASHBOARD_VIEW
         ]
     },
     "ADVERTISER": {
         CompanyRole.ADMIN: [
+            # User Management - Full control within company
             Permission.USER_CREATE, Permission.USER_READ, Permission.USER_UPDATE, Permission.USER_DELETE,
+            # Content Management - Full control (no sharing, no device management)
             Permission.CONTENT_CREATE, Permission.CONTENT_READ, Permission.CONTENT_UPDATE, Permission.CONTENT_DELETE,
             Permission.CONTENT_UPLOAD, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT, Permission.CONTENT_MODERATE,
+            # Analytics and Settings - Full access to company data
             Permission.ANALYTICS_READ, Permission.ANALYTICS_EXPORT, Permission.ANALYTICS_REPORTS,
-            Permission.SETTINGS_READ, Permission.SETTINGS_UPDATE, Permission.SETTINGS_MANAGE, Permission.DASHBOARD_VIEW
+            Permission.SETTINGS_READ, Permission.SETTINGS_UPDATE, Permission.SETTINGS_MANAGE,
+            Permission.DASHBOARD_VIEW
         ],
         CompanyRole.REVIEWER: [
-            Permission.USER_READ, Permission.CONTENT_READ, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT,
-            Permission.CONTENT_MODERATE, Permission.ANALYTICS_READ, Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
+            # User Management - Read only
+            Permission.USER_READ,
+            # Content Management - Review and moderate content
+            Permission.CONTENT_READ, Permission.CONTENT_APPROVE, Permission.CONTENT_REJECT, Permission.CONTENT_MODERATE,
+            # Analytics - View reports
+            Permission.ANALYTICS_READ, Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
         ],
         CompanyRole.EDITOR: [
+            # Content Management - Create and edit ads/content
             Permission.CONTENT_CREATE, Permission.CONTENT_READ, Permission.CONTENT_UPDATE, Permission.CONTENT_UPLOAD,
+            # Analytics - View basic analytics
             Permission.ANALYTICS_READ, Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
         ],
         CompanyRole.VIEWER: [
-            Permission.CONTENT_READ, Permission.CONTENT_UPLOAD, Permission.ANALYTICS_READ,
-            Permission.ANALYTICS_REPORTS, Permission.DASHBOARD_VIEW
+            # Content Management - View and basic upload
+            Permission.CONTENT_READ, Permission.CONTENT_UPLOAD,
+            # Analytics - Basic viewing
+            Permission.ANALYTICS_READ, Permission.DASHBOARD_VIEW
         ]
     }
 }

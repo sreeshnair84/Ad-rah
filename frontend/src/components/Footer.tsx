@@ -8,7 +8,7 @@ export function Footer() {
             <div className="flex items-center gap-2">
               <span className="text-gray-600 text-sm">© {new Date().getFullYear()}</span>
               <span className="font-semibold text-gray-900 text-lg">
-                Adārah from Hebron™
+                Adara Screen from Hebron™
               </span>
             </div>
             <div className="hidden lg:block w-px h-4 bg-gray-300"></div>

@@ -11,7 +11,7 @@ export function useCompanies() {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       
       const response = await fetch('/api/companies/', {
         headers: token ? {
@@ -38,7 +38,7 @@ export function useCompanies() {
 
   const addCompany = async (companyData: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -66,7 +66,7 @@ export function useCompanies() {
 
   const updateCompany = async (companyId: string, companyData: Partial<Company>) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -96,7 +96,7 @@ export function useCompanies() {
 
   const deleteCompany = async (companyId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('No authentication token found');
       }

@@ -1,5 +1,5 @@
 """
-Content Delivery Module for Adarah Digital Signage Platform
+Content Delivery Module for Adara Digital Signage Platform
 Provides secure content distribution, scheduling, and proof-of-play verification
 """
 

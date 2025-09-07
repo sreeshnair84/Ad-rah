@@ -1,5 +1,5 @@
 """
-Analytics Module for Adarah Digital Signage Platform
+Analytics Module for Adara Digital Signage Platform
 Provides real-time analytics, audience measurement, and performance insights
 Essential for advertising effectiveness measurement and business optimization
 """

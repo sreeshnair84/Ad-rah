@@ -190,7 +190,7 @@ export default function RolesManagementPage() {
     if (!newRole.name || !newRole.company_id) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/roles', {
         method: 'POST',
         headers: {
@@ -218,7 +218,7 @@ export default function RolesManagementPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/roles/${roleId}`, {
         method: 'DELETE',
         headers: {
@@ -245,7 +245,7 @@ export default function RolesManagementPage() {
         permissions: perms
       }));
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/roles/${selectedRole.id}/permissions`, {
         method: 'POST',
         headers: {

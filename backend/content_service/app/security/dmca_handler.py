@@ -409,7 +409,7 @@ We will review your request and take appropriate action within 24 hours. You wil
 If you have any questions, please contact us at {self.dmca_email}.
 
 Best regards,
-Adarah Digital Signage DMCA Team
+Adara Digital Signage DMCA Team
 \"\"\"
             
             await self._send_email(request.copyright_holder_email, subject, body)
@@ -438,7 +438,7 @@ Per DMCA requirements, we have forwarded your counter notice to the original cop
 Expected Restore Date: {notice.restore_deadline.strftime('%Y-%m-%d') if notice.restore_deadline else 'TBD'}
 
 Best regards,
-Adarah Digital Signage DMCA Team
+Adara Digital Signage DMCA Team
 \"\"\"
             
             await self._send_email(notice.user_email, subject, body)
@@ -490,7 +490,7 @@ If you believe the counter notice is invalid or wish to prevent restoration, you
 Restoration Date: {counter_notice.restore_deadline.strftime('%Y-%m-%d') if counter_notice.restore_deadline else 'TBD'}
 
 Best regards,
-Adarah Digital Signage DMCA Team
+Adara Digital Signage DMCA Team
 \"\"\"
             
             await self._send_email(takedown.copyright_holder_email, subject, body)

@@ -94,7 +94,7 @@ export default function ReviewQueuePage() {
   const fetchPendingContent = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/content/admin/pending', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -161,7 +161,7 @@ export default function ReviewQueuePage() {
   const handleApprove = async (contentId: string) => {
     try {
       setActionInProgress(contentId);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('reviewer_id', user?.id || '');
       formData.append('notes', reviewNotes || 'Approved by reviewer');
@@ -201,7 +201,7 @@ export default function ReviewQueuePage() {
 
     try {
       setActionInProgress(contentId);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('reviewer_id', user?.id || '');
       formData.append('notes', reviewNotes);

@@ -91,13 +91,17 @@ class DatabaseService:
         return self._object_id_to_str(user) if user else None
     
     async def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
-        # Query by MongoDB _id since that's how users are actually stored
-        from bson import ObjectId
-        try:
-            user = await self.db.users.find_one({"_id": ObjectId(user_id), "is_active": True})
-        except:
-            # Fallback: try querying by id field in case it exists
-            user = await self.db.users.find_one({"id": user_id, "is_active": True})
+        # First try querying by id field (from JWT token)
+        user = await self.db.users.find_one({"id": user_id, "is_active": True})
+        
+        # Fallback: try querying by MongoDB _id in case it's provided
+        if not user:
+            try:
+                from bson import ObjectId
+                user = await self.db.users.find_one({"_id": ObjectId(user_id), "is_active": True})
+            except:
+                pass  # Invalid ObjectId format
+                
         if not user:
             return None
         
@@ -106,7 +110,11 @@ class DatabaseService:
         # Get company data
         company = None
         if user.get("company_id"):
-            company_doc = await self.db.companies.find_one({"_id": user["company_id"]})
+            # Try by id field first (standard approach)
+            company_doc = await self.db.companies.find_one({"id": user["company_id"]})
+            # Fallback to _id field
+            if not company_doc:
+                company_doc = await self.db.companies.find_one({"_id": user["company_id"]})
             if company_doc:
                 company = self._object_id_to_str(company_doc)
         

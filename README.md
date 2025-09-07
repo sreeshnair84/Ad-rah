@@ -1,4 +1,4 @@
-# Adārah Digital Signage Platform
+# Adara Screen Digital Signage Platform
 
 A comprehensive, enterprise-grade digital signage platform with advanced Role-Based Access Control (RBAC), multi-tenant architecture, and AI-powered content moderation.
 

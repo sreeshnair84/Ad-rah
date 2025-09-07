@@ -1,4 +1,4 @@
-# Adārah Digital Signage Platform - Content Service
+# Adara Screen Digital Signage Platform - Content Service
 
 FastAPI content microservice with advanced RBAC, event-driven architecture, and Docker support.
 

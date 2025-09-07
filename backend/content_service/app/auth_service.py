@@ -139,13 +139,26 @@ class AuthService:
         payload = self.verify_token(token)
         user_id = payload["sub"]
         
+        # Log debug info for troubleshooting
+        logger.debug(f"Getting user profile for user_id: {user_id}")
+        
         user_profile = await db_service.get_user_profile(user_id)
         if not user_profile:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
+            # Additional debugging - try to find user by email from token
+            user_email = payload.get("email")
+            if user_email:
+                logger.debug(f"User profile not found by ID, trying email: {user_email}")
+                user_data = await db_service.get_user_by_email(user_email)
+                if user_data:
+                    user_profile = await db_service.get_user_profile(user_data["id"])
+            
+            if not user_profile:
+                logger.error(f"User profile not found for user_id: {user_id}, email: {user_email}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
         
         if not user_profile.is_active:
             raise HTTPException(
@@ -154,6 +167,7 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
+        logger.debug(f"Successfully retrieved user profile for: {user_profile.email}")
         return user_profile
     
     async def register_user(self, user_data: UserCreate) -> UserProfile:

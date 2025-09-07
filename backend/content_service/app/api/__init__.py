@@ -18,7 +18,7 @@ from .websocket import router as websocket_router
 from .debug_roles import router as debug_router
 
 # Import debug token router
-from .debug_token import router as debug_token_router
+# from .debug_token import router as debug_token_router  # Removed - depends on removed auth service
 
 # Import overlays router
 from .overlays import router as overlays_router
@@ -54,7 +54,7 @@ from .dashboard import router as dashboard_router
 from .seed import router as seed_router
 
 # Import temp auth router for debugging
-from .temp_auth import router as temp_auth_router
+# from .temp_auth import router as temp_auth_router  # Removed - temporary debug router
 
 # Import debug config router
 from .debug_config import router as debug_config_router
@@ -75,13 +75,13 @@ api_router.include_router(device_router)
 api_router.include_router(categories_router)
 api_router.include_router(websocket_router)
 api_router.include_router(debug_router)
-api_router.include_router(debug_token_router)
+# api_router.include_router(debug_token_router)  # Removed - depends on removed auth service
 api_router.include_router(overlays_router, prefix="/overlays")
 # api_router.include_router(simple_screens_router, prefix="/screens")  # Disabled - conflicts with main screens router
 api_router.include_router(analytics_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(seed_router)
-api_router.include_router(temp_auth_router, prefix="/temp-auth")
+# api_router.include_router(temp_auth_router, prefix="/temp-auth")  # Removed - temporary debug router
 api_router.include_router(debug_config_router, prefix="/debug")
 
 # Include content delivery router if available

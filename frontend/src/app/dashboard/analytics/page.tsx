@@ -40,7 +40,7 @@ export default function AnalyticsPage() {
       title: "Content Analytics",
       description: "Track content performance and engagement",
       icon: <BarChart3 className="h-8 w-8 text-purple-600" />,
-      href: "/dashboard/my-content",
+      href: "/dashboard/content",
       permission: { resource: "content", action: "read" },
       stats: "Content metrics"
     },

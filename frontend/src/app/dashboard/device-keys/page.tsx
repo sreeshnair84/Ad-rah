@@ -53,6 +53,7 @@ interface Company {
   name: string;
   type: 'HOST' | 'ADVERTISER';
   status: 'active' | 'inactive';
+  organization_code?: string;
 }
 
 export default function DeviceKeysPage() {
@@ -321,7 +322,14 @@ export default function DeviceKeysPage() {
                       <SelectItem key={company.id} value={company.id}>
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4" />
-                          {company.name}
+                          <div className="flex flex-col">
+                            <span className="font-medium">{company.name}</span>
+                            {company.organization_code && (
+                              <span className="text-xs text-gray-500 font-mono">
+                                {company.organization_code}
+                              </span>
+                            )}
+                          </div>
                           <Badge variant={company.type === 'HOST' ? 'default' : 'secondary'}>
                             {company.type}
                           </Badge>
@@ -483,23 +491,27 @@ export default function DeviceKeysPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {key.organization_code ? (
-                        <div className="flex items-center gap-2">
-                          <code className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm font-mono">
-                            {key.organization_code}
-                          </code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyKeyToClipboard(key.organization_code!)}
-                            title="Copy organization code to clipboard"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-sm">-</span>
-                      )}
+                      {(() => {
+                        const company = companies.find(c => c.id === key.company_id);
+                        const orgCode = company?.organization_code;
+                        return orgCode ? (
+                          <div className="flex items-center gap-2">
+                            <code className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm font-mono">
+                              {orgCode}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyKeyToClipboard(orgCode)}
+                              title="Copy organization code to clipboard"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

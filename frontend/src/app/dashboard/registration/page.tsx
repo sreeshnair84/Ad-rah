@@ -170,7 +170,7 @@ export default function RegistrationManagementPage() {
 
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/company-applications/${selectedRequest.id}/review`, {
         method: 'PUT',
         headers: {

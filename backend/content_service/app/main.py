@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting Adārah Digital Signage Platform")
+    logger.info("🚀 Starting Adara Screen Digital Signage Platform")
     try:
         await db_service.initialize()
         logger.info("✅ Database service initialized")
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
         logger.info("🔌 Database connections closed")
 
 app = FastAPI(
-    title="Adārah Digital Signage Platform",
+    title="Adara Screen Digital Signage Platform",
     description="Enterprise Multi-Tenant Digital Signage Platform with Enhanced RBAC",
     version="2.0.0",
     lifespan=lifespan,
@@ -79,7 +79,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": "Adārah Digital Signage Platform API",
+        "message": "Adara Screen Digital Signage Platform API",
         "version": "2.0.0",
         "docs": "/api/docs",
         "health": "/api/health",
@@ -94,7 +94,7 @@ async def root():
 @app.get("/api")
 async def api_info():
     return {
-        "title": "Adārah Digital Signage Platform API",
+        "title": "Adara Screen Digital Signage Platform API",
         "version": "2.0.0",
         "description": "Enterprise Multi-Tenant Digital Signage Platform with Enhanced RBAC",
         "features": ["Clean RBAC System", "Multi-Company Support", "Device Authentication", "Permission-based Access Control"],

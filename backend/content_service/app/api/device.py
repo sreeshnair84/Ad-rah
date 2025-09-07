@@ -43,6 +43,16 @@ def convert_objectid_to_str(data):
 router = APIRouter(prefix="/device", tags=["device"])
 security = HTTPBearer(auto_error=False)
 
+@router.get("/")
+async def list_devices():
+    """List all devices - basic endpoint for testing"""
+    try:
+        devices = await repo.list_all_devices()
+        return {"devices": devices, "count": len(devices)}
+    except Exception as e:
+        logger.error(f"Error listing devices: {e}")
+        return {"devices": [], "count": 0, "error": str(e)}
+
 # Helper function to generate secure registration key
 def generate_secure_key(length: int = 16) -> str:
     """Generate a secure random registration key"""
@@ -268,6 +278,24 @@ async def register_device(
         # Save device to database
         await repo.save_digital_screen(screen_record)
         
+        # Create associated digital twin for the device
+        from app.models import DigitalTwin, DigitalTwinStatus
+        digital_twin = DigitalTwin(
+            id=str(uuid.uuid4()),
+            name=f"Twin-{device_data.device_name}",
+            screen_id=device_id,
+            company_id=company_id,
+            description=f"Digital twin for {device_data.device_name}",
+            is_live_mirror=True,  # Enable live mirroring by default
+            status=DigitalTwinStatus.STOPPED,
+            created_by="system",  # TODO: Get from authenticated user context
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        # Save digital twin to database
+        await repo.save_digital_twin(digital_twin)
+        
         # Generate device authentication credentials
         auth_result = await device_auth_service.authenticate_device(
             device_id, 
@@ -282,7 +310,8 @@ async def register_device(
         return {
             "success": True,
             "device_id": device_id,
-            "message": "Device registered successfully with authentication",
+            "digital_twin_id": digital_twin.id,
+            "message": "Device registered successfully with authentication and digital twin",
             "organization_code": device_data.organization_code,
             "company_name": matching_company.get("name"),
             "ip_address": client_ip,
@@ -292,7 +321,14 @@ async def register_device(
             "private_key": auth_result.get("private_key"),  # Only provided once
             "jwt_token": auth_result.get("jwt_token"),
             "refresh_token": auth_result.get("refresh_token"),
-            "token_expires_in": auth_result.get("expires_in")
+            "token_expires_in": auth_result.get("expires_in"),
+            # Digital twin information
+            "digital_twin": {
+                "id": digital_twin.id,
+                "name": digital_twin.name,
+                "status": digital_twin.status,
+                "is_live_mirror": digital_twin.is_live_mirror
+            }
         }
 
     except HTTPException:

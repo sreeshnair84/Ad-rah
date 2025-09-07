@@ -112,7 +112,7 @@ export default function AnalyticsDashboard() {
 
   const fetchAnalyticsData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/analytics/dashboard?timeRange=${selectedTimeRange}&device=${selectedDevice}`, {
         headers: {
           'Authorization': `Bearer ${token}`,

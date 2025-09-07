@@ -100,7 +100,7 @@ export default function OverlayManagement() {
 
   const loadOverlays = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/overlays/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -115,7 +115,7 @@ export default function OverlayManagement() {
 
   const loadScreens = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/screens/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -161,7 +161,7 @@ export default function OverlayManagement() {
 
   const loadContent = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/content/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -177,7 +177,7 @@ export default function OverlayManagement() {
 
   const createOverlay = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/overlays/', {
         method: 'POST',
         headers: {
@@ -204,7 +204,7 @@ export default function OverlayManagement() {
     if (!editingOverlay) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/overlays/${editingOverlay.id}`, {
         method: 'PUT',
         headers: {
@@ -226,7 +226,7 @@ export default function OverlayManagement() {
 
   const deleteOverlay = async (overlayId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/overlays/${overlayId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }

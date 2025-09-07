@@ -136,7 +136,7 @@ export default function RealTimeAnalyticsPage() {
     try {
       const response = await fetch('/api/analytics/real-time', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           'Content-Type': 'application/json'
         }
       })
@@ -158,7 +158,7 @@ export default function RealTimeAnalyticsPage() {
     try {
       const response = await fetch('/api/devices/status', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           'Content-Type': 'application/json'
         }
       })

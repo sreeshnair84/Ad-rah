@@ -35,11 +35,11 @@ export default function DashboardLayout({
   // Handle redirect when authentication state changes
   useEffect(() => {
     if (isInitialized) {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token || !user) {
         console.log('User not authenticated, redirecting to login');
         if (token && !user) {
-          localStorage.removeItem('token'); // Clear invalid token
+          localStorage.removeItem('access_token'); // Clear invalid token
         }
         router.replace('/login');
       } else {
@@ -54,9 +54,16 @@ export default function DashboardLayout({
   };
 
   const setPathname = (newPath: string) => {
-    if (newPath === 'dashboard') {
+    // If path is just "dashboard" or empty, go to dashboard root
+    if (newPath === 'dashboard' || newPath === '') {
       router.push('/dashboard');
-    } else {
+    } 
+    // If path already starts with "/dashboard/", use it as is
+    else if (newPath.startsWith('/dashboard/')) {
+      router.push(newPath);
+    }
+    // Otherwise, treat as relative path and prefix with /dashboard/
+    else {
       router.push(`/dashboard/${newPath}`);
     }
   };
@@ -69,8 +76,9 @@ export default function DashboardLayout({
     'registration': { label: 'Registration Requests', group: 'User Management' },
     'device-keys': { label: 'Device Keys', group: 'User Management' },
     'master-data': { label: 'Companies', group: 'Company Management' },
-    'my-ads': { label: 'My Content', group: 'Content Management' },
-    'my-content': { label: 'My Content', group: 'Content Management' },
+    'my-ads': { label: 'Content', group: 'Content Management' },
+    'my-content': { label: 'Content', group: 'Content Management' },
+    'content': { label: 'Content', group: 'Content Management' },
     'ads-approval': { label: 'Ads Approval', group: 'Content Management' },
     'moderation': { label: 'Content Review', group: 'Content Management' },
     'host-review': { label: 'Host Review', group: 'Content Management' },

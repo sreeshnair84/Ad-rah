@@ -108,7 +108,7 @@ export default function DigitalTwinPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       
       // Fetch screens
       const screensResponse = await fetch('/api/screens', {
@@ -161,7 +161,7 @@ export default function DigitalTwinPage() {
   // Create digital twin
   const handleCreateTwin = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/digital-twins', {
         method: 'POST',
         headers: {
@@ -187,7 +187,7 @@ export default function DigitalTwinPage() {
 
     try {
       const newStatus = twinStatus === 'running' ? 'stopped' : 'running';
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       
       const response = await fetch(`/api/digital-twins/${selectedTwin.id}`, {
         method: 'PUT',
@@ -218,7 +218,7 @@ export default function DigitalTwinPage() {
     if (!confirm('Are you sure you want to delete this digital twin?')) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/digital-twins/${twinId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }

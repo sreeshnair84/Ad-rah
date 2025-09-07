@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from app.models import ContentMetadata, UploadResponse, ModerationResult, ContentMeta
-from app.auth import get_current_user, get_user_company_context, require_company_role_type
+from app.auth_service import get_current_user
+from app.auth import get_user_company_context, require_company_role_type
 import asyncio
 try:
     import aiofiles
@@ -161,11 +162,8 @@ async def upload_file(
     """Accept a file upload and simulate quarantine + AI moderation trigger."""
     
     # Verify user has permission to upload content for this owner
-    # Handle both UserProfile objects and dictionaries
-    if isinstance(current_user, dict):
-        current_user_id = current_user.get("id")
-    else:
-        current_user_id = current_user.id if hasattr(current_user, 'id') else None
+    # current_user is a UserProfile object from auth_service
+    current_user_id = current_user.id
     
     print(f"[UPLOAD DEBUG] current_user_id: {current_user_id} (type: {type(current_user_id)})")
     print(f"[UPLOAD DEBUG] owner_id: {owner_id} (type: {type(owner_id)})")
@@ -194,10 +192,7 @@ async def upload_file(
     user_can_upload = False
     
     # Check user's company role from the current_user object directly
-    if isinstance(current_user, dict):
-        user_role = current_user.get("company_role")
-    else:
-        user_role = current_user.company_role if hasattr(current_user, 'company_role') else None
+    user_role = current_user.company_role.value if current_user.company_role else None
     
     print(f"[UPLOAD DEBUG] User company role: {user_role}")
     if user_role in ["ADMIN", "REVIEWER", "EDITOR"]:
@@ -307,7 +302,7 @@ async def list_metadata(
     company_context=Depends(get_user_company_context)
 ):
     # Get both regular metadata and content meta with company filtering
-    current_user_id = current_user.get("id")
+    current_user_id = current_user.id
     is_platform_admin = company_context["is_platform_admin"]
     accessible_companies = company_context["accessible_companies"]
     accessible_company_ids = {c.get("id") for c in accessible_companies}
@@ -360,12 +355,32 @@ async def list_metadata(
         # Convert ObjectId to string if present
         content_id = str(content.get("_id", content.get("id", ""))) if content.get("_id") else content.get("id", "")
         
+        # Get owner information to enrich content
+        owner_id = content.get("owner_id", "")
+        company_name = "Unknown Company"
+        created_by = "Unknown User"
+        
+        if owner_id:
+            try:
+                # Get user profile to get company information
+                user_profile = await repo.get_user_profile(owner_id)
+                if user_profile:
+                    created_by = user_profile.name or user_profile.email or "Unknown User"
+                    # Get company name from user's primary company
+                    if hasattr(user_profile, 'companies') and user_profile.companies:
+                        primary_company_id = user_profile.companies[0]
+                        company = await repo.get_company(primary_company_id)
+                        if company:
+                            company_name = company.get("name", "Unknown Company")
+            except Exception as e:
+                logger.warning(f"Could not enrich content {content_id} with owner info: {e}")
+        
         # Create a formatted version that matches ContentMetadata structure
         formatted_content = {
             "id": content_id,
             "title": content.get("title", content.get("filename", "Untitled")),  # Use title if available, otherwise filename
             "description": content.get("description", f"File: {content.get('filename', '')}"),
-            "owner_id": content.get("owner_id", ""),
+            "owner_id": owner_id,
             "categories": content.get("categories", ["uploaded"]),  # Use existing categories or default
             "tags": content.get("tags", []),
             "status": content.get("status", "unknown"),
@@ -373,7 +388,10 @@ async def list_metadata(
             "updated_at": content.get("updated_at"),
             "filename": content.get("filename"),
             "content_type": content.get("content_type"),
-            "size": content.get("size")
+            "size": content.get("size"),
+            "company_name": company_name,
+            "created_by": created_by,
+            "visibility_level": content.get("visibility_level", "private")
         }
         formatted_uploaded_content.append(formatted_content)
 
@@ -386,6 +404,22 @@ async def list_metadata(
             formatted_content["id"] = content_id
             if "_id" in formatted_content:
                 del formatted_content["_id"]
+            
+            # Enrich regular content with company info too
+            owner_id = formatted_content.get("owner_id", "")
+            if owner_id and "company_name" not in formatted_content:
+                try:
+                    user_profile = await repo.get_user_profile(owner_id)
+                    if user_profile:
+                        formatted_content["created_by"] = user_profile.name or user_profile.email or "Unknown User"
+                        if hasattr(user_profile, 'companies') and user_profile.companies:
+                            primary_company_id = user_profile.companies[0]
+                            company = await repo.get_company(primary_company_id)
+                            if company:
+                                formatted_content["company_name"] = company.get("name", "Unknown Company")
+                except Exception as e:
+                    logger.warning(f"Could not enrich regular content {content_id} with owner info: {e}")
+            
             formatted_regular_content.append(formatted_content)
         else:
             formatted_regular_content.append(content)
@@ -519,7 +553,7 @@ async def admin_approve_content(
     """Admin endpoint to approve content and push to devices"""
     
     # Check if user has approval permissions
-    current_user_id = current_user.get("id")
+    current_user_id = current_user.id
     is_platform_admin = company_context["is_platform_admin"]
     
     # Get content to check ownership
@@ -609,7 +643,7 @@ async def admin_reject_content(
     """Admin endpoint to reject content"""
     
     # Check if user has approval permissions (same logic as approve)
-    current_user_id = current_user.get("id")
+    current_user_id = current_user.id
     is_platform_admin = company_context["is_platform_admin"]
     
     # Get content to check ownership
@@ -689,7 +723,7 @@ async def get_pending_content(
 ):
     """Get all content pending admin approval with company filtering"""
     
-    current_user_id = current_user.get("id")
+    current_user_id = current_user.id
     is_platform_admin = company_context["is_platform_admin"]
     try:
         # Check if repo is initialized

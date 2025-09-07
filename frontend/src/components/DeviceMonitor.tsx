@@ -68,7 +68,7 @@ export default function DeviceMonitor({
     if (!autoRefresh) return;
 
     const connectWebSocket = () => {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) return;
 
       const wsUrl = `ws://localhost:8000/api/ws/admin?token=${token}`;
@@ -174,7 +174,7 @@ export default function DeviceMonitor({
 
       const response = await fetch(endpoint, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
       });
 

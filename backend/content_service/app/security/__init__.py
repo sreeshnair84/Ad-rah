@@ -1,5 +1,5 @@
 """
-Security Module for Adarah Digital Signage Platform
+Security Module for Adara Digital Signage Platform
 Provides comprehensive security features including:
 - Secure configuration management
 - Authentication and authorization

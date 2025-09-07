@@ -9,7 +9,8 @@ from app.models import (
     DigitalTwin, DigitalTwinCreate, DigitalTwinUpdate,
     LayoutTemplate, LayoutTemplateCreate, LayoutTemplateUpdate
 )
-from app.auth import get_current_user, get_user_company_context, get_current_user_with_super_admin_bypass
+from app.auth_service import get_current_user
+from app.auth import get_user_company_context, get_current_user_with_super_admin_bypass
 from app.repo import repo
 from app.utils.serialization import safe_json_response
 

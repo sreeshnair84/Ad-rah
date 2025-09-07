@@ -18,7 +18,16 @@
       "Bash(docker run:*)",
       "Bash(npm run build:*)",
       "Read(/C:\\Users\\Srees\\Workarea\\Open_kiosk/**)",
-      "Read(/C:\\Users\\Srees\\Workarea\\Open_kiosk\\backend\\content_service/**)"
+      "Read(/C:\\Users\\Srees\\Workarea\\Open_kiosk\\backend\\content_service/**)",
+      "Bash(dart run:*)",
+      "Bash(move libcore temp_backup )",
+      "Bash(move libfeatures temp_backup )",
+      "Bash(move libscreens temp_backup )",
+      "Bash(move libservices temp_backup )",
+      "Bash(move:*)",
+      "Bash(copy:*)",
+      "Bash(del \"lib\\features\\home\\presentation\\pages\\home_page_simple.dart\")",
+      "Bash(del:*)"
     ],
     "deny": [],
     "ask": []

@@ -96,6 +96,13 @@ const navigationGroups = [
         permission: { resource: "content", action: "approve" }
       },
       { 
+        key: "content/distribute", 
+        label: "Distribute Content", 
+        icon: <Share2 className="h-5 w-5" />, 
+        description: "Distribute content to devices",
+        permission: { resource: "content", action: "distribute" }
+      },
+      { 
         key: "content-overlay", 
         label: "Overlay Designer", 
         icon: <Layers className="h-5 w-5" />, 
@@ -108,13 +115,6 @@ const navigationGroups = [
         icon: <Smartphone className="h-5 w-5" />, 
         description: "Test in virtual environment",
         permission: { resource: "digital_twin", action: "view" }
-      },
-      { 
-        key: "my-content", 
-        label: "My Content", 
-        icon: <Layers className="h-5 w-5" />, 
-        description: "View my content",
-        permission: { resource: "content", action: "read" }
       },
       { 
         key: "my-ads", 
@@ -152,6 +152,13 @@ const navigationGroups = [
   {
     label: "Device Management",
     items: [
+      { 
+        key: "devices", 
+        label: "Devices", 
+        icon: <MonitorSmartphone className="h-5 w-5" />, 
+        description: "Manage devices",
+        permission: { resource: "device", action: "read" }
+      },
       { 
         key: "kiosks", 
         label: "Kiosks", 
@@ -328,7 +335,7 @@ export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarPr
                 <span className="text-sm font-bold text-white">A</span>
               </div>
               <div>
-                <h2 className="text-sm font-semibold">Adārah Platform</h2>
+                <h2 className="text-sm font-semibold">Adara Screen Platform</h2>
                 <p className="text-xs text-muted-foreground">Digital Signage</p>
               </div>
             </div>
@@ -400,7 +407,7 @@ export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarPr
             <div className="rounded-lg border bg-gradient-to-br from-blue-50/50 to-indigo-50/50 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className={`h-2 w-2 rounded-full ${user.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                <p className="text-xs font-medium">Adārah Platform</p>
+                <p className="text-xs font-medium">Adara Screen Platform</p>
               </div>
               
               <div className="space-y-1">

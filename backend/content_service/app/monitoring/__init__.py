@@ -1,5 +1,5 @@
 """
-Monitoring Module for Adarah Digital Signage Platform
+Monitoring Module for Adara Digital Signage Platform
 Provides comprehensive device health monitoring, performance tracking, and proof-of-play verification
 """
 

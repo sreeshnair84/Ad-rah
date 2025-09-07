@@ -85,7 +85,7 @@ export default function KiosksPage() {
   const fetchScreens = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/screens', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -134,7 +134,7 @@ export default function KiosksPage() {
   // Create new screen
   const handleCreateScreen = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/screens', {
         method: 'POST',
         headers: {
@@ -161,7 +161,7 @@ export default function KiosksPage() {
     if (!selectedScreen) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${selectedScreen.id}`, {
         method: 'PUT',
         headers: {
@@ -191,7 +191,7 @@ export default function KiosksPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/screens/${screenId}`, {
         method: 'DELETE',
         headers: {
