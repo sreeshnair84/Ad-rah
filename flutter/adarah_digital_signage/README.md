@@ -133,7 +133,7 @@ For the fastest setup experience, see our **[Quick Start Guide](../QUICK_START.m
 
 ### 1. Clone and Setup
 ```bash
-cd flutter/adarah_digital_signage
+cd flutter/adara_screen_digital_signage
 flutter pub get
 ```
 

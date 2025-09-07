@@ -1,7 +1,7 @@
+import 'package:adara_screen_digital_signage/services/api_service.dart';
+import 'package:adara_screen_digital_signage/services/device_info_service.dart';
+import 'package:adara_screen_digital_signage/services/websocket_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:adarah_digital_signage/services/api_service.dart';
-import 'package:adarah_digital_signage/services/device_info_service.dart';
-import 'package:adarah_digital_signage/services/websocket_service.dart';
 
 void main() {
   group('Services Integration Tests', () {

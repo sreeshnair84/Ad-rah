@@ -1,6 +1,6 @@
 {
-    "name": "adarah_digital_signage",
-    "short_name": "adarah_digital_signage",
+    "name": "Adara Screen Digital Signage",
+    "short_name": "Adara Screen",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

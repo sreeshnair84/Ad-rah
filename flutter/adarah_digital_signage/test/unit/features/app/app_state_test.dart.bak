@@ -1,0 +1,262 @@
+import 'package:adara_screen_digital_signage/features/app/domain/app_state.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  group('AppState Tests', () {
+    late ProviderContainer container;
+
+    setUp(() {
+      container = ProviderContainer();
+    });
+
+    tearDown(() {
+      container.dispose();
+    });
+
+    test('should have correct initial state', () {
+      final appState = container.read(appNotifierProvider);
+      
+      expect(appState.mode, AppMode.initializing);
+      expect(appState.connectivity, ConnectivityStatus.unknown);
+      expect(appState.isLoading, false);
+      expect(appState.isKioskMode, false);
+      expect(appState.brightness, 1.0);
+      expect(appState.isMaintenanceMode, false);
+      expect(appState.errorMessage, isNull);
+      expect(appState.lastActivity, isNull);
+      expect(appState.settings, isEmpty);
+    });
+
+    test('should initialize correctly', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.initialize();
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.mode, AppMode.initializing);
+      expect(state.isLoading, true);
+      expect(state.lastActivity, isNotNull);
+    });
+
+    test('should set mode correctly', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.setMode(AppMode.normal);
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.mode, AppMode.normal);
+      expect(state.isLoading, false);
+      expect(state.errorMessage, isNull);
+    });
+
+    test('should update connectivity status', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.updateConnectivity(ConnectivityStatus.connected);
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.connectivity, ConnectivityStatus.connected);
+      expect(state.isOnline, true);
+      expect(state.isOffline, false);
+    });
+
+    test('should set loading state', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.setLoading(true);
+      expect(container.read(appNotifierProvider).isLoading, true);
+      
+      notifier.setLoading(false);
+      expect(container.read(appNotifierProvider).isLoading, false);
+    });
+
+    test('should enable/disable kiosk mode', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.setKioskMode(true);
+      expect(container.read(appNotifierProvider).isKioskMode, true);
+      
+      notifier.setKioskMode(false);
+      expect(container.read(appNotifierProvider).isKioskMode, false);
+    });
+
+    test('should set brightness within valid range', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      // Test valid range
+      notifier.setBrightness(0.5);
+      expect(container.read(appNotifierProvider).brightness, 0.5);
+      
+      // Test clamping above 1.0
+      notifier.setBrightness(1.5);
+      expect(container.read(appNotifierProvider).brightness, 1.0);
+      
+      // Test clamping below 0.0
+      notifier.setBrightness(-0.5);
+      expect(container.read(appNotifierProvider).brightness, 0.0);
+    });
+
+    test('should enter and exit maintenance mode', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.enterMaintenanceMode();
+      expect(container.read(appNotifierProvider).isMaintenanceMode, true);
+      
+      notifier.exitMaintenanceMode();
+      expect(container.read(appNotifierProvider).isMaintenanceMode, false);
+    });
+
+    test('should update activity timestamp', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      final beforeUpdate = DateTime.now();
+      
+      notifier.updateActivity();
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.lastActivity, isNotNull);
+      expect(state.lastActivity!.isAfter(beforeUpdate.subtract(const Duration(seconds: 1))), true);
+    });
+
+    test('should set error state', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      const errorMessage = 'Test error';
+      
+      notifier.setError(errorMessage);
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.mode, AppMode.error);
+      expect(state.errorMessage, errorMessage);
+      expect(state.isLoading, false);
+      expect(state.hasError, true);
+    });
+
+    test('should clear error state', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      // Set error first
+      notifier.setError('Test error');
+      expect(container.read(appNotifierProvider).hasError, true);
+      
+      // Clear error
+      notifier.clearError();
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.mode, AppMode.normal);
+      expect(state.errorMessage, isNull);
+      expect(state.hasError, false);
+    });
+
+    test('should update settings', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.updateSetting('test_key', 'test_value');
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.settings['test_key'], 'test_value');
+    });
+
+    test('should update multiple settings', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      final settings = {
+        'key1': 'value1',
+        'key2': 42,
+        'key3': true,
+      };
+      
+      notifier.updateSettings(settings);
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.settings['key1'], 'value1');
+      expect(state.settings['key2'], 42);
+      expect(state.settings['key3'], true);
+    });
+
+    test('should get setting value with correct type', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      notifier.updateSetting('string_key', 'string_value');
+      notifier.updateSetting('int_key', 42);
+      notifier.updateSetting('bool_key', true);
+      
+      expect(notifier.getSetting<String>('string_key'), 'string_value');
+      expect(notifier.getSetting<int>('int_key'), 42);
+      expect(notifier.getSetting<bool>('bool_key'), true);
+      expect(notifier.getSetting<String>('nonexistent_key'), isNull);
+    });
+
+    test('should reset state', () {
+      final notifier = container.read(appNotifierProvider.notifier);
+      
+      // Set some state
+      notifier.setMode(AppMode.normal);
+      notifier.setKioskMode(true);
+      notifier.updateSetting('test', 'value');
+      
+      // Reset
+      notifier.reset();
+      final state = container.read(appNotifierProvider);
+      
+      expect(state.mode, AppMode.initializing);
+      expect(state.isKioskMode, false);
+      expect(state.settings, isEmpty);
+    });
+  });
+
+  group('AppState Extensions Tests', () {
+    test('should correctly identify online/offline states', () {
+      const onlineState = AppState(connectivity: ConnectivityStatus.connected);
+      const offlineState = AppState(connectivity: ConnectivityStatus.disconnected);
+      const limitedState = AppState(connectivity: ConnectivityStatus.limited);
+      
+      expect(onlineState.isOnline, true);
+      expect(onlineState.isOffline, false);
+      expect(onlineState.hasLimitedConnectivity, false);
+      
+      expect(offlineState.isOnline, false);
+      expect(offlineState.isOffline, true);
+      expect(offlineState.hasLimitedConnectivity, false);
+      
+      expect(limitedState.isOnline, false);
+      expect(limitedState.isOffline, false);
+      expect(limitedState.hasLimitedConnectivity, true);
+    });
+
+    test('should correctly identify content display capability', () {
+      const normalState = AppState(mode: AppMode.normal, isMaintenanceMode: false);
+      const maintenanceState = AppState(mode: AppMode.normal, isMaintenanceMode: true);
+      const errorState = AppState(mode: AppMode.error);
+      
+      expect(normalState.canDisplayContent, true);
+      expect(maintenanceState.canDisplayContent, false);
+      expect(errorState.canDisplayContent, false);
+    });
+
+    test('should calculate time since last activity', () {
+      final now = DateTime.now();
+      final oneMinuteAgo = now.subtract(const Duration(minutes: 1));
+      final stateWithActivity = AppState(lastActivity: oneMinuteAgo);
+      const stateWithoutActivity = AppState();
+      
+      final timeSince = stateWithActivity.timeSinceLastActivity;
+      expect(timeSince, isNotNull);
+      expect(timeSince!.inMinutes, 1);
+      
+      expect(stateWithoutActivity.timeSinceLastActivity, isNull);
+    });
+
+    test('should identify inactive state', () {
+      final now = DateTime.now();
+      final recentActivity = now.subtract(const Duration(minutes: 10));
+      final oldActivity = now.subtract(const Duration(minutes: 45));
+      
+      const activeState = AppState();
+      final recentState = AppState(lastActivity: recentActivity);
+      final inactiveState = AppState(lastActivity: oldActivity);
+      
+      expect(activeState.isInactive, false);
+      expect(recentState.isInactive, false);
+      expect(inactiveState.isInactive, true);
+    });
+  });
+}

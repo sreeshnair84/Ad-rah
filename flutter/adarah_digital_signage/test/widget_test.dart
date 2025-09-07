@@ -5,16 +5,15 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:adara_screen_digital_signage/main.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:adarah_digital_signage/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const AdarahDigitalSignageApp());
+    await tester.pumpWidget(const AdaraScreenDigitalSignageApp());
 
     // Verify that our app starts on the setup screen
-    expect(find.text('Device Setup & Registration'), findsOneWidget);
+    expect(find.text('Adara Screen Digital Signage'), findsOneWidget);
   });
 }

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.adarah" "\0"
-            VALUE "FileDescription", "adarah_digital_signage" "\0"
+            VALUE "CompanyName", "com.adarascreen" "\0"
+            VALUE "FileDescription", "Adara Screen Digital Signage" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "adarah_digital_signage" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.adarah. All rights reserved." "\0"
-            VALUE "OriginalFilename", "adarah_digital_signage.exe" "\0"
-            VALUE "ProductName", "adarah_digital_signage" "\0"
+            VALUE "InternalName", "adara_screen_digital_signage" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2025 com.adarascreen. All rights reserved." "\0"
+            VALUE "OriginalFilename", "adara_screen_digital_signage.exe" "\0"
+            VALUE "ProductName", "Adara Screen Digital Signage" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

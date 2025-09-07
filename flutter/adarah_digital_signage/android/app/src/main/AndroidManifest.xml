@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="adarah_digital_signage"
+        android:label="Adara Screen Digital Signage"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -1,0 +1,56 @@
+# Build configuration for code generation
+targets:
+  $default:
+    builders:
+      # Freezed code generation
+      freezed|freezed:
+        generate_for:
+          - lib/**/*.dart
+        options:
+          # Generate copyWith methods
+          copy_with: true
+          # Generate equality operators
+          equal: true
+          # Generate toString methods
+          to_string: true
+
+      # JSON Serializable code generation
+      json_serializable|json_serializable:
+        generate_for:
+          - lib/**/*.dart
+        options:
+          # Include fields with null values
+          include_if_null: false
+          # Generate explicit to/from JSON methods
+          explicit_to_json: true
+          # Use field rename for snake_case
+          field_rename: snake
+
+      # Riverpod Generator code generation
+      riverpod_generator|riverpod_generator:
+        generate_for:
+          - lib/**/*.dart
+        options:
+          # Generate async notifiers
+          async_notifiers: true
+          # Generate family providers
+          families: true
+
+      # Injectable code generation
+      injectable_generator|injectable_generator:
+        generate_for:
+          - lib/core/di/injection.dart
+        options:
+          # Auto register mode
+          auto_register: true
+          # Generate for test environments
+          generate_for_dir: 
+            - lib
+
+      # Hive code generation
+      hive_generator|hive_generator:
+        generate_for:
+          - lib/**/*.dart
+        options:
+          # Generate type adapters
+          type_adapters: true
