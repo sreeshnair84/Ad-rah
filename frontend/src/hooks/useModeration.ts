@@ -25,11 +25,15 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('content_id', contentId);
 
       const response = await fetch('/api/moderation/enqueue', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -53,7 +57,12 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/moderation/queue');
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/moderation/queue', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -80,6 +89,7 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('decision', decision);
       if (reviewerId) formData.append('reviewer_id', reviewerId);
@@ -87,6 +97,9 @@ export function useModeration() {
 
       const response = await fetch(`/api/moderation/${reviewId}/decision`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -115,6 +128,7 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('decision', decision);
       if (reviewerId) formData.append('reviewer_id', reviewerId);
@@ -122,6 +136,9 @@ export function useModeration() {
 
       const response = await fetch(`/api/moderation/content/${contentId}/decision`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -145,11 +162,15 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('content_id', contentId);
 
       const response = await fetch('/api/content/moderation/simulate', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -173,7 +194,12 @@ export function useModeration() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/moderation/pending');
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/moderation/pending', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

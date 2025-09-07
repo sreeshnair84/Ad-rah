@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Forward the Authorization header from the frontend request
+    const authHeader = request.headers.get('authorization');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
     const backendResponse = await fetch(`${BACKEND_URL}/api/content/admin/pending`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (!backendResponse.ok) {
