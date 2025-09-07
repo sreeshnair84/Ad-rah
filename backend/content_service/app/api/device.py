@@ -48,7 +48,7 @@ security = HTTPBearer(auto_error=False)
 async def list_devices():
     """List all devices - basic endpoint for testing"""
     try:
-        devices = await repo.list_all_devices()
+        devices = await repo.list_digital_screens()
         return {"devices": devices, "count": len(devices)}
     except Exception as e:
         logger.error(f"Error listing devices: {e}")

@@ -77,7 +77,8 @@ export function useDevice() {
       }
 
       const result = await response.json();
-      return result;
+      // The API returns {devices: [...], count: number}, but we need just the devices array
+      return result.devices || [];
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to list devices';
       setError(errorMessage);
