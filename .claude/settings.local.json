@@ -27,7 +27,10 @@
       "Bash(move:*)",
       "Bash(copy:*)",
       "Bash(del \"lib\\features\\home\\presentation\\pages\\home_page_simple.dart\")",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(dart:*)",
+      "Bash(dir \"C:\\Users\\Srees\\Workarea\\Open_kiosk\\flutter\\adarah_digital_signage\\assets\\images\")",
+      "Bash(dir \"C:\\Users\\Srees\\Workarea\\Open_kiosk\\backend\\content_service\\app\\api\"\")"
     ],
     "deny": [],
     "ask": []

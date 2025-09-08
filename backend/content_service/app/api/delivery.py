@@ -4,7 +4,7 @@ Provides content with overlay positioning data
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from app.auth import get_current_user
+from app.auth_service import get_current_user
 from app.repo import repo
 import logging
 from typing import List, Dict, Optional

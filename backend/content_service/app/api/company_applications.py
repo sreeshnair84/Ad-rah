@@ -15,7 +15,7 @@ from app.models import (
 )
 from app.repo import repo
 from app.auth_service import get_current_user, UserProfile  # Fixed import path and added UserProfile
-from app.auth import get_password_hash  # Import password hashing function
+from app.auth_service import auth_service
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])
 
@@ -248,7 +248,7 @@ async def _create_company_and_user(application: dict, reviewer_id: str):
             name=application["applicant_name"],
             email=application["applicant_email"],
             phone=application["applicant_phone"],
-            hashed_password=get_password_hash(temp_password),
+            hashed_password=auth_service.hash_password(temp_password),
             status="active",
             email_verified=True
         )

@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import UnifiedOverlayManager from '@/components/overlay/UnifiedOverlayManager';
 
 export const metadata: Metadata = {
-  title: 'Content Overlay Management | Dashboard',
-  description: 'Manage content overlays for your digital screens',
+  title: 'Content Overlay Management | Digital Signage',
+  description: 'Design and manage content overlays on your digital screens',
 };
 
 export default function ContentOverlayPage() {

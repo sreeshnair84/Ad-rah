@@ -6,7 +6,7 @@ from app.models import (
     HostPreference, HostPreferenceCreate, HostPreferenceUpdate
 )
 from app.repo import repo
-from app.auth import get_current_user, require_roles
+from app.auth_service import get_current_user, require_roles
 import uuid
 
 router = APIRouter(prefix="/categories", tags=["categories"])

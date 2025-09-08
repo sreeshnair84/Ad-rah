@@ -5,7 +5,7 @@ import secrets
 import hashlib
 from app.models import UserRegistration, UserInvitation, PasswordResetRequest, PasswordReset, User
 from app.repo import repo
-from app.auth import authenticate_user, create_access_token, get_current_user, require_roles, get_password_hash
+from app.auth_service import get_current_user, require_roles, auth_service
 from app.email_service import email_service, EmailSchema
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,7 +38,7 @@ async def register_user(user_data: UserRegistration):
         name=user_data.name,
         email=user_data.email,
         phone=user_data.phone,
-        hashed_password=get_password_hash(user_data.password),
+        hashed_password=auth_service.hash_password(user_data.password),
         status="active",
         email_verified=True
     )
@@ -175,7 +175,7 @@ async def reset_password(reset_data: PasswordReset):
     if not user:
         raise HTTPException(status_code=400, detail="User not found")
 
-    user["hashed_password"] = get_password_hash(reset_data.new_password)
+    user["hashed_password"] = auth_service.hash_password(reset_data.new_password)
     from app.models import User
     user_obj = User(**user)
     await repo.save_user(user_obj)

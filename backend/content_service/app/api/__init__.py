@@ -1,18 +1,14 @@
 # package
 
 from fastapi import APIRouter
-from .uploads import router as uploads_router
 from .auth import router as auth_router
-from app.routes.content import router as content_router
 from .moderation import router as moderation_router
 from .companies import router as companies_router
 from .users import router as users_router
 # from .roles import router as roles_router  # Temporarily disabled
 from .events import router as events_router
 from .registration import router as registration_router
-from .screens import router as screens_router
 from .company_applications import router as company_applications_router
-from .device import router as device_router
 from .categories import router as categories_router
 from .websocket import router as websocket_router
 from .debug_roles import router as debug_router
@@ -20,11 +16,14 @@ from .debug_roles import router as debug_router
 # Import debug token router
 # from .debug_token import router as debug_token_router  # Removed - depends on removed auth service
 
-# Import overlays router
-from .overlays import router as overlays_router
+# Import unified content management router (consolidates routes/content.py, api/content_delivery.py, api/enhanced_content.py, api/uploads.py)
+from .content_unified import router as content_unified_router
 
-# Import simple screens router
-from .simple_screens import router as simple_screens_router
+# Import unified overlays management router (consolidates routes/overlay.py and api/overlays.py)
+from .overlays_unified import router as overlays_unified_router
+
+# Import unified device management router (consolidates device.py, screens.py, simple_screens.py)
+from .devices_unified import router as devices_unified_router
 
 # Import content delivery router if available
 try:
@@ -32,8 +31,8 @@ try:
     CONTENT_DELIVERY_ROUTER_AVAILABLE = True
 except (ImportError, TypeError) as e:
     CONTENT_DELIVERY_ROUTER_AVAILABLE = False
-    logger = __import__('logging').getLogger(__name__)
-    logger.warning(f"Content delivery router not available: {e}")
+    # Content delivery functionality is now in content_unified.py
+    print(f"Content delivery router not available (consolidated into content_unified.py): {e}")
 
 # Import delivery router
 try:
@@ -62,22 +61,19 @@ from .debug_config import router as debug_config_router
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(registration_router)
-api_router.include_router(uploads_router)
-api_router.include_router(content_router, prefix="/content")
+api_router.include_router(content_unified_router)  # Unified content management
 api_router.include_router(moderation_router)
 api_router.include_router(companies_router)
 api_router.include_router(users_router)
 # api_router.include_router(roles_router)  # Temporarily disabled
 api_router.include_router(events_router)
-api_router.include_router(screens_router, prefix="/screens")
 api_router.include_router(company_applications_router)
-api_router.include_router(device_router)
+api_router.include_router(devices_unified_router)  # Unified device management (replaces device_router, screens_router, simple_screens_router)
 api_router.include_router(categories_router)
 api_router.include_router(websocket_router)
 api_router.include_router(debug_router)
 # api_router.include_router(debug_token_router)  # Removed - depends on removed auth service
-api_router.include_router(overlays_router, prefix="/overlays")
-# api_router.include_router(simple_screens_router, prefix="/screens")  # Disabled - conflicts with main screens router
+api_router.include_router(overlays_unified_router)  # Unified overlays management
 api_router.include_router(analytics_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(seed_router)

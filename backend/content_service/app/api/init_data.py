@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 from app.models import Role, User, UserRole, Company
 from app.repo import repo
-from app.auth import get_password_hash
+from app.auth_service import auth_service
 
 
 async def initialize_mock_data():
@@ -373,7 +373,7 @@ async def initialize_users():
             "email": "admin@adara.com",
             "phone": "+1-555-0001",
             "status": "active",
-            "hashed_password": get_password_hash("adminpass"),
+            "hashed_password": auth_service.hash_password("adminpass"),
             "oauth_provider": None,
             "oauth_id": None,
             "email_verified": True,

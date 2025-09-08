@@ -9,11 +9,11 @@ import secrets
 
 from app.database import get_db_service, QueryFilter, FilterOperation, QueryOptions, DatabaseResult
 from app.rbac.permissions import (
-    Role, UserType, PermissionManager, DEFAULT_ROLE_TEMPLATES, 
+    Role, UserType, PermissionManager, DEFAULT_ROLE_TEMPLATES,
     PagePermissions, is_super_admin, Page, Permission
 )
 from app.models import User, UserCreate, UserUpdate, UserProfile
-from app.auth import get_password_hash, verify_password  # Use centralized password functions
+from app.auth_service import auth_service  # Use consolidated auth service
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class UserService:
         """Create a new user with role assignments"""
         try:
             # Hash password
-            hashed_password = get_password_hash(user_data.password)
+            hashed_password = auth_service.hash_password(user_data.password)
             
             # Prepare user record
             user_record = {
@@ -394,8 +394,7 @@ class UserService:
                 return DatabaseResult(success=False, error="Account is not active")
             
             # Verify password
-            from app.auth import verify_password
-            if not verify_password(password, user_data.get("hashed_password")):
+            if not auth_service.verify_password(password, user_data.get("hashed_password")):
                 logger.warning(f"Invalid password for user: {email}")
                 return DatabaseResult(success=False, error="Invalid credentials")
             
@@ -580,11 +579,11 @@ class UserService:
             user_data = user_result.data
             
             # Verify old password
-            if not verify_password(old_password, user_data.get("hashed_password")):
+            if not auth_service.verify_password(old_password, user_data.get("hashed_password")):
                 return DatabaseResult(success=False, error="Invalid current password")
             
             # Hash new password
-            new_hashed_password = get_password_hash(new_password)
+            new_hashed_password = auth_service.hash_password(new_password)
             
             # Update password
             result = await self.db.update_record("users", user_id, {

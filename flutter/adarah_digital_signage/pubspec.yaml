@@ -39,3 +39,5 @@ flutter:
   assets:
     - assets/images/
     - assets/images/logo.png
+    - assets/images/launch_video.mp4
+    - assets/images/standby_screen.jpg

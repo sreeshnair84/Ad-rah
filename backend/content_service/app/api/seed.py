@@ -4,7 +4,7 @@ This ensures data persists in the in-memory repository for testing
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from app.auth import get_current_user
+from app.auth_service import get_current_user
 import sys
 import os
 

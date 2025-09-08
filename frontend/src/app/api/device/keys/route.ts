@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     
     // Forward the request to the backend
     const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
-    const fetchUrl = `${backendUrl}/api/device/keys`;
+    const fetchUrl = `${backendUrl}/api/devices/keys`;
     console.log('Environment BACKEND_URL:', process.env.BACKEND_URL);
     console.log('Using backend URL:', backendUrl);
     console.log('Full fetch URL:', fetchUrl);
@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
     const response = await fetch(fetchUrl, {
       method: 'GET',
       headers: requestHeaders,
-      timeout: 10000, // 10 second timeout
     });
 
     console.log('Backend response status:', response.status);
@@ -73,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Forward the request to the backend
     const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
-    const response = await fetch(`${backendUrl}/api/device/keys`, {
+    const response = await fetch(`${backendUrl}/api/devices/keys`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

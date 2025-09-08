@@ -70,6 +70,24 @@ class InMemoryRepo:
     async def list_content_meta(self) -> List[Dict]:
         return list(self._store.get("__content_meta__", {}).values())
 
+    async def list_content(self, status: Optional[str] = None, owner_id: Optional[str] = None,
+                          category: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict]:
+        """List content with filtering and pagination"""
+        content_items = list(self._store.get("__content_meta__", {}).values())
+
+        # Apply filters
+        if status:
+            content_items = [item for item in content_items if item.get("status") == status]
+        if owner_id:
+            content_items = [item for item in content_items if item.get("owner_id") == owner_id]
+        if category:
+            content_items = [item for item in content_items if item.get("category") == category]
+
+        # Apply pagination
+        start_idx = offset
+        end_idx = offset + limit
+        return content_items[start_idx:end_idx]
+
     # Role operations
     async def save_role(self, role: Role) -> dict:
         async with self._lock:
@@ -976,6 +994,22 @@ class MongoRepo:
 
     async def list_content_meta(self) -> List[Dict]:
         cursor = self._content_meta_col.find({})
+        return [d async for d in cursor]
+
+    async def list_content(self, status: Optional[str] = None, owner_id: Optional[str] = None,
+                          category: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict]:
+        """List content with filtering and pagination"""
+        query = {}
+
+        # Apply filters
+        if status:
+            query["status"] = status
+        if owner_id:
+            query["owner_id"] = owner_id
+        if category:
+            query["category"] = category
+
+        cursor = self._content_meta_col.find(query).skip(offset).limit(limit)
         return [d async for d in cursor]
 
     # ContentCategory operations

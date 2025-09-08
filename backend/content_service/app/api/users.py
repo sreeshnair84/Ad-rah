@@ -11,7 +11,7 @@ except ImportError:
         ObjectId = None
 from app.models import User, UserCreate, UserUpdate, UserRole, UserProfile, Role, RoleCreate, RoleUpdate, PermissionCheck
 from app.repo import repo
-from app.auth import require_roles, get_password_hash, get_user_company_context, get_current_user_with_super_admin_bypass
+from app.auth_service import require_roles, auth_service, get_user_company_context, get_current_user_with_super_admin_bypass
 from app.auth_service import get_current_user
 # Data initialization is handled at server startup
 
@@ -505,7 +505,7 @@ async def create_user(
                 "email": user_data.get("email", ""),
                 "phone": user_data.get("phone", ""),
                 "status": user_data.get("status", "active"),
-                "hashed_password": get_password_hash(user_data.get("password", "defaultpass")),
+                "hashed_password": auth_service.hash_password(user_data.get("password", "defaultpass")),
                 "oauth_provider": None,
                 "oauth_id": None,
                 "email_verified": True,
@@ -549,7 +549,7 @@ async def create_user(
                     "email": user_data.get("email", ""),
                     "phone": user_data.get("phone", ""),
                     "status": user_data.get("status", "active"),
-                    "hashed_password": get_password_hash(user_data.get("password", "defaultpass")),
+                    "hashed_password": auth_service.hash_password(user_data.get("password", "defaultpass")),
                     "oauth_provider": None,
                     "oauth_id": None,
                     "email_verified": True,
@@ -630,7 +630,7 @@ async def update_user(
             # Update user fields
             update_data = user_update.model_dump(exclude_unset=True)
             if "password" in update_data:
-                update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+                update_data["hashed_password"] = auth_service.hash_password(update_data.pop("password"))
             
             updated_user = {**existing_user, **update_data}
             updated_user["updated_at"] = datetime.utcnow().isoformat()
@@ -677,7 +677,7 @@ async def update_user(
                 # Update user fields
                 update_data = user_update.model_dump(exclude_unset=True)
                 if "password" in update_data:
-                    update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+                    update_data["hashed_password"] = auth_service.hash_password(update_data.pop("password"))
                 
                 update_data["updated_at"] = datetime.utcnow()
                 

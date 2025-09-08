@@ -1,7 +1,7 @@
 'use client';
 
-import { ContentManager } from '@/components/content/ContentManager';
+import { UnifiedContentManager } from '@/components/content/UnifiedContentManager';
 
 export default function ContentPage() {
-  return <ContentManager mode="all" />;
+  return <UnifiedContentManager mode="all" />;
 }

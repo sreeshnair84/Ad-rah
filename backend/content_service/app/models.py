@@ -778,26 +778,87 @@ class DeviceHeartbeat(BaseModel):
     performance_score: Optional[float] = None  # Overall health score
 
 
-class DeviceRegistration(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    device_name: str
-    organization_code: str
-    registration_key: str
-    device_type: DeviceType = DeviceType.KIOSK
-    aspect_ratio: Optional[str] = None
-    # Enhanced device information
-    fingerprint: Optional[DeviceFingerprint] = None
-    capabilities: Optional[DeviceCapabilities] = None
-    location_description: Optional[str] = None
-    # Status and tracking
-    status: str = "active"
-    registered_at: datetime = Field(default_factory=datetime.utcnow)
-    last_seen: datetime = Field(default_factory=datetime.utcnow)
-    ip_address: Optional[str] = None
-    mac_address: Optional[str] = None
-    # Security
-    is_trusted: bool = False
-    security_level: str = "standard"  # standard, high, maximum
-    # Configuration
-    auto_update: bool = True
-    maintenance_window: Optional[str] = None  # "02:00-04:00"
+class ContentLayoutCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    company_id: str
+    zones: List[Dict]  # List of zone configurations
+    layout_type: str = "grid"  # grid, custom, template
+    is_template: bool = False
+    tags: List[str] = []
+
+
+class ContentLayoutUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    zones: Optional[List[Dict]] = None
+    layout_type: Optional[str] = None
+    is_template: Optional[bool] = None
+    tags: Optional[List[str]] = None
+
+
+class AdvertiserCampaignCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    advertiser_company_id: str
+    content_ids: List[str]
+    target_screens: List[str] = []
+    budget: Optional[float] = None
+    start_date: datetime
+    end_date: datetime
+    targeting_rules: Optional[Dict] = None
+    status: str = "draft"
+
+
+class ContentDeploymentCreate(BaseModel):
+    content_id: str
+    device_ids: List[str]
+    layout_id: Optional[str] = None
+    deployment_type: str = "immediate"  # immediate, scheduled
+    scheduled_time: Optional[datetime] = None
+    priority: int = 1
+    auto_retry: bool = True
+    max_retries: int = 3
+
+
+class DeviceAnalytics(BaseModel):
+    device_id: str
+    content_id: Optional[str] = None
+    event_type: str  # impression, interaction, completion, error
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    duration_seconds: Optional[float] = None
+    estimated_revenue: float = 0.0
+    user_interactions: int = 0
+    technical_issues: List[str] = []
+    location_data: Optional[Dict] = None
+    device_info: Optional[Dict] = None
+
+
+class ProximityDetection(BaseModel):
+    device_id: str
+    content_id: str
+    user_distance: float  # meters
+    detection_method: str  # bluetooth, wifi, camera, motion
+    confidence_score: float
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    user_demographics: Optional[Dict] = None
+
+
+class AnalyticsQuery(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    device_ids: Optional[List[str]] = None
+    content_ids: Optional[List[str]] = None
+    event_types: Optional[List[str]] = None
+    group_by: Optional[str] = None  # device, content, date, hour
+
+
+class AnalyticsSummary(BaseModel):
+    total_impressions: int = 0
+    total_revenue: float = 0.0
+    total_interactions: int = 0
+    unique_devices: int = 0
+    avg_engagement_time: float = 0.0
+    top_performing_content: List[Dict] = []
+    revenue_by_category: Dict[str, float] = {}
+    hourly_breakdown: List[Dict] = []

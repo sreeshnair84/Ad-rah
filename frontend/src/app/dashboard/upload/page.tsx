@@ -1,10 +1,10 @@
 'use client';
 
-import UnifiedUploadPage from '@/components/upload/UnifiedUploadPage';
+import UnifiedUploadManager from '@/components/upload/UnifiedUploadManager';
 
 export default function UploadPage() {
   return (
-    <UnifiedUploadPage
+    <UnifiedUploadManager
       mode="simple"
       title="Upload Your First Content"
       description="Upload your advertisement content for review and approval"
