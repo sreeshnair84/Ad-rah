@@ -183,10 +183,30 @@ async def register_device(
             raise HTTPException(status_code=400, detail="Registration key is not associated with a company")
 
         companies = await repo.list_companies()
-        matching_company = next((c for c in companies if c.get("id") == company_id), None)
+        # Handle both dict and Company object formats
+        matching_company = None
+        for c in companies:
+            if isinstance(c, dict):
+                if c.get("id") == company_id:
+                    matching_company = c
+                    break
+            else:
+                # Assume it's a Company object
+                if hasattr(c, 'id') and c.id == company_id:
+                    matching_company = c
+                    break
 
         if not matching_company:
             raise HTTPException(status_code=400, detail="Company associated with registration key not found")
+
+        # Extract company name safely
+        if isinstance(matching_company, dict):
+            company_name = matching_company.get("name")
+            organization_code = matching_company.get("organization_code")
+        else:
+            # Assume it's a Company object
+            company_name = getattr(matching_company, 'name', None)
+            organization_code = getattr(matching_company, 'organization_code', None)
 
         existing_screens = await repo.list_digital_screens(company_id)
         if any(screen.get("name") == device_data.device_name for screen in existing_screens):
@@ -212,11 +232,11 @@ async def register_device(
         screen_record = DigitalScreen(
             id=device_id,
             name=device_data.device_name,
-            description=f"Registered device - {matching_company.get('name')}",
+            description=f"Registered device - {company_name}",
             company_id=company_id,
             location=getattr(device_data, 'location_description', "Device Location (TBD)"),
-            resolution_width=capabilities.max_resolution_width,
-            resolution_height=capabilities.max_resolution_height,
+            resolution_width=capabilities.max_resolution_width if capabilities else 1920,
+            resolution_height=capabilities.max_resolution_height if capabilities else 1080,
             orientation=ScreenOrientation.LANDSCAPE,
             aspect_ratio=device_data.aspect_ratio or "16:9",
             registration_key=device_data.registration_key,
@@ -226,9 +246,7 @@ async def register_device(
             last_seen=datetime.utcnow(),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
-            device_type=getattr(device_data, 'device_type', DeviceType.KIOSK),
-            capabilities=capabilities.model_dump() if capabilities else None,
-            fingerprint=fingerprint.model_dump() if fingerprint else None
+            device_type=getattr(device_data, 'device_type', DeviceType.KIOSK) if hasattr(DeviceType, '__members__') else DeviceType.KIOSK
         )
 
         await repo.save_digital_screen(screen_record)
@@ -249,7 +267,7 @@ async def register_device(
 
         await repo.save_digital_twin(digital_twin)
 
-        auth_result = await device_auth_service.authenticate_device(device_id, matching_company.get('name'))
+        auth_result = await device_auth_service.authenticate_device(device_id, company_name or "Unknown Organization")
 
         await repo.mark_key_used(registration_key_data["id"], device_id)
 
@@ -260,8 +278,8 @@ async def register_device(
             "device_id": device_id,
             "digital_twin_id": digital_twin.id,
             "message": "Device registered successfully with authentication and digital twin",
-            "organization_code": device_data.organization_code,
-            "company_name": matching_company.get("name"),
+            "organization_code": organization_code,
+            "company_name": company_name,
             "ip_address": client_ip,
             "certificate": auth_result.get("certificate"),
             "private_key": auth_result.get("private_key"),

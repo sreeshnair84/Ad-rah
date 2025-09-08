@@ -19,15 +19,16 @@ from .debug_roles import router as debug_router
 # Import unified content management router (consolidates routes/content.py, api/content_delivery.py, api/enhanced_content.py, api/uploads.py)
 from .content_unified import router as content_unified_router
 
-# Import unified overlays management router (consolidates routes/overlay.py and api/overlays.py)
-from .overlays_unified import router as overlays_unified_router
+# Import uploads router
+from .uploads import router as uploads_router
 
-# Import unified device management router (consolidates device.py, screens.py, simple_screens.py)
+# Import unified overlays management router (consolidates routes/overlay.py and api/overlays.py)
 from .devices_unified import router as devices_unified_router
+from .overlays_unified import router as overlays_unified_router
 
 # Import content delivery router if available
 try:
-    from .content_delivery import router as content_delivery_router
+    from .delivery import router as content_delivery_router
     CONTENT_DELIVERY_ROUTER_AVAILABLE = True
 except (ImportError, TypeError) as e:
     CONTENT_DELIVERY_ROUTER_AVAILABLE = False
@@ -62,6 +63,7 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(registration_router)
 api_router.include_router(content_unified_router)  # Unified content management
+api_router.include_router(uploads_router)  # Upload management
 api_router.include_router(moderation_router)
 api_router.include_router(companies_router)
 api_router.include_router(users_router)

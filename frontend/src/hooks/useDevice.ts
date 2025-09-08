@@ -31,7 +31,7 @@ export function useDevice() {
         throw new Error('Authentication required');
       }
 
-      const response = await fetch('/api/device/register', {
+      const response = await fetch('/api/devices/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

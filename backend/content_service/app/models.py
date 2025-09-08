@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Literal
 from datetime import datetime
@@ -685,6 +686,12 @@ class DeviceRegistrationCreate(BaseModel):
     organization_code: str = Field(..., min_length=1, max_length=50)
     aspect_ratio: Optional[str] = None  # e.g., "16:9", "4:3"
     registration_key: str = Field(..., min_length=1, max_length=100)  # Secure key for registration
+    
+    # Additional fields for enhanced registration
+    device_type: Optional[str] = None  # e.g., "KIOSK", "DISPLAY", "TABLET"
+    capabilities: Optional["DeviceCapabilities"] = None  # Forward reference
+    fingerprint: Optional["DeviceFingerprint"] = None    # Forward reference
+    location_description: Optional[str] = None
 
 
 class DeviceRegistrationKeyCreate(BaseModel):
@@ -715,25 +722,49 @@ class DeviceType(str, Enum):
 
 class DeviceCapabilities(BaseModel):
     """Device hardware and software capabilities"""
+    # Resolution capabilities
     max_resolution_width: int = 1920
     max_resolution_height: int = 1080
+    
+    # Content support capabilities (Flutter format)
+    supports_video: Optional[bool] = True
+    supports_images: Optional[bool] = True
+    supports_web_content: Optional[bool] = True
+    
+    # Legacy format support
     supported_formats: List[str] = ["mp4", "jpg", "png", "webp"]
+    
+    # Hardware capabilities
     has_touch: bool = False
     has_audio: bool = True
     has_camera: bool = False
-    storage_gb: Optional[int] = None
+    
+    # System resources (Flutter format)
+    storage_capacity_gb: Optional[int] = None  # Flutter sends this
+    storage_gb: Optional[int] = None  # Legacy field
     ram_gb: Optional[int] = None
     cpu_info: Optional[str] = None
     os_version: Optional[str] = None
+    
+    # Network and interaction (Flutter format)
+    network_interfaces: Optional[List[str]] = None
+    interactive_features: Optional[List[str]] = None
 
 
 class DeviceFingerprint(BaseModel):
     """Unique device identification"""
     hardware_id: str  # CPU ID, motherboard serial, etc.
     mac_addresses: List[str] = []  # All network interfaces
+    
+    # Flutter format fields
+    platform: Optional[str] = None  # Flutter sends this
+    device_model: Optional[str] = None  # Flutter sends this
+    os_version: Optional[str] = None  # Flutter sends this
+    
+    # Legacy fields
     device_serial: Optional[str] = None
     manufacturer: Optional[str] = None
-    model: Optional[str] = None
+    model: Optional[str] = None  # Same as device_model
     timezone: Optional[str] = None
     locale: Optional[str] = None
 

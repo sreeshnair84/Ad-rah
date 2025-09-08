@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -38,8 +38,8 @@ async def seed_test_data():
             "email": "info@dubaimall-displays.com",
             "website": "https://dubaimall-displays.com",
             "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
         },
         {
             "_id": "company_advertiser_emirates",

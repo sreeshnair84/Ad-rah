@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       headers.Authorization = authHeader;
     }
 
-    const backendResponse = await fetch(`${BACKEND_URL}/api/device/`, {
+    const backendResponse = await fetch(`${BACKEND_URL}/api/devices/`, {
       headers,
     });
 
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const backendResponse = await fetch(`${BACKEND_URL}/api/device/register`, {
+    const backendResponse = await fetch(`${BACKEND_URL}/api/devices/register`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
 
     // Forward the request to the backend
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
-    const response = await fetch(`${backendUrl}/api/device/register`, {
+    const response = await fetch(`${backendUrl}/api/devices/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

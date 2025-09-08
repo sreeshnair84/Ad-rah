@@ -21,6 +21,44 @@ from app.config import settings
 # Import API router with all endpoints
 from app.api import api_router
 
+async def seed_development_data():
+    """Seed test data for development with in-memory storage"""
+    from app.models import Company, DeviceRegistrationKey
+    from app.repo import repo
+    from datetime import datetime, timedelta
+    import uuid
+    
+    # Create Dubai Mall company (what Flutter expects)
+    company = Company(
+        id=str(uuid.uuid4()),
+        name='Dubai Mall Digital Displays',
+        type='HOST',
+        address='Dubai Mall, Downtown Dubai',
+        city='Dubai',
+        country='UAE',
+        organization_code='ORG-DUBAI001',  # Flutter expects this
+        status='active'
+    )
+    
+    saved_company = await repo.save_company(company)
+    
+    # Create the registration key that Flutter is using
+    key = DeviceRegistrationKey(
+        id=str(uuid.uuid4()),
+        key='nZ2CB2bX472WhaOq',  # Flutter expects this
+        company_id=saved_company['id'],
+        created_by='system',
+        expires_at=datetime.utcnow() + timedelta(days=30),  # Valid for 30 days
+        used=False,
+        used_by_device=None
+    )
+    
+    await repo.save_device_registration_key(key)
+    
+    logger.info("✅ Created Dubai Mall company and registration key for development")
+    logger.info(f"✅ Organization Code: ORG-DUBAI001")
+    logger.info(f"✅ Registration Key: nZ2CB2bX472WhaOq")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -30,6 +68,12 @@ async def lifespan(app: FastAPI):
     try:
         await db_service.initialize()
         logger.info("✅ Database service initialized")
+        
+        # Seed test data for in-memory storage in development
+        if not settings.MONGO_URI and settings.ENVIRONMENT == "development":
+            await seed_development_data()
+            logger.info("✅ Development test data seeded")
+        
         yield
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
@@ -47,13 +91,33 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://*.adara.com", "https://*.vercel.app"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-)
+# Configure CORS based on environment
+if settings.ENVIRONMENT == "development":
+    # In development, allow all localhost/127.0.0.1 origins to handle dynamic Flutter ports
+    cors_origins = [
+        "http://localhost:*",  # This won't work, so we'll use a custom function
+        "http://127.0.0.1:*",  # This won't work, so we'll use a custom function
+    ]
+    # For development, we'll allow all origins (less secure but needed for Flutter)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow all origins in development
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["*"],
+    )
+else:
+    # Production: strict CORS policy
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://*.adara.com", 
+            "https://*.vercel.app"
+        ],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["*"],
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

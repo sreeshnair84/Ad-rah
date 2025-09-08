@@ -78,8 +78,14 @@ try:
         if content_type:
             kwargs["content_settings"] = ContentSettings(content_type=content_type)
         blob_client.upload_blob(content, overwrite=True, **kwargs)
-        url = f"azure://{container}/{blob_name}"
-        logger.info("Uploaded media to Azure: %s", url)
+        
+        # For Azurite, return the actual HTTP URL instead of azure://
+        if "localhost" in conn or "127.0.0.1" in conn:
+            url = blob_client.url
+            logger.info("Uploaded media to Azurite: %s", url)
+        else:
+            url = f"azure://{container}/{blob_name}"
+            logger.info("Uploaded media to Azure: %s", url)
         return url
 
 except Exception:

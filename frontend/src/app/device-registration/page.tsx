@@ -34,7 +34,7 @@ export default function DeviceRegistrationPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/device/register', {
+      const response = await fetch('/api/devices/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

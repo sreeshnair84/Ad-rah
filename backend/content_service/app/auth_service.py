@@ -17,6 +17,7 @@ except ImportError:
 
 from app.config import settings
 from app.database_service import db_service
+from app.repo import repo
 from app.rbac_models import *
 
 logger = logging.getLogger(__name__)
@@ -191,10 +192,10 @@ class AuthService:
 
         # Get basic user data
         user_data = await self.get_current_user(token)
-        user_dict = user_data.__dict__ if hasattr(user_data, '__dict__') else user_data
+        user_dict = user_data.model_dump() if hasattr(user_data, 'model_dump') else (user_data.__dict__ if hasattr(user_data, '__dict__') else user_data)
 
         # Get user roles from database
-        user_roles = await db_service.get_user_roles(user_dict.get("id", user_dict.get("_id")))
+        user_roles = await repo.get_user_roles(user_dict.get("id", user_dict.get("_id")))
         user_dict["roles"] = user_roles
 
         # Get all companies for user's roles
@@ -219,7 +220,7 @@ class AuthService:
             role_id = user_role.get("role_id")
             if role_id and role_id.strip():
                 try:
-                    role = await db_service.get_role(role_id)
+                    role = await repo.get_role(role_id)
                     if role:
                         expanded_role = {
                             **user_role,
@@ -313,7 +314,9 @@ class AuthService:
         if user_type == "SUPER_USER" or user_email == "admin@adara.com":
             logger.debug("SUPER_USER detected - granting platform access")
             all_companies = await db_service.list_companies()
-            return {"is_platform_admin": True, "accessible_companies": all_companies}
+            # Convert Company objects to dicts
+            all_companies_dicts = [company.model_dump() for company in all_companies]
+            return {"is_platform_admin": True, "accessible_companies": all_companies_dicts}
 
         # Check roles for admin privileges
         is_platform_admin = False
@@ -338,7 +341,7 @@ class AuthService:
                 break
             elif role_id:
                 # Fallback: check role details from database
-                role = await db_service.get_role(role_id)
+                role = await repo.get_role(role_id)
                 logger.debug(f"Role from DB: {role}")
                 if role and role.get("role_group") == "ADMIN":
                     is_platform_admin = True
@@ -349,13 +352,15 @@ class AuthService:
 
         if is_platform_admin:
             all_companies = await db_service.list_companies()
-            logger.debug(f"Admin accessing {len(all_companies)} companies")
-            return {"is_platform_admin": True, "accessible_companies": all_companies}
+            # Convert Company objects to dicts
+            all_companies_dicts = [company.model_dump() for company in all_companies]
+            logger.debug(f"Admin accessing {len(all_companies_dicts)} companies")
+            return {"is_platform_admin": True, "accessible_companies": all_companies_dicts}
         else:
             # Regular user - get their company
             if user_company_id:
                 company = await db_service.get_company(user_company_id)
-                accessible_companies = [company] if company else []
+                accessible_companies = [company.model_dump()] if company else []
             else:
                 accessible_companies = []
 
@@ -386,7 +391,7 @@ class AuthService:
                         if user_data and user_data.get("user_type") == "SUPER_USER":
                             logger.info(f"SUPER_USER bypass activated for {user_email}")
                             # Get user roles
-                            user_roles = await db_service.get_user_roles(user_data["id"])
+                            user_roles = await repo.get_user_roles(user_data["id"])
                             user_data["roles"] = user_roles
                             return user_data
                         else:
@@ -407,7 +412,7 @@ class AuthService:
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
 
-        return await db_service.get_user_accessible_companies(user_id)
+        return await repo.get_user_accessible_companies(user_id)
 
     async def register_user(self, user_data: UserCreate) -> UserProfile:
         hashed_password = self.hash_password(user_data.password)
@@ -463,7 +468,7 @@ def require_roles(*allowed_roles):
         for user_role in user_roles:
             role_id = user_role.get("role_id") if isinstance(user_role, dict) else user_role.role_id
             if role_id:
-                role = await db_service.get_role(role_id)
+                role = await repo.get_role(role_id)
                 if role and role.get("role_group") in allowed_roles:
                     return user
 
@@ -484,7 +489,7 @@ def require_company_role(company_id: str, *allowed_roles):
                 role_id = user_role.role_id
 
             if (role_company_id == company_id and role_id):
-                role = await db_service.get_role(role_id)
+                role = await repo.get_role(role_id)
                 if role and role.get("role_group") in allowed_roles:
                     return user
 
@@ -521,12 +526,12 @@ def require_company_role_type(company_id: str, *allowed_role_types):
             raise HTTPException(status_code=401, detail="User not authenticated")
 
         # First check company access
-        has_access = await db_service.check_user_company_access(user_id, company_id)
+        has_access = await repo.check_user_company_access(user_id, company_id)
         if not has_access:
             raise HTTPException(status_code=403, detail="Access denied: You don't belong to this company")
 
         # Check role type
-        user_role = await db_service.get_user_role_in_company(user_id, company_id)
+        user_role = await repo.get_user_role_in_company(user_id, company_id)
         if not user_role:
             raise HTTPException(status_code=403, detail="No role found for this company")
 
@@ -550,7 +555,7 @@ def require_content_access(content_owner_id: str, action: str = "view"):
         if not user_id:
             raise HTTPException(status_code=401, detail="User not authenticated")
 
-        has_access = await db_service.check_content_access_permission(user_id, content_owner_id, action)
+        has_access = await repo.check_content_access_permission(user_id, content_owner_id, action)
         if not has_access:
             raise HTTPException(status_code=403, detail=f"Access denied: Cannot {action} this content")
 

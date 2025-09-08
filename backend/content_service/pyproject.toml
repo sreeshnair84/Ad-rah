@@ -15,6 +15,7 @@ dependencies = [
     "fastapi[email,mail]>=0.116.1",
     "google-generativeai>=0.8.5",
     "httpx>=0.28.0",
+    "imagehash>=4.3.2",
     "jwt>=1.4.0",
     "motor>=3.7.1",
     "passlib>=1.7.4",
