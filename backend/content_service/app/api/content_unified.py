@@ -28,7 +28,8 @@ from pydantic import BaseModel
 from ..models import (
     ContentMeta, ContentOverlay, ContentOverlayCreate, ContentOverlayUpdate,
     ContentLayoutCreate, ContentLayoutUpdate, AdvertiserCampaignCreate,
-    ContentDeploymentCreate, DeviceAnalytics, ProximityDetection, AnalyticsQuery, AnalyticsSummary
+    ContentDeploymentCreate, DeviceAnalytics, ProximityDetection, AnalyticsQuery, AnalyticsSummary,
+    UserProfile
 )
 from ..auth_service import require_roles, get_current_user, get_user_company_context
 from ..repo import repo
@@ -194,6 +195,35 @@ async def reject_content(
         raise HTTPException(status_code=500, detail=f"Failed to reject content: {e}")
 
 # ============================================================================
+# CONTENT ADMIN/MODERATION ENDPOINTS
+# ============================================================================
+
+@router.get("/admin/pending")
+async def get_pending_content(
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Get all pending content for admin review"""
+    try:
+        # Only SUPER_USER or users with content_moderate permission can access
+        if (current_user.user_type != "SUPER_USER" and 
+            "content_moderate" not in current_user.permissions):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get all content with status="pending"
+        pending_content = await repo.list_content(status="pending")
+        
+        return safe_json_response({
+            "content": pending_content,
+            "total": len(pending_content)
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get pending content: {e}")
+
+# ============================================================================
 # CONTENT UPLOAD MANAGEMENT (from app/api/uploads.py)
 # ============================================================================
 
@@ -202,15 +232,16 @@ async def upload_content_files(
     request: Request,
     owner_id: str,
     files: List[UploadFile] = File(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
     company_context: dict = Depends(get_user_company_context)
 ):
     """Upload content files with security scanning"""
     try:
         # Validate company access
-        if owner_id != current_user.get("id"):
+        # SUPER_USER can upload for any company, others need permission check
+        if current_user.user_type != "SUPER_USER" and owner_id != current_user.id:
             can_access = await repo.check_content_access_permission(
-                current_user.get("id"), owner_id, "edit"
+                current_user.id, owner_id, "edit"
             )
             if not can_access:
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -229,7 +260,7 @@ async def upload_content_files(
                 # Security scanning
                 if SECURITY_SCANNING_ENABLED:
                     audit_logger.log_content_upload(
-                        user_id=current_user.get('id', owner_id),
+                        user_id=current_user.id or owner_id,
                         filename=filename,
                         content_type=ctype,
                         size=file_size,

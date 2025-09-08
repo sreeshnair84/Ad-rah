@@ -187,7 +187,8 @@ async def register_device(
         matching_company = None
         for c in companies:
             if isinstance(c, dict):
-                if c.get("id") == company_id:
+                # Check both _id (MongoDB) and id (processed) fields
+                if c.get("id") == company_id or c.get("_id") == company_id:
                     matching_company = c
                     break
             else:
@@ -199,7 +200,7 @@ async def register_device(
         if not matching_company:
             raise HTTPException(status_code=400, detail="Company associated with registration key not found")
 
-        # Extract company name safely
+        # Extract company name and organization code safely
         if isinstance(matching_company, dict):
             company_name = matching_company.get("name")
             organization_code = matching_company.get("organization_code")
@@ -498,7 +499,8 @@ async def get_registration_keys(current_user: dict = Depends(get_current_user)):
 
         keys_collection = db.device_registration_keys
         keys = []
-        async for key_doc in keys_collection.find():
+        # Get all keys (both used and unused) for admin view
+        async for key_doc in keys_collection.find().sort("created_at", -1):
             if "_id" in key_doc:
                 key_doc["_id"] = str(key_doc["_id"])
             keys.append(key_doc)
@@ -559,7 +561,17 @@ async def get_devices_by_organization(org_code: str, current_user: dict = Depend
     """Get all devices for an organization with enhanced status info"""
     try:
         companies = await repo.list_companies()
-        company = next((c for c in companies if c.get("organization_code") == org_code), None)
+        # Check both organization_code and _id fields for MongoDB compatibility
+        company = None
+        for c in companies:
+            if isinstance(c, dict):
+                if c.get("organization_code") == org_code:
+                    company = c
+                    break
+            else:
+                if hasattr(c, 'organization_code') and c.organization_code == org_code:
+                    company = c
+                    break
 
         if not company:
             return {
@@ -570,7 +582,9 @@ async def get_devices_by_organization(org_code: str, current_user: dict = Depend
                 "offline": 0
             }
 
-        devices = await repo.list_digital_screens(company.get("id"))
+        # Get company ID safely
+        company_id = company.get("_id") or company.get("id") if isinstance(company, dict) else getattr(company, 'id', None)
+        devices = await repo.list_digital_screens(company_id)
 
         enhanced_devices = []
         online_count = 0

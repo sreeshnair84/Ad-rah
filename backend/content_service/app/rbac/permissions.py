@@ -65,6 +65,12 @@ class Permission(str, Enum):
     MANAGE = "manage"      # Full management access
     EXPORT = "export"      # Can export data
     IMPORT = "import"      # Can import data
+    
+    # Content specific permissions
+    READ = "read"          # Can read content
+    UPLOAD = "upload"      # Can upload content
+    DISTRIBUTE = "distribute"  # Can distribute content to devices
+    MODERATE = "moderate"  # Can moderate content
 
 @dataclass
 class PagePermissions:
@@ -173,7 +179,7 @@ def company_admin_template() -> RoleTemplate:
         PagePermissions(Page.COMPANIES, {Permission.VIEW, Permission.EDIT}),
         
         # Full Content Management
-        PagePermissions(Page.CONTENT, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE, Permission.EXPORT}),
+        PagePermissions(Page.CONTENT, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE, Permission.EXPORT, Permission.READ, Permission.UPLOAD, Permission.DISTRIBUTE}),
         PagePermissions(Page.CONTENT_UPLOAD, {Permission.VIEW, Permission.CREATE}),
         PagePermissions(Page.CONTENT_REVIEW, {Permission.VIEW, Permission.EDIT}),
         PagePermissions(Page.CONTENT_APPROVAL, {Permission.VIEW, Permission.APPROVE, Permission.REJECT}),
@@ -186,7 +192,7 @@ def company_admin_template() -> RoleTemplate:
         # Advanced Features
         PagePermissions(Page.SCHEDULES, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE}),
         PagePermissions(Page.OVERLAYS, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE}),
-        PagePermissions(Page.DIGITAL_TWIN, {Permission.VIEW, Permission.CREATE, Permission.EDIT}),
+        PagePermissions(Page.DIGITAL_TWIN, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE}),
         
         # Limited System Access
         PagePermissions(Page.API_KEYS, {Permission.VIEW, Permission.CREATE, Permission.EDIT})
@@ -195,7 +201,7 @@ def company_admin_template() -> RoleTemplate:
     return RoleTemplate(
         role=Role.COMPANY_ADMIN,
         name="Company Administrator",
-        description="Full management within company scope",
+        description="Full management within company scope with access to all features",
         user_type=UserType.COMPANY_USER,
         page_permissions=permissions
     )
@@ -266,20 +272,24 @@ def editor_template() -> RoleTemplate:
         PagePermissions(Page.DASHBOARD, {Permission.VIEW}),
         
         # Content Creation Focus
-        PagePermissions(Page.CONTENT, {Permission.VIEW, Permission.CREATE, Permission.EDIT}),
+        PagePermissions(Page.CONTENT, {Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.READ, Permission.UPLOAD, Permission.DISTRIBUTE}),
         PagePermissions(Page.CONTENT_UPLOAD, {Permission.VIEW, Permission.CREATE}),
         
         # Limited Device Access
         PagePermissions(Page.DEVICES, {Permission.VIEW}),
         
         # Scheduling
-        PagePermissions(Page.SCHEDULES, {Permission.VIEW, Permission.CREATE, Permission.EDIT})
+        PagePermissions(Page.SCHEDULES, {Permission.VIEW, Permission.CREATE, Permission.EDIT}),
+        
+        # Advanced Features - Added for Host Admin and Editor access
+        PagePermissions(Page.OVERLAYS, {Permission.VIEW, Permission.CREATE, Permission.EDIT}),
+        PagePermissions(Page.DIGITAL_TWIN, {Permission.VIEW, Permission.CREATE, Permission.EDIT})
     ]
     
     return RoleTemplate(
         role=Role.EDITOR,
         name="Content Editor",
-        description="Content creation and editing",
+        description="Content creation and editing with advanced features",
         user_type=UserType.COMPANY_USER,
         page_permissions=permissions
     )

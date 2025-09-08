@@ -380,8 +380,8 @@ export default function RolesManagementPage() {
                 <Label htmlFor="role-group">Role Group</Label>
                 <Select value={newRole.role_group} onValueChange={(value) => 
                   setNewRole({...newRole, role_group: value as any})
-                }>
-                  <SelectTrigger>
+                } name="role_group">
+                  <SelectTrigger id="role-group">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -404,8 +404,8 @@ export default function RolesManagementPage() {
                 <Label htmlFor="company">Company</Label>
                 <Select value={newRole.company_id} onValueChange={(value) => 
                   setNewRole({...newRole, company_id: value})
-                }>
-                  <SelectTrigger>
+                } name="company_id">
+                  <SelectTrigger id="company">
                     <SelectValue placeholder="Select company" />
                   </SelectTrigger>
                   <SelectContent>

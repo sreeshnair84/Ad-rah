@@ -188,8 +188,9 @@ export default function ContentUploadForm({ onUploadComplete }: ContentUploadFor
                 onValueChange={(value) => setFormData({ ...formData, category: value })} 
                 required 
                 disabled={uploading}
+                name="category"
               >
-                <SelectTrigger>
+                <SelectTrigger id="category">
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>

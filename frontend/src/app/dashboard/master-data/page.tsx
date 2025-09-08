@@ -187,8 +187,8 @@ export default function MasterDataPage() {
                       <Label htmlFor="type">Type</Label>
                       <Select value={newCompany.type} onValueChange={(value: 'HOST' | 'ADVERTISER') =>
                         setNewCompany({ ...newCompany, type: value })
-                      }>
-                        <SelectTrigger>
+                      } name="type">
+                        <SelectTrigger id="type">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -261,8 +261,8 @@ export default function MasterDataPage() {
                     <Label htmlFor="status">Status</Label>
                     <Select value={newCompany.status} onValueChange={(value: 'active' | 'inactive') =>
                       setNewCompany({ ...newCompany, status: value })
-                    }>
-                      <SelectTrigger>
+                    } name="status">
+                      <SelectTrigger id="status">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

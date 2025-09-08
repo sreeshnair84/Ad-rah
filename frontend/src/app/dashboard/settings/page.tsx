@@ -122,8 +122,8 @@ export default function SettingsPage() {
               <Label htmlFor="theme">Theme</Label>
               <Select value={settings.theme} onValueChange={(value) =>
                 setSettings({ ...settings, theme: value })
-              }>
-                <SelectTrigger>
+              } name="theme">
+                <SelectTrigger id="theme">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -137,8 +137,8 @@ export default function SettingsPage() {
               <Label htmlFor="language">Language</Label>
               <Select value={settings.language} onValueChange={(value) =>
                 setSettings({ ...settings, language: value })
-              }>
-                <SelectTrigger>
+              } name="language">
+                <SelectTrigger id="language">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

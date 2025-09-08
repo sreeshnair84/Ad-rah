@@ -14,7 +14,41 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
 
-    const backendResponse = await fetch(`${BACKEND_URL}/api/content/upload-file`, {
+    // Get owner_id from form data, if not provided, get user info
+    let ownerId = formData.get('owner_id') as string;
+    
+    // If owner_id is not provided, get it from the user's profile
+    if (!ownerId && authHeader) {
+      try {
+        const profileResponse = await fetch(`${BACKEND_URL}/api/auth/me`, {
+          headers: {
+            Authorization: authHeader,
+          },
+        });
+        
+        if (profileResponse.ok) {
+          const userProfile = await profileResponse.json();
+          // Use company_id if available (for company uploads), otherwise use user id
+          ownerId = userProfile.company_id || userProfile.id;
+        }
+      } catch (error) {
+        console.warn('Could not get user profile for owner_id:', error);
+      }
+    }
+
+    // If we still don't have owner_id, return error
+    if (!ownerId) {
+      return NextResponse.json(
+        { detail: 'Could not determine owner_id. Please ensure you are logged in.' },
+        { status: 400 }
+      );
+    }
+
+    // Create URL with owner_id as query parameter
+    const backendUrl = new URL(`${BACKEND_URL}/api/content/upload`);
+    backendUrl.searchParams.set('owner_id', ownerId);
+
+    const backendResponse = await fetch(backendUrl.toString(), {
       method: 'POST',
       headers,
       body: formData,

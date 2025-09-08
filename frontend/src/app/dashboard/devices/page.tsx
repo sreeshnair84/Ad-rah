@@ -144,8 +144,8 @@ export default function DeviceManagementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="device_type">Device Type</Label>
-                  <Select value={formData.device_type} onValueChange={(value) => setFormData({ ...formData, device_type: value })}>
-                    <SelectTrigger>
+                  <Select value={formData.device_type} onValueChange={(value) => setFormData({ ...formData, device_type: value })} name="device_type">
+                    <SelectTrigger id="device_type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

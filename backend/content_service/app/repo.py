@@ -440,6 +440,14 @@ class InMemoryRepo:
                     return twin
             return None
 
+    async def delete_digital_twin(self, _id: str) -> bool:
+        async with self._lock:
+            twins = self._store.setdefault("__digital_twins__", {})
+            if _id in twins:
+                del twins[_id]
+                return True
+            return False
+
     # Device operations (for new RBAC system)
     async def save_device(self, device_data: dict) -> dict:
         async with self._lock:
@@ -1479,6 +1487,10 @@ class MongoRepo:
 
     async def get_digital_twin_by_screen(self, screen_id: str) -> Optional[dict]:
         return await self._digital_twin_col.find_one({"screen_id": screen_id})
+
+    async def delete_digital_twin(self, _id: str) -> bool:
+        result = await self._digital_twin_col.delete_one({"id": _id})
+        return result.deleted_count > 0
 
     # Device operations (for new RBAC system)
     @property

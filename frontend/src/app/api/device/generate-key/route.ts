@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const backendResponse = await fetch(`${BACKEND_URL}/api/device/generate-key`, {
+    const backendResponse = await fetch(`${BACKEND_URL}/api/devices/keys`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

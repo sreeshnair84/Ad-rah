@@ -26,6 +26,9 @@ from .uploads import router as uploads_router
 from .devices_unified import router as devices_unified_router
 from .overlays_unified import router as overlays_unified_router
 
+# Import digital twins router
+from .digital_twins import router as digital_twins_router
+
 # Import content delivery router if available
 try:
     from .delivery import router as content_delivery_router
@@ -71,6 +74,7 @@ api_router.include_router(users_router)
 api_router.include_router(events_router)
 api_router.include_router(company_applications_router)
 api_router.include_router(devices_unified_router)  # Unified device management (replaces device_router, screens_router, simple_screens_router)
+api_router.include_router(digital_twins_router)  # Digital twin management
 api_router.include_router(categories_router)
 api_router.include_router(websocket_router)
 api_router.include_router(debug_router)

@@ -12,6 +12,83 @@ from app.rbac.permissions import (
     Role, UserType, PermissionManager, DEFAULT_ROLE_TEMPLATES,
     PagePermissions, is_super_admin, Page, Permission
 )
+
+# Mapping from backend Page+Permission to frontend resource_action format
+PERMISSION_MAPPING = {
+    # Dashboard
+    (Page.DASHBOARD, Permission.VIEW): "dashboard_view",
+    
+    # Content management
+    (Page.CONTENT, Permission.VIEW): "content_view",
+    (Page.CONTENT, Permission.CREATE): "content_create",
+    (Page.CONTENT, Permission.EDIT): "content_edit",
+    (Page.CONTENT, Permission.DELETE): "content_delete",
+    (Page.CONTENT, Permission.READ): "content_read",
+    (Page.CONTENT, Permission.UPLOAD): "content_upload",
+    (Page.CONTENT, Permission.DISTRIBUTE): "content_distribute",
+    
+    # Device management
+    (Page.DEVICES, Permission.VIEW): "device_view",
+    (Page.DEVICES, Permission.CREATE): "device_create",
+    (Page.DEVICES, Permission.EDIT): "device_edit",
+    (Page.DEVICES, Permission.DELETE): "device_delete",
+    (Page.DEVICES, Permission.MANAGE): "device_manage",
+    
+    # Overlay management
+    (Page.OVERLAYS, Permission.VIEW): "overlay_view",
+    (Page.OVERLAYS, Permission.CREATE): "overlay_create",
+    (Page.OVERLAYS, Permission.EDIT): "overlay_edit",
+    (Page.OVERLAYS, Permission.DELETE): "overlay_delete",
+    
+    # Digital Twin
+    (Page.DIGITAL_TWIN, Permission.VIEW): "digital_twin_view",
+    (Page.DIGITAL_TWIN, Permission.CREATE): "digital_twin_create",
+    (Page.DIGITAL_TWIN, Permission.EDIT): "digital_twin_edit",
+    (Page.DIGITAL_TWIN, Permission.DELETE): "digital_twin_delete",
+    
+    # Analytics
+    (Page.ANALYTICS, Permission.VIEW): "analytics_view",
+    (Page.ANALYTICS, Permission.EXPORT): "analytics_export",
+    
+    # User management
+    (Page.USERS, Permission.VIEW): "user_view",
+    (Page.USERS, Permission.CREATE): "user_create",
+    (Page.USERS, Permission.EDIT): "user_edit",
+    (Page.USERS, Permission.DELETE): "user_delete",
+    
+    # Role management
+    (Page.ROLES, Permission.VIEW): "role_view",
+    (Page.ROLES, Permission.CREATE): "role_create",
+    (Page.ROLES, Permission.EDIT): "role_edit",
+    (Page.ROLES, Permission.DELETE): "role_delete",
+    
+    # Company management
+    (Page.COMPANIES, Permission.VIEW): "company_view",
+    (Page.COMPANIES, Permission.EDIT): "company_edit",
+    (Page.COMPANIES, Permission.DELETE): "company_delete",
+    
+    # System settings
+    (Page.SYSTEM_SETTINGS, Permission.VIEW): "settings_view",
+    (Page.SYSTEM_SETTINGS, Permission.EDIT): "settings_edit",
+    
+    # Schedules
+    (Page.SCHEDULES, Permission.VIEW): "schedule_view",
+    (Page.SCHEDULES, Permission.CREATE): "schedule_create",
+    (Page.SCHEDULES, Permission.EDIT): "schedule_edit",
+    (Page.SCHEDULES, Permission.DELETE): "schedule_delete",
+}
+
+def convert_permissions_to_frontend_format(page_permissions_list: List[PagePermissions]) -> List[str]:
+    """Convert backend PagePermissions to frontend resource_action format"""
+    frontend_permissions = []
+    
+    for page_perm in page_permissions_list:
+        for permission in page_perm.permissions:
+            permission_key = (page_perm.page, permission)
+            if permission_key in PERMISSION_MAPPING:
+                frontend_permissions.append(PERMISSION_MAPPING[permission_key])
+    
+    return list(set(frontend_permissions))  # Remove duplicates
 from app.models import User, UserCreate, UserUpdate, UserProfile
 from app.auth_service import auth_service  # Use consolidated auth service
 
@@ -156,28 +233,44 @@ class UserService:
             company_role = None
             company_id = None
             
-            # For SUPER_USER, use permissions from user record directly
+            # For SUPER_USER, grant all permissions
             if user_type == "SUPER_USER":
-                user_permissions = user_data.get("permissions", [])
-                permissions = list(set(str(p) for p in user_permissions if p))
+                # Super admin gets all permissions on all pages
+                all_page_permissions = []
+                for page in Page:
+                    page_permissions = PagePermissions(page=page, permissions={Permission.VIEW, Permission.CREATE, Permission.EDIT, Permission.DELETE, Permission.MANAGE, Permission.EXPORT, Permission.IMPORT, Permission.DISTRIBUTE})
+                    all_page_permissions.append(page_permissions)
+                
+                permissions = convert_permissions_to_frontend_format(all_page_permissions)
             else:
-                # For other users, get permissions from roles
+                # For other users, get permissions from RBAC role templates
+                page_permissions_list = []
+                
                 for role in user_roles:
-                    role_permissions = role.get("permissions", [])
-                    if isinstance(role_permissions, list):
-                        for perm in role_permissions:
-                            if isinstance(perm, dict) and "permissions" in perm:
-                                permissions.extend(perm["permissions"])
-                            elif isinstance(perm, str):
-                                permissions.append(perm)
-                    
                     # Set company role and ID from first company role
                     if not company_role and role.get("company_id") != "global":
                         company_role = role.get("role")
                         company_id = role.get("company_id")
+                    
+                    # Map company role to RBAC Role enum
+                    rbac_role = None
+                    if company_role == "ADMIN":
+                        rbac_role = Role.COMPANY_ADMIN
+                    elif company_role == "EDITOR":
+                        rbac_role = Role.EDITOR
+                    elif company_role == "REVIEWER":
+                        rbac_role = Role.REVIEWER
+                    elif company_role == "VIEWER":
+                        rbac_role = Role.VIEWER
+                    
+                    # Get role template permissions
+                    if rbac_role:
+                        template = PermissionManager.get_role_template(rbac_role)
+                        if template:
+                            page_permissions_list.extend(template.page_permissions)
                 
-                # Remove duplicates and ensure all permissions are strings
-                permissions = list(set(str(p) for p in permissions if p))
+                # Convert page permissions to frontend format
+                permissions = convert_permissions_to_frontend_format(page_permissions_list)
             
             profile = UserProfile(
                 id=user_data.get("id") or str(user_data.get("_id")),

@@ -311,8 +311,8 @@ export default function DeviceKeysPage() {
             <div className="space-y-4 py-4">
               <div>
                 <Label htmlFor="company">Select Company *</Label>
-                <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                  <SelectTrigger>
+                <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} name="company_id">
+                  <SelectTrigger id="company">
                     <SelectValue placeholder="Choose a company" />
                   </SelectTrigger>
                   <SelectContent>

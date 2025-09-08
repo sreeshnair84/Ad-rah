@@ -100,8 +100,9 @@ export function ContentForm({
             value={formData.category} 
             onValueChange={(value) => onFormDataChange({ category: value })}
             disabled={disabled}
+            name="category"
           >
-            <SelectTrigger className="mt-1">
+            <SelectTrigger className="mt-1" id="category">
               <SelectValue placeholder="Select a category" />
             </SelectTrigger>
             <SelectContent>
@@ -172,8 +173,9 @@ export function ContentForm({
                 value={formData.priority}
                 onValueChange={(value: 'low' | 'medium' | 'high') => onFormDataChange({ priority: value })}
                 disabled={disabled}
+                name="priority"
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1" id="priority">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
