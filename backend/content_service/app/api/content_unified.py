@@ -15,7 +15,7 @@ This unified API provides:
 - Analytics and reporting
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request, BackgroundTasks, Query, Form
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
@@ -82,6 +82,7 @@ async def list_content(
             limit=limit,
             offset=offset
         )
+        # Return the list directly to match the response model
         return safe_json_response(content_list)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list content: {e}")
@@ -214,7 +215,7 @@ async def get_pending_content(
         pending_content = await repo.list_content(status="pending")
         
         return safe_json_response({
-            "content": pending_content,
+            "pending_content": pending_content,
             "total": len(pending_content)
         })
 
@@ -223,9 +224,189 @@ async def get_pending_content(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get pending content: {e}")
 
+@router.post("/admin/approve/{content_id}")
+async def admin_approve_content(
+    content_id: str,
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Admin approve content with reviewer tracking"""
+    try:
+        # Only SUPER_USER or users with content_approve permission can access
+        if (current_user.user_type != "SUPER_USER" and 
+            "content_approve" not in current_user.permissions):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        existing_content = await repo.get_content_meta(content_id)
+        if not existing_content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Update content status and add reviewer info
+        await repo.update_content_status(
+            content_id, 
+            "approved", 
+            current_user.id,
+            notes="Approved by admin"
+        )
+
+        return safe_json_response({"message": "Content approved successfully"})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to approve content: {e}")
+
+@router.post("/admin/reject/{content_id}")
+async def admin_reject_content(
+    content_id: str,
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Admin reject content with reviewer tracking"""
+    try:
+        # Only SUPER_USER or users with content_approve permission can access
+        if (current_user.user_type != "SUPER_USER" and 
+            "content_approve" not in current_user.permissions):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        existing_content = await repo.get_content_meta(content_id)
+        if not existing_content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Update content status and add reviewer info
+        await repo.update_content_status(
+            content_id, 
+            "rejected", 
+            current_user.id,
+            notes="Rejected by admin"
+        )
+
+        return safe_json_response({"message": "Content rejected successfully"})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reject content: {e}")
+
 # ============================================================================
 # CONTENT UPLOAD MANAGEMENT (from app/api/uploads.py)
 # ============================================================================
+
+async def _process_upload_files(
+    request: Request,
+    owner_id: str,
+    files: List[UploadFile],
+    current_user: UserProfile,
+    company_context: dict
+):
+    """Common upload processing logic"""
+    # Validate company access
+    # SUPER_USER can upload for any company, others need permission check
+    if current_user.user_type != "SUPER_USER" and owner_id != current_user.id:
+        can_access = await repo.check_content_access_permission(
+            current_user.id, owner_id, "edit"
+        )
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    saved = []
+    rejected = []
+    client_ip = request.client.host if request.client else "unknown"
+
+    for f in files:
+        try:
+            filename = f.filename or "upload.bin"
+            ctype = f.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            content = await f.read()
+            file_size = len(content)
+
+            # Security scanning
+            if SECURITY_SCANNING_ENABLED:
+                audit_logger.log_content_upload(
+                    user_id=current_user.id or owner_id,
+                    filename=filename,
+                    content_type=ctype,
+                    size=file_size,
+                    ip_address=client_ip
+                )
+
+                scan_result = await content_scanner.scan_content(content, filename, ctype)
+                if scan_result.security_level == "blocked":
+                    rejected.append({
+                        "filename": filename,
+                        "reason": "security_blocked",
+                        "details": scan_result.content_warnings
+                    })
+                    continue
+
+            # Save file
+            path = save_media(filename, content, content_type=ctype)
+
+            # Create metadata
+            content_status = "approved" if SECURITY_SCANNING_ENABLED and 'scan_result' in locals() and scan_result.security_level == "safe" else "pending"
+
+            meta = ContentMeta(
+                id=None,
+                owner_id=owner_id,
+                filename=filename,
+                content_type=ctype,
+                size=file_size,
+                status=content_status
+            )
+
+            saved_meta = await repo.save_content_meta(meta)
+            saved.append({"meta": saved_meta, "path": path})
+
+        except Exception as e:
+            rejected.append({
+                "filename": filename,
+                "reason": "processing_error",
+                "details": str(e)
+            })
+
+    response = {"uploaded": saved}
+    if rejected:
+        response["rejected"] = rejected
+
+    return response
+
+@router.post("/upload-file")
+async def upload_content_file(
+    request: Request,
+    file: UploadFile = File(...),
+    owner_id: str = Form(...),
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    categories: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
+    priority: Optional[str] = Form("medium"),
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Upload a single content file (legacy endpoint for compatibility)"""
+    try:
+        # Convert single file to list for compatibility with main upload function
+        files_list = [file]
+
+        # Process upload using existing logic
+        result = await _process_upload_files(
+            request, owner_id, files_list, current_user, company_context
+        )
+
+        # Transform response for legacy compatibility
+        if result.get("uploaded"):
+            return safe_json_response({
+                "uploaded": result["uploaded"],
+                "status": "success",
+                "message": "File uploaded successfully"
+            })
+        else:
+            raise HTTPException(status_code=400, detail="Upload failed")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
 @router.post("/upload")
 async def upload_content_files(
@@ -237,75 +418,10 @@ async def upload_content_files(
 ):
     """Upload content files with security scanning"""
     try:
-        # Validate company access
-        # SUPER_USER can upload for any company, others need permission check
-        if current_user.user_type != "SUPER_USER" and owner_id != current_user.id:
-            can_access = await repo.check_content_access_permission(
-                current_user.id, owner_id, "edit"
-            )
-            if not can_access:
-                raise HTTPException(status_code=403, detail="Access denied")
-
-        saved = []
-        rejected = []
-        client_ip = request.client.host if request.client else "unknown"
-
-        for f in files:
-            try:
-                filename = f.filename or "upload.bin"
-                ctype = f.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-                content = await f.read()
-                file_size = len(content)
-
-                # Security scanning
-                if SECURITY_SCANNING_ENABLED:
-                    audit_logger.log_content_upload(
-                        user_id=current_user.id or owner_id,
-                        filename=filename,
-                        content_type=ctype,
-                        size=file_size,
-                        ip_address=client_ip
-                    )
-
-                    scan_result = await content_scanner.scan_content(content, filename, ctype)
-                    if scan_result.security_level == "blocked":
-                        rejected.append({
-                            "filename": filename,
-                            "reason": "security_blocked",
-                            "details": scan_result.content_warnings
-                        })
-                        continue
-
-                # Save file
-                path = save_media(filename, content, content_type=ctype)
-
-                # Create metadata
-                content_status = "approved" if SECURITY_SCANNING_ENABLED and scan_result.security_level == "safe" else "pending"
-
-                meta = ContentMeta(
-                    id=None,
-                    owner_id=owner_id,
-                    filename=filename,
-                    content_type=ctype,
-                    size=file_size,
-                    status=content_status
-                )
-
-                saved_meta = await repo.save_content_meta(meta)
-                saved.append({"meta": saved_meta, "path": path})
-
-            except Exception as e:
-                rejected.append({
-                    "filename": filename,
-                    "reason": "processing_error",
-                    "details": str(e)
-                })
-
-        response = {"uploaded": saved}
-        if rejected:
-            response["rejected"] = rejected
-
-        return safe_json_response(response)
+        result = await _process_upload_files(
+            request, owner_id, files, current_user, company_context
+        )
+        return safe_json_response(result)
 
     except HTTPException:
         raise

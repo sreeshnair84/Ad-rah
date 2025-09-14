@@ -41,7 +41,7 @@ export function useContent() {
       formData.append('owner_id', ownerId);
       formData.append('file', file);  // Backend expects 'file' not 'files'
 
-      const response = await fetch('/api/content/upload-file', {
+      const response = await fetch(`/api/content/upload-file`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

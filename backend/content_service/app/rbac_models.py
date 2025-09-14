@@ -147,6 +147,8 @@ def get_permissions_for_role(user_type: UserType, company_type: Optional[Company
 
 # Pydantic Models
 class Company(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: str
     name: str
     company_type: CompanyType
@@ -163,6 +165,8 @@ class Company(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class User(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: str
     email: str
     first_name: str
@@ -180,6 +184,8 @@ class User(BaseModel):
     company: Optional[Company] = None
 
 class UserProfile(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: str
     email: str
     first_name: str
@@ -194,7 +200,7 @@ class UserProfile(BaseModel):
     last_login: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    company: Optional[Company] = None
+    company: Optional[Dict] = None  # Changed from Company to Dict
     accessible_navigation: List[str] = Field(default_factory=list)
     display_name: str = ""
     role_display: str = ""

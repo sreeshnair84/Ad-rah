@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     // Forward the Authorization header from the frontend request
     const authHeader = request.headers.get('authorization');
     const headers: HeadersInit = {};
-    
+
     if (authHeader) {
       headers.Authorization = authHeader;
     }
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     // Get owner_id from form data, if not provided, get user info
     let ownerId = formData.get('owner_id') as string;
-    
+
     // If owner_id is not provided, get it from the user's profile
     if (!ownerId && authHeader) {
       try {
@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
             Authorization: authHeader,
           },
         });
-        
+
         if (profileResponse.ok) {
           const userProfile = await profileResponse.json();
-          // Use company_id if available (for company uploads), otherwise use user id
-          ownerId = userProfile.company_id || userProfile.id;
+          // Use user id for media uploads
+          ownerId = userProfile.id;
         }
       } catch (error) {
         console.warn('Could not get user profile for owner_id:', error);
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create URL with owner_id as query parameter - use the single file endpoint
-    const backendUrl = new URL(`${BACKEND_URL}/api/content/upload-file`);
-    // owner_id is already in the form data, so we don't need to add it as query param for this endpoint
+    // Create URL with owner_id as query parameter for the multi-file endpoint
+    const backendUrl = new URL(`${BACKEND_URL}/api/content/upload`);
+    backendUrl.searchParams.set('owner_id', ownerId);
 
     const backendResponse = await fetch(backendUrl.toString(), {
       method: 'POST',
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       status: backendResponse.status,
     });
   } catch (error) {
-    console.error('Upload proxy error:', error);
+    console.error('Upload media proxy error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

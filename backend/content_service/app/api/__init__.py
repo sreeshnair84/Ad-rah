@@ -59,6 +59,9 @@ from .seed import router as seed_router
 # Import temp auth router for debugging
 # from .temp_auth import router as temp_auth_router  # Removed - temporary debug router
 
+# Import test seed router for testing authentication
+from .test_seed import router as test_seed_router
+
 # Import debug config router
 from .debug_config import router as debug_config_router
 
@@ -83,6 +86,7 @@ api_router.include_router(overlays_unified_router)  # Unified overlays managemen
 api_router.include_router(analytics_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(seed_router)
+api_router.include_router(test_seed_router)  # Test seed router for authentication testing
 # api_router.include_router(temp_auth_router, prefix="/temp-auth")  # Removed - temporary debug router
 api_router.include_router(debug_config_router, prefix="/debug")
 

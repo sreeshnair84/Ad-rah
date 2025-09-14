@@ -64,6 +64,8 @@ class CompanyUpdate(BaseModel):
 
 
 class Company(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: Optional[str] = None
     name: str
     type: str
@@ -154,6 +156,8 @@ class UserUpdate(BaseModel):
 
 
 class UserProfile(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: str
     email: str
     first_name: Optional[str] = None

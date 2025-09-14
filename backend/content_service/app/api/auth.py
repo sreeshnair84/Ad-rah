@@ -4,7 +4,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from app.auth_service import auth_service, get_current_user, get_current_active_user, require_permission, require_user_type
 from app.database_service import db_service
-from app.rbac_models import *
+from app.rbac_models import LoginRequest, LoginResponse, UserCreate
+from app.models import UserProfile
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -28,14 +29,14 @@ async def logout():
 @router.post("/users", response_model=UserProfile)
 async def create_user(
     user_data: UserCreate,
-    current_user: UserProfile = Depends(require_permission(Permission.USER_CREATE.value))
+    current_user: UserProfile = Depends(require_permission("user_create"))
 ):
     # Only SUPER_USER and company ADMIN can create users
-    if current_user.user_type != UserType.SUPER_USER and current_user.company_role != CompanyRole.ADMIN:
+    if current_user.user_type != "SUPER_USER" and current_user.company_role != "ADMIN":
         raise HTTPException(status_code=403, detail="Only administrators can create users")
     
     # Company admin can only create users for their own company
-    if current_user.user_type != UserType.SUPER_USER:
+    if current_user.user_type != "SUPER_USER":
         if not current_user.company_id:
             raise HTTPException(status_code=400, detail="Company admin must have a company")
         if user_data.company_id != current_user.company_id:
@@ -55,12 +56,12 @@ async def list_users(
     logger.info(f"list_users called by user: {current_user.email} (type: {current_user.user_type})")
     
     # Only SUPER_USER and company ADMIN can access user listing
-    if current_user.user_type != UserType.SUPER_USER and current_user.company_role != CompanyRole.ADMIN:
+    if current_user.user_type != "SUPER_USER" and current_user.company_role != "ADMIN":
         logger.warning(f"Access denied - user {current_user.email} is not admin")
         raise HTTPException(status_code=403, detail="Only administrators can manage users")
     
     # Super users can see all users, company admins see only their company's users
-    if current_user.user_type == UserType.SUPER_USER:
+    if current_user.user_type == "SUPER_USER":
         logger.info("Getting all users for super user")
         users = await db_service.list_all_users()
         logger.info(f"Retrieved {len(users)} users")
@@ -76,9 +77,9 @@ async def list_users(
             logger.warning("Company admin has no company_id")
             return []
 
-@router.get("/companies", response_model=List[Company])
+@router.get("/companies")
 async def list_companies(current_user: UserProfile = Depends(get_current_active_user)):
-    if current_user.user_type == UserType.SUPER_USER:
+    if current_user.user_type == "SUPER_USER":
         return await db_service.list_companies()
     else:
         if current_user.company_id:

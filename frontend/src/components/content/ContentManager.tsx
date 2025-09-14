@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useContent } from '@/hooks/useContent';
 import { useAuth } from '@/hooks/useAuth';
 import { PageLayout } from '@/components/shared/PageLayout';
+import UnifiedUploadManager from '@/components/upload/UnifiedUploadManager';
 import { 
   Upload, 
   Eye, 
@@ -174,10 +175,17 @@ export function ContentManager({
               <DialogHeader>
                 <DialogTitle>Upload New Content</DialogTitle>
               </DialogHeader>
-              {/* Upload form would go here */}
-              <div className="p-4 text-center text-muted-foreground">
-                Upload functionality will be integrated here
-              </div>
+              <UnifiedUploadManager
+                mode="simple"
+                title="Upload Content"
+                description="Upload new content for review and approval"
+                onUploadComplete={() => {
+                  setShowUploadDialog(false);
+                  fetchContent(); // Refresh content list
+                }}
+                maxFiles={5}
+                showAI={true}
+              />
             </DialogContent>
           </Dialog>
         )}

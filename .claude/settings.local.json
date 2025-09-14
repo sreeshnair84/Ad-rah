@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(flutter:*)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "ask": []

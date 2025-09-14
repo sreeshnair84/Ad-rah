@@ -116,11 +116,12 @@ class DatabaseService:
             if not company_doc:
                 company_doc = await self.db.companies.find_one({"_id": user["company_id"]})
             if company_doc:
-                company = self._object_id_to_str(company_doc)
+                company_doc = self._object_id_to_str(company_doc)
+                company = Company(**company_doc)  # Convert to Company object
         
         # Compute permissions
         user_type = UserType(user["user_type"])
-        company_type = CompanyType(company["company_type"]) if company else None
+        company_type = CompanyType(company.company_type) if company else None
         company_role = CompanyRole(user["company_role"]) if user.get("company_role") else None
         
         permissions = get_permissions_for_role(user_type, company_type, company_role)
@@ -217,7 +218,7 @@ class DatabaseService:
         profile_data = {
             **user,
             "permissions": permission_strings,
-            "company": company,
+            "company": company.model_dump() if company else None,
             "accessible_navigation": accessible_navigation,
             "display_name": display_name,
             "role_display": role_display
