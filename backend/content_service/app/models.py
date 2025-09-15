@@ -335,6 +335,38 @@ class ContentMeta(BaseModel):
     impression_count: int = 0
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # AI Moderation fields
+    ai_moderation_status: Optional[str] = None  # pending, approved, rejected, needs_review
+    ai_confidence_score: Optional[float] = None
+    ai_analysis: Optional[Dict] = None
+    ai_processed_at: Optional[datetime] = None
+
+    # Review workflow fields
+    reviewer_id: Optional[str] = None
+    reviewer_notes: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    approval_status: Optional[str] = None  # pending, approved, rejected
+
+    # Content metadata enhancements
+    production_notes: Optional[str] = None  # Notes for editors during overlay creation
+    usage_guidelines: Optional[str] = None  # Guidelines for content usage
+    priority_level: str = "medium"  # low, medium, high, urgent
+
+    # File metadata
+    file_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    preview_url: Optional[str] = None
+
+    # Compliance and legal
+    copyright_info: Optional[str] = None
+    license_type: Optional[str] = None  # commercial, creative_commons, proprietary
+    usage_rights: Optional[str] = None
+
+    # Performance tracking
+    download_count: int = 0
+    share_count: int = 0
+    error_count: int = 0
+
 
 class ContentMetadata(BaseModel):
     id: Optional[str] = None
@@ -366,10 +398,44 @@ class ContentMetadataUpdate(BaseModel):
     target_gender: Optional[str] = None
 
 
+class ContentUploadRequest(BaseModel):
+    # Basic content information
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+
+    # Categorization
+    categories: List[str] = Field(default_factory=list, max_items=5)
+    tags: List[str] = Field(default_factory=list, max_items=20)
+    content_rating: Optional[str] = Field(None, pattern="^(G|PG|PG-13|R|NC-17)$")
+
+    # Targeting and scheduling
+    target_age_min: Optional[int] = Field(None, ge=0, le=100)
+    target_age_max: Optional[int] = Field(None, ge=0, le=100)
+    target_gender: Optional[str] = Field(None, pattern="^(male|female|all)$")
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+
+    # Production information
+    production_notes: Optional[str] = Field(None, max_length=500)
+    usage_guidelines: Optional[str] = Field(None, max_length=500)
+    priority_level: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+
+    # Legal and compliance
+    copyright_info: Optional[str] = Field(None, max_length=300)
+    license_type: Optional[str] = Field(None, pattern="^(commercial|creative_commons|proprietary)$")
+    usage_rights: Optional[str] = Field(None, max_length=300)
+
+    # File metadata (set during upload)
+    duration_seconds: Optional[int] = Field(None, ge=0)
+
+
 class UploadResponse(BaseModel):
     filename: str
     status: str
     message: Optional[str] = None
+    content_id: Optional[str] = None
+    ai_moderation_required: bool = False
+    estimated_review_time: Optional[str] = None
 
 
 class ModerationResult(BaseModel):
@@ -897,3 +963,291 @@ class AnalyticsSummary(BaseModel):
     top_performing_content: List[Dict] = []
     revenue_by_category: Dict[str, float] = {}
     hourly_breakdown: List[Dict] = []
+
+
+# Content History and Audit Tracking Models
+class ContentDeleteType(str, Enum):
+    """Types of content deletion"""
+    SOFT_DELETE = "soft_delete"  # Mark as deleted but keep data
+    HARD_DELETE = "hard_delete"  # Permanently remove data
+
+
+class ContentHistoryEventType(str, Enum):
+    """Types of events in content lifecycle"""
+    UPLOADED = "uploaded"
+    AI_MODERATION_STARTED = "ai_moderation_started"
+    AI_MODERATION_COMPLETED = "ai_moderation_completed"
+    MANUAL_REVIEW_ASSIGNED = "manual_review_assigned"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    UPDATED = "updated"
+    SCHEDULED = "scheduled"
+    DEPLOYED = "deployed"
+    DISPLAYED = "displayed"
+    ERROR = "error"
+    DELETED = "deleted"
+    SHARED = "shared"
+    OVERLAY_CREATED = "overlay_created"
+    OVERLAY_UPDATED = "overlay_updated"
+    ANALYTICS_RECORDED = "analytics_recorded"
+
+
+class ContentHistory(BaseModel):
+    """Comprehensive audit log for content lifecycle events"""
+    id: Optional[str] = None
+    content_id: str
+    event_type: ContentHistoryEventType
+    event_timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    # User who triggered the event
+    triggered_by_user_id: Optional[str] = None
+    triggered_by_user_name: Optional[str] = None
+    triggered_by_user_type: Optional[str] = None  # SUPER_USER, COMPANY_USER, DEVICE_USER
+
+    # System information
+    triggered_by_system: Optional[str] = None  # AI_MODERATION, SCHEDULER, SYNC_SERVICE
+    device_id: Optional[str] = None  # For device-related events
+    company_id: str  # Company context
+
+    # Event details
+    event_details: Dict = Field(default_factory=dict)  # Flexible JSON for event-specific data
+    previous_state: Optional[Dict] = None  # State before the event
+    new_state: Optional[Dict] = None  # State after the event
+
+    # Metadata
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+
+    # Error tracking
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    stack_trace: Optional[str] = None
+
+    # Performance metrics
+    processing_time_ms: Optional[int] = None
+    payload_size_bytes: Optional[int] = None
+
+    # Compliance and legal
+    gdpr_compliant: bool = True
+    retention_expires_at: Optional[datetime] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContentHistoryQuery(BaseModel):
+    """Query parameters for content history lookup"""
+    content_ids: Optional[List[str]] = None
+    event_types: Optional[List[ContentHistoryEventType]] = None
+    user_ids: Optional[List[str]] = None
+    device_ids: Optional[List[str]] = None
+    company_id: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    include_system_events: bool = True
+    include_error_events: bool = True
+    limit: int = Field(100, ge=1, le=1000)
+    offset: int = Field(0, ge=0)
+    sort_order: str = Field("desc", pattern="^(asc|desc)$")
+
+
+class ContentLifecycleSummary(BaseModel):
+    """Summary view of content's complete lifecycle"""
+    content_id: str
+    content_title: str
+    current_status: str
+    company_id: str
+    company_name: str
+
+    # Lifecycle timestamps
+    uploaded_at: Optional[datetime] = None
+    ai_moderation_completed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    first_deployed_at: Optional[datetime] = None
+    last_displayed_at: Optional[datetime] = None
+
+    # Performance metrics
+    total_deployments: int = 0
+    total_displays: int = 0
+    total_errors: int = 0
+    avg_processing_time_ms: Optional[float] = None
+
+    # User involvement
+    uploaded_by: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    last_modified_by: Optional[str] = None
+
+    # Business metrics
+    estimated_revenue: float = 0.0
+    total_impressions: int = 0
+    engagement_score: Optional[float] = None
+
+    # Recent activity
+    recent_events: List[Dict] = Field(default_factory=list)
+    last_activity_at: Optional[datetime] = None
+
+
+class ContentAuditReport(BaseModel):
+    """Comprehensive audit report for compliance and analysis"""
+    report_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    company_id: str
+    report_type: str  # daily, weekly, monthly, custom, compliance
+
+    # Report period
+    start_date: datetime
+    end_date: datetime
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_by: str  # User ID who requested the report
+
+    # Content statistics
+    total_content_uploaded: int = 0
+    total_content_approved: int = 0
+    total_content_rejected: int = 0
+    total_content_deployed: int = 0
+
+    # Performance metrics
+    avg_approval_time_hours: Optional[float] = None
+    avg_deployment_time_hours: Optional[float] = None
+    success_rate_percentage: Optional[float] = None
+
+    # User activity
+    most_active_uploaders: List[Dict] = Field(default_factory=list)
+    most_active_reviewers: List[Dict] = Field(default_factory=list)
+
+    # Error analysis
+    common_errors: List[Dict] = Field(default_factory=list)
+    error_rate_percentage: Optional[float] = None
+
+    # Compliance information
+    gdpr_compliant_events: int = 0
+    data_retention_violations: int = 0
+
+    # Detailed breakdown
+    events_by_type: Dict[str, int] = Field(default_factory=dict)
+    events_by_user_type: Dict[str, int] = Field(default_factory=dict)
+    daily_activity: List[Dict] = Field(default_factory=list)
+
+    # File information
+    report_file_url: Optional[str] = None
+    report_format: str = "json"  # json, csv, pdf
+
+
+class HistoryEventCreate(BaseModel):
+    """Model for creating history events"""
+    content_id: str
+    event_type: ContentHistoryEventType
+    event_details: Dict = Field(default_factory=dict)
+    previous_state: Optional[Dict] = None
+    new_state: Optional[Dict] = None
+    device_id: Optional[str] = None
+    triggered_by_system: Optional[str] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    processing_time_ms: Optional[int] = None
+    payload_size_bytes: Optional[int] = None
+
+
+class ContentTimelineView(BaseModel):
+    """Timeline view for content history UI"""
+    content_id: str
+    content_title: str
+    timeline_events: List[Dict] = Field(default_factory=list)
+    milestones: List[Dict] = Field(default_factory=list)  # Key lifecycle points
+    current_phase: str  # upload, moderation, review, approved, deployed, active
+    next_expected_action: Optional[str] = None
+    estimated_completion: Optional[datetime] = None
+    bottlenecks: List[Dict] = Field(default_factory=list)  # Identified delays
+    performance_score: Optional[float] = None  # Overall efficiency score
+
+
+# Device History and Monitoring Models
+class DeviceHistoryEventType(str, Enum):
+    """Types of device-related events"""
+    REGISTERED = "registered"
+    AUTHENTICATED = "authenticated"
+    HEARTBEAT = "heartbeat"
+    CONTENT_SYNCED = "content_synced"
+    CONTENT_DISPLAYED = "content_displayed"
+    ERROR_OCCURRED = "error_occurred"
+    OFFLINE = "offline"
+    ONLINE = "online"
+    MAINTENANCE_START = "maintenance_start"
+    MAINTENANCE_END = "maintenance_end"
+    CONFIGURATION_UPDATED = "configuration_updated"
+    PERFORMANCE_ALERT = "performance_alert"
+
+
+class DeviceHistory(BaseModel):
+    """Device activity and status history"""
+    id: Optional[str] = None
+    device_id: str
+    event_type: DeviceHistoryEventType
+    event_timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    # Event context
+    content_id: Optional[str] = None
+    company_id: str
+    triggered_by_user_id: Optional[str] = None
+
+    # Device state
+    device_status: Optional[str] = None
+    device_location: Optional[str] = None
+
+    # Technical details
+    event_data: Dict = Field(default_factory=dict)
+    system_metrics: Optional[Dict] = None  # CPU, memory, etc.
+    network_info: Optional[Dict] = None
+
+    # Error information
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+    # Performance
+    response_time_ms: Optional[int] = None
+    bandwidth_usage_mb: Optional[float] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SystemAuditLog(BaseModel):
+    """System-wide audit logging for compliance"""
+    id: Optional[str] = None
+    audit_type: str  # USER_ACTION, SYSTEM_EVENT, SECURITY_EVENT, DATA_ACCESS
+    resource_type: str  # CONTENT, USER, COMPANY, DEVICE, SYSTEM
+    resource_id: str
+    action_performed: str
+
+    # Actor information
+    performed_by_user_id: Optional[str] = None
+    performed_by_system: Optional[str] = None
+    user_role: Optional[str] = None
+    company_id: Optional[str] = None
+
+    # Technical details
+    request_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+
+    # Event payload
+    request_data: Optional[Dict] = None
+    response_data: Optional[Dict] = None
+    before_state: Optional[Dict] = None
+    after_state: Optional[Dict] = None
+
+    # Security and compliance
+    security_level: str = "normal"  # low, normal, high, critical
+    contains_pii: bool = False
+    gdpr_category: Optional[str] = None
+    retention_policy: str = "standard"  # standard, extended, permanent
+
+    # Status and outcome
+    success: bool = True
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+    # Timing
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    duration_ms: Optional[int] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)

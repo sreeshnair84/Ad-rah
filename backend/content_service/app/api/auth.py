@@ -1,13 +1,138 @@
 # Clean Authentication API
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from typing import List
-from app.auth_service import auth_service, get_current_user, get_current_active_user, require_permission, require_user_type
+from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer
+from typing import List, Optional
+
+# Use the enhanced auth service instead of the old one
+from app.security.enhanced_auth_service import auth_service
 from app.database_service import db_service
 from app.rbac_models import LoginRequest, LoginResponse, UserCreate
 from app.models import UserProfile
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# HTTP Bearer scheme for token extraction
+oauth2_scheme = HTTPBearer()
+
+# Simplified dependency functions
+async def get_current_user(credentials = Depends(oauth2_scheme)):
+    """Get current authenticated user using enhanced auth service"""
+    try:
+        if not credentials or not credentials.credentials:
+            raise HTTPException(status_code=401, detail="No authorization token provided")
+        
+        user_profile = await auth_service.get_current_user_from_token(credentials.credentials)
+        return user_profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+async def get_current_active_user(current_user = Depends(get_current_user)):
+    """Get current active user"""
+    is_active = True
+    if hasattr(current_user, 'is_active'):
+        is_active = current_user.is_active
+    elif isinstance(current_user, dict):
+        is_active = current_user.get('is_active', True)
+    
+    if not is_active:
+        raise HTTPException(status_code=403, detail="Inactive user account")
+    return current_user
+
+def require_permission(permission: str):
+    """Require specific permission"""
+    async def permission_dependency(current_user = Depends(get_current_active_user)):
+        # Get user type
+        user_type = None
+        if hasattr(current_user, 'user_type'):
+            user_type = current_user.user_type.value if hasattr(current_user.user_type, 'value') else str(current_user.user_type)
+        elif isinstance(current_user, dict):
+            user_type = current_user.get('user_type')
+        
+        # Super users bypass permission checks
+        if user_type == "SUPER_USER":
+            return current_user
+        
+        # Check permissions
+        user_permissions = []
+        if isinstance(current_user, dict):
+            user_permissions = current_user.get('permissions', [])
+        elif hasattr(current_user, 'permissions'):
+            permissions = getattr(current_user, 'permissions', None)
+            user_permissions = permissions if permissions is not None else []
+        
+        if permission not in user_permissions:
+            raise HTTPException(status_code=403, detail=f"Permission required: {permission}")
+        return current_user
+    return permission_dependency
+
+def require_roles(*allowed_roles):
+    """Require specific user roles"""
+    async def role_checker(user=Depends(get_current_user)):
+        # Get user roles
+        user_roles = []
+        if isinstance(user, dict):
+            user_roles = user.get("roles", [])
+        elif hasattr(user, 'roles'):
+            user_roles = getattr(user, 'roles', [])
+        
+        # Get user type for super user bypass
+        user_type = None
+        if isinstance(user, dict):
+            user_type = user.get('user_type')
+        elif hasattr(user, 'user_type'):
+            user_type = getattr(user, 'user_type')
+            if hasattr(user_type, 'value'):
+                user_type = user_type.value
+        
+        # Super users bypass role checks
+        if user_type == "SUPER_USER":
+            return user
+
+        # Check role groups
+        for user_role in user_roles:
+            role_group = None
+            if isinstance(user_role, dict):
+                role_group = user_role.get("role_group")
+            elif hasattr(user_role, 'role_group'):
+                role_group = getattr(user_role, 'role_group')
+            
+            if role_group in allowed_roles:
+                return user
+
+        raise HTTPException(status_code=403, detail=f"Role required: {list(allowed_roles)}")
+    return role_checker
+
+async def get_user_company_context(user=Depends(get_current_user)) -> dict:
+    """Get user's company context for filtering data"""
+    # Handle both UserProfile objects and dictionaries
+    if hasattr(user, 'user_type'):
+        # This is a UserProfile object
+        user_type = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type)
+        user_email = user.email.lower() if hasattr(user, 'email') else ""
+        user_id = user.id if hasattr(user, 'id') else None
+        user_company_id = user.company_id if hasattr(user, 'company_id') else None
+    else:
+        # This is a dictionary
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        user_type = user.get("user_type", "")
+        user_email = user.get("email", "").lower()
+        user_company_id = user.get("company_id")
+    
+    # Build company context
+    context = {
+        "user_id": user_id,
+        "user_type": user_type,
+        "user_email": user_email,
+        "company_id": user_company_id,
+        "is_super_user": user_type == "SUPER_USER"
+    }
+    
+    return context
 
 @router.post("/login", response_model=LoginResponse)
 async def login(login_request: LoginRequest):
@@ -46,7 +171,7 @@ async def create_user(
 
 @router.get("/users", response_model=List[UserProfile])
 async def list_users(
-    company_id: str = None,
+    company_id: Optional[str] = None,
     current_user: UserProfile = Depends(get_current_active_user)
 ):
     import logging
@@ -89,7 +214,15 @@ async def list_companies(current_user: UserProfile = Depends(get_current_active_
 
 @router.get("/navigation", response_model=List[str])
 async def get_accessible_navigation(current_user: UserProfile = Depends(get_current_active_user)):
-    return current_user.accessible_navigation
+    # Get accessible navigation for the current user
+    if isinstance(current_user, dict):
+        accessible_nav = current_user.get('accessible_navigation', [])
+    elif hasattr(current_user, 'accessible_navigation'):
+        accessible_nav = getattr(current_user, 'accessible_navigation', [])
+    else:
+        accessible_nav = []
+    
+    return accessible_nav
 
 @router.get("/health")
 async def health_check():

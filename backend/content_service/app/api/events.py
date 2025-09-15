@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any
-from app.auth_service import get_current_user
+from app.api.auth import get_current_user
 from app.event_processor import event_processor
 
 router = APIRouter(prefix="/events", tags=["events"])

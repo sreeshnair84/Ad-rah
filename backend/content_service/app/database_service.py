@@ -293,5 +293,164 @@ class DatabaseService:
                 users.append(user_profile)
         return users
 
+    # Content History Tracking Methods
+    async def create_content_history(self, history_data: Dict) -> Dict:
+        """Create a content history event"""
+        history_doc = {
+            "id": str(uuid.uuid4()),
+            **history_data,
+            "created_at": datetime.utcnow()
+        }
+
+        try:
+            result = await self.db.content_history.insert_one(history_doc)
+            history_doc["_id"] = result.inserted_id
+            return self._object_id_to_str(history_doc)
+        except Exception as e:
+            logger.error(f"Failed to create content history: {e}")
+            raise
+
+    async def find_content_history(
+        self,
+        filters: Dict,
+        limit: int = 100,
+        offset: int = 0,
+        sort: Optional[List] = None
+    ) -> List[Dict]:
+        """Find content history events with filtering"""
+        try:
+            cursor = self.db.content_history.find(filters)
+
+            if sort:
+                cursor = cursor.sort(sort)
+            else:
+                cursor = cursor.sort("event_timestamp", -1)
+
+            cursor = cursor.skip(offset).limit(limit)
+
+            history_events = []
+            async for doc in cursor:
+                history_events.append(self._object_id_to_str(doc))
+
+            return history_events
+        except Exception as e:
+            logger.error(f"Failed to find content history: {e}")
+            raise
+
+    async def get_content_history_count(self, filters: Dict) -> int:
+        """Get count of content history events matching filters"""
+        try:
+            return await self.db.content_history.count_documents(filters)
+        except Exception as e:
+            logger.error(f"Failed to count content history: {e}")
+            return 0
+
+    async def create_device_history(self, history_data: Dict) -> Dict:
+        """Create a device history event"""
+        history_doc = {
+            "id": str(uuid.uuid4()),
+            **history_data,
+            "created_at": datetime.utcnow()
+        }
+
+        try:
+            result = await self.db.device_history.insert_one(history_doc)
+            history_doc["_id"] = result.inserted_id
+            return self._object_id_to_str(history_doc)
+        except Exception as e:
+            logger.error(f"Failed to create device history: {e}")
+            raise
+
+    async def find_device_history(
+        self,
+        filters: Dict,
+        limit: int = 100,
+        offset: int = 0,
+        sort: Optional[List] = None
+    ) -> List[Dict]:
+        """Find device history events with filtering"""
+        try:
+            cursor = self.db.device_history.find(filters)
+
+            if sort:
+                cursor = cursor.sort(sort)
+            else:
+                cursor = cursor.sort("event_timestamp", -1)
+
+            cursor = cursor.skip(offset).limit(limit)
+
+            history_events = []
+            async for doc in cursor:
+                history_events.append(self._object_id_to_str(doc))
+
+            return history_events
+        except Exception as e:
+            logger.error(f"Failed to find device history: {e}")
+            raise
+
+    async def create_system_audit_log(self, audit_data: Dict) -> Dict:
+        """Create a system audit log entry"""
+        audit_doc = {
+            "id": str(uuid.uuid4()),
+            **audit_data,
+            "created_at": datetime.utcnow()
+        }
+
+        try:
+            result = await self.db.system_audit_log.insert_one(audit_doc)
+            audit_doc["_id"] = result.inserted_id
+            return self._object_id_to_str(audit_doc)
+        except Exception as e:
+            logger.error(f"Failed to create system audit log: {e}")
+            raise
+
+    async def find_system_audit_logs(
+        self,
+        filters: Dict,
+        limit: int = 100,
+        offset: int = 0,
+        sort: Optional[List] = None
+    ) -> List[Dict]:
+        """Find system audit logs with filtering"""
+        try:
+            cursor = self.db.system_audit_log.find(filters)
+
+            if sort:
+                cursor = cursor.sort(sort)
+            else:
+                cursor = cursor.sort("timestamp", -1)
+
+            cursor = cursor.skip(offset).limit(limit)
+
+            audit_logs = []
+            async for doc in cursor:
+                audit_logs.append(self._object_id_to_str(doc))
+
+            return audit_logs
+        except Exception as e:
+            logger.error(f"Failed to find system audit logs: {e}")
+            raise
+
+    async def get_content_by_id(self, content_id: str, company_id: str) -> Optional[Dict]:
+        """Get content by ID with company scoping"""
+        try:
+            content = await self.db.content.find_one({
+                "id": content_id,
+                "company_id": company_id
+            })
+            return self._object_id_to_str(content) if content else None
+        except Exception as e:
+            logger.error(f"Failed to get content by ID: {e}")
+            return None
+
+    async def get_user_by_id(self, user_id: str) -> Optional[Dict]:
+        """Get user by ID"""
+        try:
+            user = await self.db.users.find_one({"id": user_id, "is_active": True})
+            return self._object_id_to_str(user) if user else None
+        except Exception as e:
+            logger.error(f"Failed to get user by ID: {e}")
+            return None
+
 # Global instance
 db_service = DatabaseService()

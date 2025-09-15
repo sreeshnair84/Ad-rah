@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database_service import db_service
-from app.auth_service import auth_service
+from app.security.enhanced_auth_service import auth_service
 from app.config import enhanced_config, initialize_config, settings
 
 # Import enhanced security services
@@ -26,43 +26,6 @@ from app.security.encryption_service import encryption_service
 # Import API router with all endpoints
 from app.api import api_router
 
-async def seed_development_data():
-    """Seed test data for development with in-memory storage"""
-    from app.models import Company, DeviceRegistrationKey
-    from app.repo import repo
-    from datetime import datetime, timedelta
-    import uuid
-    
-    # Create Dubai Mall company (what Flutter expects)
-    company = Company(
-        id=str(uuid.uuid4()),
-        name='Dubai Mall Digital Displays',
-        type='HOST',
-        address='Dubai Mall, Downtown Dubai',
-        city='Dubai',
-        country='UAE',
-        organization_code='ORG-DUBAI001',  # Flutter expects this
-        status='active'
-    )
-    
-    saved_company = await repo.save_company(company)
-    
-    # Create the registration key that Flutter is using
-    key = DeviceRegistrationKey(
-        id=str(uuid.uuid4()),
-        key='nZ2CB2bX472WhaOq',  # Flutter expects this
-        company_id=saved_company['id'],
-        created_by='system',
-        expires_at=datetime.utcnow() + timedelta(days=30),  # Valid for 30 days
-        used=False,
-        used_by_device=None
-    )
-    
-    await repo.save_device_registration_key(key)
-    
-    logger.info("✅ Created Dubai Mall company and registration key for development")
-    logger.info(f"✅ Organization Code: ORG-DUBAI001")
-    logger.info(f"✅ Registration Key: nZ2CB2bX472WhaOq")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -97,10 +60,6 @@ async def lifespan(app: FastAPI):
         await db_service.initialize()
         logger.info("✅ Database service initialized")
         
-        # Seed test data for in-memory storage in development
-        if not enhanced_config.MONGO_URI and enhanced_config.ENVIRONMENT == "development":
-            await seed_development_data()
-            logger.info("✅ Development test data seeded")
         
         yield
     except Exception as e:

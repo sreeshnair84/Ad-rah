@@ -136,8 +136,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Download-Options"] = "noopen"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
-        # Remove server information
-        response.headers.pop("Server", None)
+        # Remove server information (use del instead of pop for MutableHeaders)
+        if "Server" in response.headers:
+            del response.headers["Server"]
 
 
 class RequestValidationMiddleware(BaseHTTPMiddleware):

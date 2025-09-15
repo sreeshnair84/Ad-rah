@@ -7,7 +7,7 @@ load_dotenv()
 
 from app.database_service import db_service
 from app.rbac_models import *
-from app.auth_service import auth_service
+from app.security.enhanced_auth_service import auth_service
 
 async def seed_test_data():
     """Seed the database with test data from DEPLOYMENT_SUCCESS.md"""

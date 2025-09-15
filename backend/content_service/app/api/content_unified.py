@@ -23,19 +23,20 @@ import uuid
 import os
 import mimetypes
 import logging
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..models import (
     ContentMeta, ContentOverlay, ContentOverlayCreate, ContentOverlayUpdate,
     ContentLayoutCreate, ContentLayoutUpdate, AdvertiserCampaignCreate,
     ContentDeploymentCreate, DeviceAnalytics, ProximityDetection, AnalyticsQuery, AnalyticsSummary,
-    UserProfile
+    UserProfile, ContentHistoryEventType
 )
 from ..auth_service import require_roles, get_current_user, get_user_company_context
 from ..repo import repo
 from ..database_service import db_service
 from ..storage import save_media
 from ..utils.serialization import safe_json_response
+from ..history_service import HistoryService
 
 # Import content delivery services
 try:
@@ -59,6 +60,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/content", tags=["content"])
+
+# Initialize history service
+history_service = HistoryService(db_service)
 
 # ============================================================================
 # CONTENT CRUD OPERATIONS (from app/routes/content.py)
@@ -224,32 +228,139 @@ async def get_pending_content(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get pending content: {e}")
 
+class ContentApprovalRequest(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject)$")
+    reviewer_notes: Optional[str] = Field(None, max_length=1000)
+
+    # For approvals - optional modifications
+    final_categories: Optional[List[str]] = None
+    final_tags: Optional[List[str]] = None
+    scheduled_start: Optional[datetime] = None
+    scheduled_end: Optional[datetime] = None
+
+    # For rejections - required reason
+    rejection_reason: Optional[str] = Field(None, max_length=500)
+
+
+@router.post("/admin/review/{content_id}")
+async def review_content(
+    content_id: str,
+    review_data: ContentApprovalRequest,
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Comprehensive content review endpoint for reviewers"""
+    try:
+        # Check permissions
+        if (current_user.user_type != "SUPER_USER" and
+            "content_approve" not in current_user.permissions):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get existing content
+        existing_content = await repo.get_content_meta(content_id)
+        if not existing_content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Validate content is in reviewable state
+        if existing_content.get("status") not in ["pending", "quarantine"]:
+            raise HTTPException(status_code=400, detail=f"Content status '{existing_content.get('status')}' cannot be reviewed")
+
+        # Validate rejection reason if rejecting
+        if review_data.action == "reject" and not review_data.rejection_reason:
+            raise HTTPException(status_code=400, detail="Rejection reason is required when rejecting content")
+
+        # Prepare update data
+        update_data = {
+            "reviewer_id": current_user.id,
+            "reviewer_notes": review_data.reviewer_notes,
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "approval_status": review_data.action + "d",  # approved or rejected
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        if review_data.action == "approve":
+            update_data["status"] = "approved"
+
+            # Apply any final modifications from reviewer
+            if review_data.final_categories is not None:
+                update_data["categories"] = review_data.final_categories
+            if review_data.final_tags is not None:
+                update_data["tags"] = review_data.final_tags
+            if review_data.scheduled_start:
+                update_data["start_time"] = review_data.scheduled_start.isoformat()
+            if review_data.scheduled_end:
+                update_data["end_time"] = review_data.scheduled_end.isoformat()
+
+        else:  # reject
+            update_data["status"] = "rejected"
+            update_data["rejection_reason"] = review_data.rejection_reason
+
+        # Update content
+        await repo.update_content_meta(content_id, update_data)
+
+        # Track review event
+        event_type = ContentHistoryEventType.APPROVED if review_data.action == "approve" else ContentHistoryEventType.REJECTED
+
+        await history_service.track_content_event(
+            content_id=content_id,
+            event_type=event_type,
+            company_id=current_user.company_id,
+            user_id=current_user.id,
+            event_details={
+                "action": review_data.action,
+                "reviewer_notes": review_data.reviewer_notes,
+                "rejection_reason": review_data.rejection_reason if review_data.action == "reject" else None,
+                "final_categories": review_data.final_categories,
+                "final_tags": review_data.final_tags,
+                "ai_moderation_status": existing_content.get("ai_moderation_status"),
+                "ai_confidence_score": existing_content.get("ai_confidence_score")
+            },
+            previous_state={
+                "status": existing_content.get("status"),
+                "approval_status": existing_content.get("approval_status")
+            },
+            new_state={
+                "status": update_data["status"],
+                "approval_status": update_data["approval_status"]
+            }
+        )
+
+        # Create review history record
+        await _create_review_history(content_id, current_user.id, review_data, existing_content)
+
+        # Send notification to content owner
+        await _notify_content_decision(content_id, existing_content, review_data, current_user)
+
+        action_message = "approved" if review_data.action == "approve" else "rejected"
+        return safe_json_response({
+            "message": f"Content {action_message} successfully",
+            "content_id": content_id,
+            "action": review_data.action,
+            "reviewer": current_user.email,
+            "reviewed_at": datetime.utcnow().isoformat()
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to review content {content_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to review content: {e}")
+
+
 @router.post("/admin/approve/{content_id}")
 async def admin_approve_content(
     content_id: str,
     current_user: UserProfile = Depends(get_current_user),
     company_context: dict = Depends(get_user_company_context)
 ):
-    """Admin approve content with reviewer tracking"""
+    """Quick approve endpoint (legacy compatibility)"""
     try:
-        # Only SUPER_USER or users with content_approve permission can access
-        if (current_user.user_type != "SUPER_USER" and 
-            "content_approve" not in current_user.permissions):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-        existing_content = await repo.get_content_meta(content_id)
-        if not existing_content:
-            raise HTTPException(status_code=404, detail="Content not found")
-
-        # Update content status and add reviewer info
-        await repo.update_content_status(
-            content_id, 
-            "approved", 
-            current_user.id,
-            notes="Approved by admin"
+        # Use the comprehensive review endpoint
+        review_request = ContentApprovalRequest(
+            action="approve",
+            reviewer_notes="Quick approval by admin"
         )
-
-        return safe_json_response({"message": "Content approved successfully"})
+        return await review_content(content_id, review_request, current_user, company_context)
 
     except HTTPException:
         raise
@@ -374,38 +485,188 @@ async def _process_upload_files(
 async def upload_content_file(
     request: Request,
     file: UploadFile = File(...),
-    owner_id: str = Form(...),
-    title: Optional[str] = Form(None),
+    # Basic information
+    title: str = Form(...),
     description: Optional[str] = Form(None),
-    categories: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),
-    priority: Optional[str] = Form("medium"),
+
+    # Categorization
+    categories: Optional[str] = Form(None),  # JSON string of category IDs
+    tags: Optional[str] = Form(None),  # JSON string of tag names
+    content_rating: Optional[str] = Form(None),
+
+    # Targeting
+    target_age_min: Optional[int] = Form(None),
+    target_age_max: Optional[int] = Form(None),
+    target_gender: Optional[str] = Form(None),
+
+    # Scheduling
+    start_time: Optional[str] = Form(None),  # ISO format datetime
+    end_time: Optional[str] = Form(None),    # ISO format datetime
+
+    # Production notes
+    production_notes: Optional[str] = Form(None),
+    usage_guidelines: Optional[str] = Form(None),
+    priority_level: str = Form("medium"),
+
+    # Legal and compliance
+    copyright_info: Optional[str] = Form(None),
+    license_type: Optional[str] = Form(None),
+    usage_rights: Optional[str] = Form(None),
+
     current_user: UserProfile = Depends(get_current_user),
     company_context: dict = Depends(get_user_company_context)
 ):
-    """Upload a single content file (legacy endpoint for compatibility)"""
+    """Upload a single content file with comprehensive metadata"""
     try:
-        # Convert single file to list for compatibility with main upload function
-        files_list = [file]
+        # Parse categories and tags from JSON strings
+        import json
+        parsed_categories = []
+        parsed_tags = []
 
-        # Process upload using existing logic
-        result = await _process_upload_files(
-            request, owner_id, files_list, current_user, company_context
+        if categories:
+            try:
+                parsed_categories = json.loads(categories) if isinstance(categories, str) else categories
+            except json.JSONDecodeError:
+                parsed_categories = [cat.strip() for cat in categories.split(',') if cat.strip()]
+
+        if tags:
+            try:
+                parsed_tags = json.loads(tags) if isinstance(tags, str) else tags
+            except json.JSONDecodeError:
+                parsed_tags = [tag.strip() for tag in tags.split(',') if tag.strip()]
+
+        # Parse datetime strings
+        parsed_start_time = None
+        parsed_end_time = None
+        if start_time:
+            try:
+                from datetime import datetime
+                parsed_start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            except ValueError:
+                pass
+        if end_time:
+            try:
+                parsed_end_time = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            except ValueError:
+                pass
+
+        # Validate company access
+        if current_user.user_type != "SUPER_USER" and current_user.company_id is None:
+            raise HTTPException(status_code=403, detail="User must belong to a company")
+
+        # Process file upload
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+
+        filename = file.filename
+        content = await file.read()
+        file_size = len(content)
+        content_type = file.content_type or "application/octet-stream"
+
+        # Security scanning
+        if SECURITY_SCANNING_ENABLED:
+            client_ip = request.client.host if request.client else "unknown"
+            audit_logger.log_content_upload(
+                user_id=current_user.id,
+                filename=filename,
+                content_type=content_type,
+                size=file_size,
+                ip_address=client_ip
+            )
+
+            scan_result = await content_scanner.scan_content(content, filename, content_type)
+            if scan_result.security_level == "blocked":
+                return safe_json_response({
+                    "status": "rejected",
+                    "message": "Content blocked by security scanner",
+                    "details": scan_result.content_warnings
+                })
+
+        # Save file
+        file_path = save_media(filename, content, content_type=content_type)
+
+        # Detect content duration for videos
+        detected_duration = None
+        if content_type.startswith('video/'):
+            try:
+                # You would implement actual video duration detection here
+                # For now, we'll use a placeholder
+                detected_duration = 30  # seconds
+            except Exception:
+                pass
+
+        # Create enhanced content metadata
+        content_id = str(uuid.uuid4())
+        content_meta = {
+            "id": content_id,
+            "owner_id": current_user.id,
+            "filename": filename,
+            "content_type": content_type,
+            "size": file_size,
+            "title": title,
+            "description": description,
+            "categories": parsed_categories,
+            "tags": parsed_tags,
+            "content_rating": content_rating,
+            "target_age_min": target_age_min,
+            "target_age_max": target_age_max,
+            "target_gender": target_gender,
+            "start_time": parsed_start_time.isoformat() if parsed_start_time else None,
+            "end_time": parsed_end_time.isoformat() if parsed_end_time else None,
+            "production_notes": production_notes,
+            "usage_guidelines": usage_guidelines,
+            "priority_level": priority_level,
+            "copyright_info": copyright_info,
+            "license_type": license_type,
+            "usage_rights": usage_rights,
+            "duration_seconds": detected_duration,
+            "file_url": file_path,
+            "status": "quarantine",
+            "ai_moderation_status": "pending",
+            "uploaded_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        # Save content metadata
+        saved_content = await repo.save_content_meta(content_meta)
+
+        # Track content upload event
+        await history_service.track_content_event(
+            content_id=content_id,
+            event_type=ContentHistoryEventType.UPLOADED,
+            company_id=current_user.company_id,
+            user_id=current_user.id,
+            event_details={
+                "filename": filename,
+                "content_type": content_type,
+                "file_size": file_size,
+                "title": title,
+                "categories": parsed_categories,
+                "tags": parsed_tags,
+                "priority_level": priority_level
+            },
+            new_state={"status": "quarantine", "ai_moderation_status": "pending"},
+            request=request
         )
 
-        # Transform response for legacy compatibility
-        if result.get("uploaded"):
-            return safe_json_response({
-                "uploaded": result["uploaded"],
-                "status": "success",
-                "message": "File uploaded successfully"
-            })
-        else:
-            raise HTTPException(status_code=400, detail="Upload failed")
+        # Trigger AI moderation in background
+        from fastapi import BackgroundTasks
+        background_tasks = BackgroundTasks()
+        background_tasks.add_task(_trigger_ai_moderation, content_id, file_path, content_meta)
+
+        return safe_json_response({
+            "status": "success",
+            "message": "Content uploaded successfully and sent for AI moderation",
+            "content_id": content_id,
+            "filename": filename,
+            "ai_moderation_required": True,
+            "estimated_review_time": "2-5 minutes for AI review, then human review if needed"
+        })
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
 @router.post("/upload")
@@ -631,7 +892,7 @@ async def create_content_layout(
             raise HTTPException(status_code=403, detail="No accessible companies")
 
         layout_doc = {
-            **layout.dict(),
+            **layout.model_dump(),
             "id": str(uuid.uuid4()),
             "created_by": current_user["id"],
             "created_at": datetime.utcnow().isoformat(),
@@ -706,7 +967,7 @@ async def create_advertiser_campaign(
             raise HTTPException(status_code=400, detail="Some content not found or not approved")
 
         campaign_doc = {
-            **campaign.dict(),
+            **campaign.model_dump(),
             "id": str(uuid.uuid4()),
             "status": "draft",
             "total_impressions": 0,
@@ -728,6 +989,205 @@ async def create_advertiser_campaign(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create campaign: {str(e)}")
+
+class ContentScheduleRequest(BaseModel):
+    content_id: str
+    overlay_id: Optional[str] = None
+    device_ids: List[str]
+
+    # Scheduling options
+    deployment_type: str = Field(..., pattern="^(immediate|scheduled|recurring)$")
+    scheduled_start: Optional[datetime] = None
+    scheduled_end: Optional[datetime] = None
+
+    # Recurring schedule options
+    recurrence_pattern: Optional[str] = Field(None, pattern="^(daily|weekly|monthly)$")
+    recurrence_days: Optional[List[str]] = None  # For weekly: ["monday", "tuesday"]
+    recurrence_end_date: Optional[datetime] = None
+
+    # Display settings
+    display_duration: Optional[int] = Field(None, ge=1, le=86400)  # seconds
+    priority_level: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+
+    # Targeting (optional)
+    target_audience: Optional[Dict] = None
+    content_rotation_weight: Optional[float] = Field(1.0, ge=0.1, le=10.0)
+
+    # Notes and tracking
+    deployment_notes: Optional[str] = Field(None, max_length=500)
+
+
+@router.post("/schedule")
+async def schedule_content_to_devices(
+    schedule_request: ContentScheduleRequest,
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """Schedule content deployment to specific devices with timing controls"""
+    try:
+        # Check permissions
+        if (current_user.user_type != "SUPER_USER" and
+            "content_deploy" not in current_user.permissions):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Validate content exists and is approved
+        content = await repo.get_content_meta(schedule_request.content_id)
+        if not content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        if content.get("status") != "approved":
+            raise HTTPException(status_code=400, detail="Only approved content can be scheduled")
+
+        # Validate overlay if specified
+        overlay_data = None
+        if schedule_request.overlay_id:
+            overlay_data = await repo.get_content_overlay(schedule_request.overlay_id)
+            if not overlay_data:
+                raise HTTPException(status_code=404, detail="Overlay not found")
+
+        # Validate devices exist and user has access
+        accessible_company_ids = [c["id"] for c in company_context["accessible_companies"]]
+        device_query = {
+            "id": {"$in": schedule_request.device_ids},
+            "company_id": {"$in": accessible_company_ids}
+        }
+
+        devices_cursor = db_service.db.digital_screens.find(device_query)
+        accessible_devices = await devices_cursor.to_list(length=None)
+        accessible_device_ids = [d["id"] for d in accessible_devices]
+
+        if len(accessible_device_ids) != len(schedule_request.device_ids):
+            inaccessible = set(schedule_request.device_ids) - set(accessible_device_ids)
+            raise HTTPException(status_code=403, detail=f"Cannot access devices: {', '.join(inaccessible)}")
+
+        # Validate scheduling parameters
+        now = datetime.utcnow()
+        if schedule_request.deployment_type == "scheduled":
+            if not schedule_request.scheduled_start:
+                raise HTTPException(status_code=400, detail="Scheduled start time required for scheduled deployment")
+            if schedule_request.scheduled_start <= now:
+                raise HTTPException(status_code=400, detail="Scheduled start time must be in the future")
+
+        # Create content schedule
+        schedule_id = str(uuid.uuid4())
+        schedule_data = {
+            "id": schedule_id,
+            "content_id": schedule_request.content_id,
+            "overlay_id": schedule_request.overlay_id,
+            "device_ids": schedule_request.device_ids,
+            "deployment_type": schedule_request.deployment_type,
+            "scheduled_start": schedule_request.scheduled_start.isoformat() if schedule_request.scheduled_start else None,
+            "scheduled_end": schedule_request.scheduled_end.isoformat() if schedule_request.scheduled_end else None,
+            "recurrence_pattern": schedule_request.recurrence_pattern,
+            "recurrence_days": schedule_request.recurrence_days,
+            "recurrence_end_date": schedule_request.recurrence_end_date.isoformat() if schedule_request.recurrence_end_date else None,
+            "display_duration": schedule_request.display_duration,
+            "priority_level": schedule_request.priority_level,
+            "target_audience": schedule_request.target_audience,
+            "content_rotation_weight": schedule_request.content_rotation_weight,
+            "deployment_notes": schedule_request.deployment_notes,
+            "created_by": current_user.id,
+            "created_at": now.isoformat(),
+            "status": "pending" if schedule_request.deployment_type == "scheduled" else "active",
+            "deployment_history": []
+        }
+
+        # Save schedule to database
+        await db_service.db.content_schedules.insert_one(schedule_data)
+
+        # If immediate deployment, trigger distribution now
+        if schedule_request.deployment_type == "immediate":
+            await _trigger_content_distribution(schedule_id, schedule_data)
+
+        # Create deployment notifications for device owners
+        await _notify_device_owners(schedule_request.device_ids, content, schedule_data, current_user)
+
+        return safe_json_response({
+            "success": True,
+            "schedule_id": schedule_id,
+            "message": f"Content {'deployed immediately' if schedule_request.deployment_type == 'immediate' else 'scheduled'} to {len(schedule_request.device_ids)} device(s)",
+            "deployment_type": schedule_request.deployment_type,
+            "scheduled_start": schedule_data["scheduled_start"],
+            "devices_count": len(schedule_request.device_ids)
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to schedule content: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to schedule content: {e}")
+
+
+@router.get("/schedules")
+async def list_content_schedules(
+    device_id: Optional[str] = Query(None),
+    content_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, le=100),
+    offset: int = Query(0),
+    current_user: UserProfile = Depends(get_current_user),
+    company_context: dict = Depends(get_user_company_context)
+):
+    """List content schedules with filtering"""
+    try:
+        # Build query
+        query = {}
+
+        # Filter by device access if not super user
+        if current_user.user_type != "SUPER_USER":
+            accessible_company_ids = [c["id"] for c in company_context["accessible_companies"]]
+            # Get devices user has access to
+            devices_cursor = db_service.db.digital_screens.find({"company_id": {"$in": accessible_company_ids}})
+            accessible_devices = await devices_cursor.to_list(length=None)
+            accessible_device_ids = [d["id"] for d in accessible_devices]
+
+            query["device_ids"] = {"$in": accessible_device_ids}
+
+        # Apply filters
+        if device_id:
+            query["device_ids"] = device_id
+        if content_id:
+            query["content_id"] = content_id
+        if status:
+            query["status"] = status
+
+        # Execute query
+        cursor = db_service.db.content_schedules.find(query).skip(offset).limit(limit)
+        schedules = await cursor.to_list(length=limit)
+
+        # Enhance with content and device information
+        enhanced_schedules = []
+        for schedule in schedules:
+            # Get content info
+            content_info = await repo.get_content_meta(schedule["content_id"])
+
+            # Get device info
+            device_infos = []
+            if schedule.get("device_ids"):
+                devices_cursor = db_service.db.digital_screens.find({"id": {"$in": schedule["device_ids"]}})
+                devices = await devices_cursor.to_list(length=None)
+                device_infos = [{"id": d["id"], "name": d["name"], "location": d.get("location")} for d in devices]
+
+            schedule["_id"] = str(schedule["_id"])
+            schedule["content_info"] = {
+                "title": content_info.get("title") if content_info else "Unknown",
+                "type": content_info.get("content_type") if content_info else "Unknown"
+            }
+            schedule["device_infos"] = device_infos
+
+            enhanced_schedules.append(schedule)
+
+        return safe_json_response({
+            "schedules": enhanced_schedules,
+            "total": len(enhanced_schedules),
+            "limit": limit,
+            "offset": offset
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to list schedules: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list schedules: {e}")
+
 
 @router.post("/deploy", response_model=Dict)
 async def deploy_content_to_devices(
@@ -763,7 +1223,7 @@ async def deploy_content_to_devices(
             raise HTTPException(status_code=403, detail="Some devices not accessible")
 
         deployment_doc = {
-            **deployment.dict(),
+            **deployment.model_dump(),
             "id": str(uuid.uuid4()),
             "status": "pending",
             "deployment_progress": {device_id: "pending" for device_id in deployment.device_ids},
@@ -879,7 +1339,7 @@ async def record_device_analytics(
             raise HTTPException(status_code=404, detail="Device not found")
 
         analytics_doc = {
-            **analytics.dict(),
+            **analytics.model_dump(),
             "id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat()
         }
@@ -1023,3 +1483,299 @@ async def update_aggregated_metrics(analytics_doc: Dict):
     except Exception as e:
         # Log error for debugging
         print(f"Failed to update aggregated metrics: {e}")
+
+
+# ============================================================================
+# AI MODERATION SYSTEM
+# ============================================================================
+
+async def _trigger_ai_moderation(content_id: str, file_path: str, content_meta: Dict):
+    """Background task to trigger AI moderation for uploaded content"""
+    try:
+        # Import AI services
+        try:
+            from ..services import ai_service_manager
+            AI_AVAILABLE = True
+        except ImportError:
+            AI_AVAILABLE = False
+            logger.warning("AI services not available - content will need manual review")
+
+        if not AI_AVAILABLE:
+            # If AI not available, mark for manual review
+            await repo.update_content_meta(content_id, {
+                "ai_moderation_status": "needs_review",
+                "status": "pending",
+                "ai_processed_at": datetime.utcnow().isoformat()
+            })
+            return
+
+        # Prepare content for AI analysis
+        ai_analysis_data = {
+            "title": content_meta.get("title", ""),
+            "description": content_meta.get("description", ""),
+            "categories": content_meta.get("categories", []),
+            "tags": content_meta.get("tags", []),
+            "content_type": content_meta.get("content_type", ""),
+            "filename": content_meta.get("filename", ""),
+            "file_path": file_path
+        }
+
+        # Run AI moderation
+        moderation_result = await ai_service_manager.moderate_content(ai_analysis_data)
+
+        # Parse AI results
+        confidence_score = moderation_result.get("confidence", 0.0)
+        ai_decision = moderation_result.get("decision", "needs_review")  # approved, rejected, needs_review
+        ai_analysis = moderation_result.get("analysis", {})
+        warnings = moderation_result.get("warnings", [])
+
+        # Determine status based on AI confidence
+        if confidence_score >= 0.9 and ai_decision == "approved":
+            new_status = "pending"  # Still needs human review, but AI approved
+            ai_status = "approved"
+        elif confidence_score >= 0.9 and ai_decision == "rejected":
+            new_status = "rejected"
+            ai_status = "rejected"
+        else:
+            new_status = "pending"
+            ai_status = "needs_review"
+
+        # Update content with AI results
+        update_data = {
+            "ai_moderation_status": ai_status,
+            "ai_confidence_score": confidence_score,
+            "ai_analysis": ai_analysis,
+            "ai_processed_at": datetime.utcnow().isoformat(),
+            "status": new_status,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        if warnings:
+            update_data["ai_warnings"] = warnings
+
+        await repo.update_content_meta(content_id, update_data)
+
+        # Track AI moderation completion event
+        company_id = content_meta.get("company_id") or content_meta.get("owner_company_id")
+        await history_service.track_content_event(
+            content_id=content_id,
+            event_type=ContentHistoryEventType.AI_MODERATION_COMPLETED,
+            company_id=company_id,
+            triggered_by_system="AI_MODERATION",
+            event_details={
+                "ai_decision": ai_decision,
+                "confidence_score": confidence_score,
+                "warnings": warnings,
+                "analysis_summary": ai_analysis.get("summary", ""),
+                "processing_time": ai_analysis.get("processing_time_ms")
+            },
+            previous_state={"status": "quarantine", "ai_moderation_status": "pending"},
+            new_state={"status": new_status, "ai_moderation_status": ai_status},
+            processing_time_ms=ai_analysis.get("processing_time_ms")
+        )
+
+        # Log moderation result
+        logger.info(f"AI moderation completed for content {content_id}: {ai_decision} (confidence: {confidence_score})")
+
+        # If high confidence rejection, notify the uploader
+        if new_status == "rejected":
+            await _notify_content_rejection(content_id, content_meta, ai_analysis)
+
+    except Exception as e:
+        logger.error(f"AI moderation failed for content {content_id}: {e}")
+        # Mark as needing manual review if AI fails
+        await repo.update_content_meta(content_id, {
+            "ai_moderation_status": "error",
+            "status": "pending",
+            "ai_processed_at": datetime.utcnow().isoformat(),
+            "ai_error": str(e)
+        })
+
+
+async def _create_review_history(content_id: str, reviewer_id: str, review_data: ContentApprovalRequest, original_content: Dict):
+    """Create a detailed review history record"""
+    try:
+        review_history = {
+            "id": str(uuid.uuid4()),
+            "content_id": content_id,
+            "reviewer_id": reviewer_id,
+            "action": review_data.action,
+            "reviewer_notes": review_data.reviewer_notes,
+            "rejection_reason": review_data.rejection_reason,
+            "changes_made": {},
+            "original_data": {
+                "categories": original_content.get("categories", []),
+                "tags": original_content.get("tags", []),
+                "status": original_content.get("status")
+            },
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "ai_data": {
+                "ai_moderation_status": original_content.get("ai_moderation_status"),
+                "ai_confidence_score": original_content.get("ai_confidence_score"),
+                "ai_analysis": original_content.get("ai_analysis")
+            }
+        }
+
+        # Track what changes were made during approval
+        if review_data.action == "approve":
+            if review_data.final_categories is not None:
+                review_history["changes_made"]["categories"] = {
+                    "from": original_content.get("categories", []),
+                    "to": review_data.final_categories
+                }
+            if review_data.final_tags is not None:
+                review_history["changes_made"]["tags"] = {
+                    "from": original_content.get("tags", []),
+                    "to": review_data.final_tags
+                }
+
+        # Save to database
+        await db_service.db.content_review_history.insert_one(review_history)
+        logger.info(f"Review history created for content {content_id} by reviewer {reviewer_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to create review history: {e}")
+
+
+async def _notify_content_decision(content_id: str, content_meta: Dict, review_data: ContentApprovalRequest, reviewer: UserProfile):
+    """Notify content owner of approval/rejection decision"""
+    try:
+        owner_id = content_meta.get("owner_id")
+        content_title = content_meta.get("title", "Untitled Content")
+
+        notification_data = {
+            "id": str(uuid.uuid4()),
+            "user_id": owner_id,
+            "content_id": content_id,
+            "type": "content_decision",
+            "action": review_data.action,
+            "title": f"Content {review_data.action}d: {content_title}",
+            "message": f"Your content '{content_title}' has been {review_data.action}d by {reviewer.email}",
+            "reviewer_notes": review_data.reviewer_notes,
+            "rejection_reason": review_data.rejection_reason if review_data.action == "reject" else None,
+            "created_at": datetime.utcnow().isoformat(),
+            "read": False
+        }
+
+        # Save notification
+        await db_service.db.notifications.insert_one(notification_data)
+
+        # You could also send email here
+        logger.info(f"Notification sent to user {owner_id} for content {content_id} decision: {review_data.action}")
+
+    except Exception as e:
+        logger.error(f"Failed to send content decision notification: {e}")
+
+
+async def _trigger_content_distribution(schedule_id: str, schedule_data: Dict):
+    """Trigger immediate content distribution to devices"""
+    try:
+        content_id = schedule_data["content_id"]
+        device_ids = schedule_data["device_ids"]
+        overlay_id = schedule_data.get("overlay_id")
+
+        # Update device content configurations
+        update_data = {
+            "current_content_id": content_id,
+            "current_overlay_id": overlay_id,
+            "schedule_id": schedule_id,
+            "last_updated": datetime.utcnow().isoformat(),
+            "sync_required": True,
+            "content_priority": schedule_data.get("priority_level", "medium"),
+            "display_duration": schedule_data.get("display_duration"),
+            "rotation_weight": schedule_data.get("content_rotation_weight", 1.0)
+        }
+
+        # Update all targeted devices
+        result = await db_service.db.digital_screens.update_many(
+            {"id": {"$in": device_ids}},
+            {"$set": update_data}
+        )
+
+        # Record distribution in schedule history
+        distribution_record = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "action": "distributed",
+            "device_count": result.modified_count,
+            "details": f"Content distributed to {result.modified_count} devices"
+        }
+
+        await db_service.db.content_schedules.update_one(
+            {"id": schedule_id},
+            {"$push": {"deployment_history": distribution_record}}
+        )
+
+        logger.info(f"Content {content_id} distributed to {result.modified_count} devices via schedule {schedule_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to distribute content for schedule {schedule_id}: {e}")
+
+
+async def _notify_device_owners(device_ids: List[str], content: Dict, schedule_data: Dict, deployer: UserProfile):
+    """Notify device owners about new content deployment"""
+    try:
+        # Get device owners (companies that own these devices)
+        devices_cursor = db_service.db.digital_screens.find({"id": {"$in": device_ids}})
+        devices = await devices_cursor.to_list(length=None)
+
+        # Group devices by company
+        company_devices = {}
+        for device in devices:
+            company_id = device.get("company_id")
+            if company_id:
+                if company_id not in company_devices:
+                    company_devices[company_id] = []
+                company_devices[company_id].append(device)
+
+        # Create notifications for each company
+        for company_id, devices_list in company_devices.items():
+            # Get company admins to notify
+            users_cursor = db_service.db.users.find({
+                "company_id": company_id,
+                "user_type": "COMPANY_USER",
+                "permissions": {"$in": ["device_manage", "content_receive"]}
+            })
+            company_users = await users_cursor.to_list(length=None)
+
+            device_names = [d["name"] for d in devices_list]
+            notification_data = {
+                "id": str(uuid.uuid4()),
+                "company_id": company_id,
+                "type": "content_deployment",
+                "title": f"New content scheduled: {content.get('title', 'Unknown')}",
+                "message": f"Content has been scheduled for deployment to {len(device_names)} device(s): {', '.join(device_names[:3])}{'...' if len(device_names) > 3 else ''}",
+                "content_id": schedule_data["content_id"],
+                "schedule_id": schedule_data["id"],
+                "deployed_by": deployer.email,
+                "deployment_type": schedule_data["deployment_type"],
+                "scheduled_start": schedule_data.get("scheduled_start"),
+                "device_count": len(device_names),
+                "created_at": datetime.utcnow().isoformat(),
+                "read": False
+            }
+
+            # Send to each company user
+            for user in company_users:
+                user_notification = {**notification_data, "user_id": user["id"]}
+                await db_service.db.notifications.insert_one(user_notification)
+
+        logger.info(f"Deployment notifications sent for schedule {schedule_data['id']}")
+
+    except Exception as e:
+        logger.error(f"Failed to notify device owners: {e}")
+
+
+async def _notify_content_rejection(content_id: str, content_meta: Dict, ai_analysis: Dict):
+    """Notify content uploader of AI rejection"""
+    try:
+        # You would implement email notification here
+        logger.info(f"Content {content_id} rejected by AI - notification would be sent to user {content_meta.get('owner_id')}")
+
+        # Could integrate with email service
+        # await email_service.send_rejection_notification(
+        #     user_id=content_meta.get('owner_id'),
+        #     content_title=content_meta.get('title'),
+        #     rejection_reason=ai_analysis.get('rejection_reason', 'Content policy violation')
+        # )
+    except Exception as e:
+        logger.error(f"Failed to send rejection notification: {e}")

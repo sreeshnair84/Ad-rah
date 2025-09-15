@@ -6,7 +6,7 @@ Provides secure authentication with JWT tokens, refresh tokens, and security mon
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
-from fastapi import HTTPException, Depends, Request
+from fastapi import HTTPException, Depends, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 import jwt
@@ -129,6 +129,141 @@ class EnhancedAuthService:
         """Reset failed login attempts for an identifier"""
         if identifier in self.failed_attempts:
             del self.failed_attempts[identifier]
+    
+    async def authenticate_user(self, email: str, password: str) -> Optional[Dict[str, Any]]:
+        """Authenticate user with email and password"""
+        try:
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Check if account is locked
+            if await self.is_account_locked(email):
+                await self.log_security_event(SecurityEvent.ACCOUNT_LOCKED, {"email": email})
+                raise HTTPException(status_code=423, detail="Account temporarily locked due to multiple failed attempts")
+            
+            # Get user by email
+            user_data = await db_service.get_user_by_email(email)
+            if not user_data:
+                await self.record_failed_attempt(email)
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "user_not_found"})
+                return None
+            
+            # Verify password
+            if not self.verify_password(password, user_data.get("hashed_password", "")):
+                await self.record_failed_attempt(email)
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "invalid_password"})
+                return None
+            
+            # Check if user is active
+            if not user_data.get("is_active", True):
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "account_inactive"})
+                raise HTTPException(status_code=403, detail="Account is inactive")
+            
+            # Reset failed attempts on successful authentication
+            await self.reset_failed_attempts(email)
+            
+            # Get user profile
+            user_profile = await db_service.get_user_profile(user_data["id"])
+            if user_profile:
+                await db_service.update_user_login(user_data["id"])
+                await self.log_security_event(SecurityEvent.LOGIN_SUCCESS, {"email": email, "user_id": user_data["id"]})
+            
+            return user_profile
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Authentication error for {email}: {e}")
+            await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "system_error"})
+            return None
+    
+    async def login(self, login_request) -> Dict[str, Any]:
+        """Login endpoint compatible with existing auth service"""
+        try:
+            # Import here to avoid circular imports
+            from app.rbac_models import LoginRequest, LoginResponse
+            
+            # Handle both dict and LoginRequest object
+            if hasattr(login_request, 'email'):
+                email = login_request.email
+                password = login_request.password
+            else:
+                email = login_request.get('email')
+                password = login_request.get('password')
+            
+            if not email or not password:
+                raise HTTPException(status_code=400, detail="Email and password are required")
+            
+            # Authenticate user
+            user_profile = await self.authenticate_user(email, password)
+            if not user_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+            
+            # Prepare user data for token creation
+            user_data = {
+                "id": user_profile.id if hasattr(user_profile, 'id') else user_profile['id'],
+                "user_type": user_profile.user_type.value if hasattr(user_profile, 'user_type') and hasattr(user_profile.user_type, 'value') else user_profile.get('user_type'),
+                "company_id": user_profile.company_id if hasattr(user_profile, 'company_id') else user_profile.get('company_id'),
+                "permissions": user_profile.permissions if hasattr(user_profile, 'permissions') else user_profile.get('permissions', [])
+            }
+            
+            # Create token pair
+            access_token, refresh_token = await self.create_token_pair(user_data)
+            
+            # Return response compatible with existing auth endpoints
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "expires_in": int(self.access_token_expire.total_seconds()),
+                "user": user_profile
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Login error: {e}")
+            raise HTTPException(status_code=500, detail="Login failed due to server error")
+    
+    async def register_user(self, user_data) -> Dict[str, Any]:
+        """Register a new user"""
+        try:
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Handle both dict and UserCreate object
+            if hasattr(user_data, 'password'):
+                password = user_data.password
+                email = user_data.email
+            else:
+                password = user_data.get('password')
+                email = user_data.get('email')
+            
+            if not password or not email:
+                raise HTTPException(status_code=400, detail="Email and password are required")
+            
+            # Hash password
+            hashed_password = self.hash_password(password)
+            
+            # Create user
+            user = await db_service.create_user(user_data, hashed_password)
+            user_profile = await db_service.get_user_profile(user.id)
+            
+            if not user_profile:
+                raise HTTPException(status_code=500, detail="Failed to create user profile")
+            
+            await self.log_security_event(SecurityEvent.LOGIN_SUCCESS, {"email": email, "user_id": user.id, "action": "registration"})
+            return user_profile
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"User registration error: {e}")
+            raise HTTPException(status_code=500, detail="Registration failed")
     
     def create_access_token(self, user_data: Dict[str, Any]) -> str:
         """Create a JWT access token"""
@@ -306,7 +441,75 @@ class EnhancedAuthService:
         # In production, this would go to a security monitoring system
         logger.info(f"Security event: {log_entry}")
     
+    async def get_current_user_from_token(self, token: str):
+        """Get current user from JWT token (compatible with existing auth service)"""
+        try:
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Check if JWT secret is available
+            if not self.jwt_secret:
+                raise HTTPException(status_code=500, detail="Authentication service not properly configured")
+            
+            # Verify token
+            payload = jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
+            
+            # Check token type - accept both "access" and "access_token"
+            token_type = payload.get("type")
+            if token_type not in ["access", "access_token"]:
+                raise HTTPException(status_code=401, detail="Invalid token type")
+            
+            # Check if token is blacklisted
+            if await self.is_token_blacklisted(payload.get("jti")):
+                raise HTTPException(status_code=401, detail="Token has been revoked")
+            
+            user_id = payload.get("sub")
+            email = payload.get("email")
+            
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token format")
+            
+            # Get user profile
+            user_profile = await db_service.get_user_profile(user_id)
+            
+            if not user_profile:
+                # Try to find user by email
+                if email:
+                    user_data = await db_service.get_user_by_email(email)
+                    if user_data:
+                        user_profile = await db_service.get_user_profile(user_data["id"])
+                
+                if not user_profile:
+                    raise HTTPException(status_code=401, detail="User not found")
+            
+            # Check if user is active
+            if hasattr(user_profile, 'is_active'):
+                if not user_profile.is_active:
+                    raise HTTPException(status_code=401, detail="User account is inactive")
+            elif isinstance(user_profile, dict):
+                if not user_profile.get('is_active', True):
+                    raise HTTPException(status_code=401, detail="User account is inactive")
+            
+            return user_profile
+            
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token has expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Get current user error: {e}")
+            raise HTTPException(status_code=401, detail="Authentication failed")
+    
     async def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
+        """Get current user from JWT token"""
+        try:
+            token_data = await self.verify_token(credentials.credentials)
+            return token_data
+        except Exception as e:
+            logger.warning(f"Authentication failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
         """Get current user from JWT token"""
         try:
             token_data = await self.verify_token(credentials.credentials)

@@ -65,6 +65,9 @@ from .test_seed import router as test_seed_router
 # Import debug config router
 from .debug_config import router as debug_config_router
 
+# Import history router for content tracking
+from .history import router as history_router
+
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(registration_router)
@@ -85,6 +88,7 @@ api_router.include_router(debug_router)
 api_router.include_router(overlays_unified_router)  # Unified overlays management
 api_router.include_router(analytics_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(history_router)  # Content history and audit tracking
 api_router.include_router(seed_router)
 api_router.include_router(test_seed_router)  # Test seed router for authentication testing
 # api_router.include_router(temp_auth_router, prefix="/temp-auth")  # Removed - temporary debug router

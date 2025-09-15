@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from app.models import Company
 from app.repo import repo
-from app.auth_service import get_current_user
+from app.api.auth import get_current_user
 from app.rbac_models import UserProfile, UserType
 
 router = APIRouter(prefix="/companies", tags=["companies"])

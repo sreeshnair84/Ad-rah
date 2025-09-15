@@ -23,7 +23,6 @@ from app.rbac_models import *
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
@@ -57,7 +56,18 @@ class AuthService:
             expected_hash = hashlib.sha256((salt + plain_password).encode()).hexdigest()
             return expected_hash == hashed_password
 
+    def _get_jwt_secret(self) -> str:
+        """Get JWT secret from settings"""
+        secret = settings.JWT_SECRET_KEY
+        if not secret:
+            # Fallback to legacy SECRET_KEY
+            secret = getattr(settings, 'SECRET_KEY', None)
+            if not secret:
+                raise ValueError("JWT_SECRET_KEY not configured")
+        return secret
+
     def create_access_token(self, user_profile: UserProfile) -> str:
+        secret_key = self._get_jwt_secret()
         expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         expire = datetime.utcnow() + expires_delta
 
@@ -74,9 +84,10 @@ class AuthService:
             "type": "access_token"
         }
 
-        return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+        return jwt.encode(token_data, secret_key, algorithm=ALGORITHM)
 
     def create_refresh_token(self, user_profile: UserProfile) -> str:
+        secret_key = self._get_jwt_secret()
         expires_delta = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         expire = datetime.utcnow() + expires_delta
 
@@ -88,11 +99,12 @@ class AuthService:
             "iat": datetime.utcnow()
         }
 
-        return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+        return jwt.encode(token_data, secret_key, algorithm=ALGORITHM)
 
     def verify_token(self, token: str) -> dict:
+        secret_key = self._get_jwt_secret()
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
 
             if payload.get("type") != "access_token":
                 raise JWTError("Invalid token type")
@@ -381,7 +393,8 @@ class AuthService:
                 logger.debug("Authentication failed, checking for SUPER_USER bypass")
                 try:
                     # Try to decode the token to get the user info
-                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                    secret_key = self._get_jwt_secret()
+                    payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
                     user_email = payload.get("email")
 
                     if user_email:

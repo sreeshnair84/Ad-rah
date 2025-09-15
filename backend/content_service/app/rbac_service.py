@@ -20,7 +20,9 @@ from app.rbac_models import (
     UserType, CompanyType, CompanyRole, Permission,
     User, Company, UserProfile, get_permissions_for_role
 )
+from app.models import ContentDeleteType, UserRole
 from app.database_service import db_service
+from app.repo import repo
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class RBACService:
     def db(self):
         """Lazy initialization of database service"""
         if self._db is None:
-            self._db = get_db_service()
+            self._db = db_service
         return self._db
     
     # ==================== USER MANAGEMENT ====================
@@ -45,7 +47,7 @@ class RBACService:
         """Create a super user (platform administrator)"""
         self.logger.info(f"Creating super user: {user_data.get('email')}")
         
-        user = EnhancedUser(
+        user = User(
             **user_data,
             user_type=UserType.SUPER_USER,
             primary_company_id=None,  # Super users are not linked to companies
@@ -61,7 +63,7 @@ class RBACService:
         super_role = await self._get_or_create_super_user_role()
         
         # Assign super user role
-        user_role = EnhancedUserRole(
+        user_role = UserRole(
             user_id=saved_user["id"],
             role_id=super_role["id"],
             company_id=None,
@@ -101,7 +103,7 @@ class RBACService:
         if current_users >= company.get("max_users", 50):
             raise ValueError("Company user limit reached")
         
-        user = EnhancedUser(
+        user = User(
             **user_data,
             user_type=UserType.COMPANY_USER,
             primary_company_id=company_id,
@@ -114,7 +116,7 @@ class RBACService:
         role = await self._get_or_create_company_role(company_id, company_role, company.get("type"))
         
         # Assign role
-        user_role = EnhancedUserRole(
+        user_role = UserRole(
             user_id=saved_user["id"],
             role_id=role["id"],
             company_id=company_id,

@@ -2,7 +2,13 @@ from datetime import datetime
 import uuid
 from app.models import Role, User, UserRole, Company
 from app.repo import repo
-from app.auth_service import auth_service
+from app.security.enhanced_auth_service import auth_service
+from passlib.context import CryptContext
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
 
 
 async def initialize_mock_data():
