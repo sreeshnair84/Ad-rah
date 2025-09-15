@@ -22,15 +22,7 @@ const navigationGroups = [
         icon: <LayoutDashboard className="h-5 w-5" />, 
         description: "Main dashboard",
         permission: { resource: "dashboard", action: "view" }
-      },
-      { 
-        key: "unified", 
-        label: "Unified View", 
-        icon: <Globe className="h-5 w-5" />, 
-        description: "Unified platform view",
-        permission: { resource: "dashboard", action: "view" },
-        userTypes: ["SUPER_USER"]
-      },
+      }
     ]
   },
   {
@@ -65,7 +57,7 @@ const navigationGroups = [
         key: "registration", 
         label: "Registration", 
         icon: <UserPlus className="h-5 w-5" />, 
-        description: "User registration",
+        description: "Company registration",
         permission: { resource: "user", action: "create" },
         userTypes: ["SUPER_USER"]
       },

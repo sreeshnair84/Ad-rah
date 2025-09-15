@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuth } from '@/hooks/useAuth';
 import { useLoginForm } from '@/hooks/useLoginForm';
 import { mapAuthError, getBrandConfig, secureLog } from '@/lib/utils';
-import { Building2, Shield, User, Lock, AlertCircle, CheckCircle, Loader2, Crown, Eye, EyeOff, Info, Mail, Chrome, Unlock } from 'lucide-react';
+import { Building2, Shield, User, Lock, AlertCircle, CheckCircle, Loader2, Crown, Eye, EyeOff, Info, Mail, Unlock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -421,39 +421,6 @@ export default function LoginPage() {
                       </>
                     )}
                   </Button>
-
-                  {/* Social Login Options */}
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-gray-200" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-3 text-gray-500 font-medium">or continue with</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 border-gray-200 hover:bg-gray-50 transition-colors"
-                        disabled={loading}
-                      >
-                        <Chrome className="w-5 h-5 mr-2 text-red-500" />
-                        Google
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 border-gray-200 hover:bg-gray-50 transition-colors"
-                        disabled={loading}
-                      >
-                        <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                        Microsoft
-                      </Button>
-                    </div>
-                  </div>
                 </motion.div>
               </motion.form>
 

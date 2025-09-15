@@ -274,6 +274,30 @@ export function UnifiedContentManager({
     setShowEditDialog(true);
   };
 
+  const handleDeleteContent = async (contentId: string) => {
+    if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      const response = await fetch(`/api/content/${contentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        await fetchContent(); // Refresh the content list
+      } else {
+        console.error('Failed to delete content');
+      }
+    } catch (error) {
+      console.error('Failed to delete content:', error);
+    }
+  };
+
   const handleApproval = async () => {
     if (!selectedContent || !user?.id) return;
 
@@ -529,7 +553,10 @@ export function UnifiedContentManager({
                     </Button>
                   )}
                   {hasPermission("content", "delete") && (
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteContent(item.id);
+                    }}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -779,7 +806,7 @@ export function UnifiedContentManager({
       )}
 
       {/* Content Detail Dialog */}
-      <Dialog open={!!selectedContent && !showApprovalDialog} onOpenChange={() => setSelectedContent(null)}>
+      <Dialog open={!!selectedContent && !showApprovalDialog && !showEditDialog} onOpenChange={() => setSelectedContent(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{selectedContent?.title}</DialogTitle>
@@ -868,6 +895,81 @@ export function UnifiedContentManager({
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Content Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Content</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label>Title *</Label>
+                <Input
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({...editFormData, title: e.target.value})}
+                  placeholder="Content title"
+                />
+              </div>
+              <div>
+                <Label>Category *</Label>
+                <Select
+                  value={editFormData.category}
+                  onValueChange={(value) => setEditFormData({...editFormData, category: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="advertising">Advertising</SelectItem>
+                    <SelectItem value="promotional">Promotional</SelectItem>
+                    <SelectItem value="informational">Informational</SelectItem>
+                    <SelectItem value="entertainment">Entertainment</SelectItem>
+                    <SelectItem value="food">Food & Dining</SelectItem>
+                    <SelectItem value="retail">Retail</SelectItem>
+                    <SelectItem value="services">Services</SelectItem>
+                    <SelectItem value="healthcare">Healthcare</SelectItem>
+                    <SelectItem value="education">Education</SelectItem>
+                    <SelectItem value="technology">Technology</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={editFormData.description}
+                onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
+                placeholder="Content description"
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label>Instructions</Label>
+              <Textarea
+                value={editFormData.instructions}
+                onChange={(e) => setEditFormData({...editFormData, instructions: e.target.value})}
+                placeholder="Special instructions for content display, timing, or scheduling"
+                rows={2}
+              />
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowEditDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button className="flex-1">
+                Save Changes
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

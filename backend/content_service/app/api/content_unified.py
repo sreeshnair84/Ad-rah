@@ -212,17 +212,22 @@ async def get_pending_content(
 ):
     """Get all pending content for admin review"""
     try:
-        # Only SUPER_USER or users with content_moderate permission can access
-        if (current_user.user_type != "SUPER_USER" and 
-            "content_moderate" not in current_user.permissions):
+        # Only SUPER_USER or users with content_moderate or content_approve permission can access
+        if (current_user.user_type != "SUPER_USER" and
+            "content_moderate" not in current_user.permissions and
+            "content_approve" not in current_user.permissions):
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Get all content with status="pending"
+        # Get all content with status="pending" or "quarantine"
         pending_content = await repo.list_content(status="pending")
+        quarantine_content = await repo.list_content(status="quarantine")
+
+        # Combine both lists
+        all_pending_content = pending_content + quarantine_content
         
         return safe_json_response({
-            "pending_content": pending_content,
-            "total": len(pending_content)
+            "pending_content": all_pending_content,
+            "total": len(all_pending_content)
         })
 
     except HTTPException:

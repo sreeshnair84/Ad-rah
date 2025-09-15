@@ -24,7 +24,7 @@ import {
   Play,
   Pause,
   Square,
-  Refresh,
+  RefreshCw,
   Download,
   Upload,
   Database,
@@ -127,7 +127,7 @@ export function DigitalTwinDashboard({
     {
       type: 'refresh_content',
       description: 'Refresh Content',
-      icon: <Refresh className="w-4 h-4" />
+      icon: <RefreshCw className="w-4 h-4" />
     },
     {
       type: 'sync_content',
@@ -366,7 +366,7 @@ export function DigitalTwinDashboard({
               }}
               disabled={commandLoading === device.id}
             >
-              <Refresh className="w-3 h-3" />
+              <RefreshCw className="w-3 h-3" />
             </Button>
             <Button
               variant="ghost"
@@ -447,7 +447,7 @@ export function DigitalTwinDashboard({
       </Select>
 
       <Button variant="outline" onClick={fetchDevices}>
-        <Refresh className="w-4 h-4 mr-1" />
+        <RefreshCw className="w-4 h-4 mr-1" />
         Refresh
       </Button>
     </div>
