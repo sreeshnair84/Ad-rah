@@ -1,0 +1,111 @@
+name: Deploy Frontend to Azure Static Web Apps
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  WORKING_DIRECTORY: './frontend'
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm ci
+
+    - name: Run tests
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run test --if-present
+
+    - name: Build application
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run build
+      env:
+        NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+    - name: Build And Deploy
+      id: builddeploy
+      uses: Azure/static-web-apps-deploy@v1
+      with:
+        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        action: "upload"
+        app_location: ${{ env.WORKING_DIRECTORY }}
+        output_location: "out"
+        skip_app_build: true # We already built the app
+        app_build_command: 'npm run build'
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+    - name: Close Pull Request
+      id: closepullrequest
+      uses: Azure/static-web-apps-deploy@v1
+      with:
+        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        action: "close"
+
+  health_check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build_and_deploy_job
+    runs-on: ubuntu-latest
+    name: Health Check
+    environment: production
+
+    steps:
+    - name: Verify deployment
+      run: |
+        # Wait for deployment to be ready
+        sleep 30
+
+        # Get the app URL from secrets or use default pattern
+        APP_URL="${{ secrets.FRONTEND_APP_URL }}"
+
+        if [ -z "$APP_URL" ]; then
+          echo "Frontend URL not provided, skipping health check"
+          exit 0
+        fi
+
+        echo "Checking frontend health at: $APP_URL"
+
+        # Perform health check
+        response=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL)
+
+        if [ $response -eq 200 ]; then
+          echo "✅ Frontend is healthy (HTTP $response)"
+        else
+          echo "❌ Frontend health check failed (HTTP $response)"
+          exit 1
+        fi

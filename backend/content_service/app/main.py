@@ -1,4 +1,4 @@
-# Clean FastAPI Application
+# Clean FastAPI Application with Enhanced Security
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -16,7 +16,12 @@ from fastapi.responses import JSONResponse
 
 from app.database_service import db_service
 from app.auth_service import auth_service
-from app.config import settings
+from app.config import enhanced_config, initialize_config, settings
+
+# Import enhanced security services
+from app.security.enhanced_auth_service import initialize_auth_service
+from app.security.security_middleware import configure_security_middleware, get_cors_config
+from app.security.encryption_service import encryption_service
 
 # Import API router with all endpoints
 from app.api import api_router
@@ -64,13 +69,36 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting Adara Screen Digital Signage Platform")
+    logger.info("🚀 Starting Adara Screen Digital Signage Platform with Enhanced Security")
     try:
+        # Initialize configuration with secrets
+        await initialize_config()
+        logger.info("✅ Configuration and secrets initialized")
+        
+        # Initialize encryption service
+        if enhanced_config.ENCRYPTION_KEY:
+            # For now, use a single key. In production, this would come from Key Vault
+            encryption_keys = {"default": enhanced_config.ENCRYPTION_KEY}
+            await encryption_service.initialize(encryption_keys)
+            logger.info("✅ Encryption service initialized")
+        
+        # Initialize enhanced authentication service
+        if enhanced_config.JWT_SECRET_KEY and enhanced_config.JWT_REFRESH_SECRET_KEY:
+            await initialize_auth_service(
+                jwt_secret=enhanced_config.JWT_SECRET_KEY,
+                refresh_secret=enhanced_config.JWT_REFRESH_SECRET_KEY,
+                redis_url=enhanced_config.REDIS_URL
+            )
+            logger.info("✅ Enhanced authentication service initialized")
+        else:
+            logger.warning("JWT secrets not available, authentication service not initialized")
+        
+        # Initialize database
         await db_service.initialize()
         logger.info("✅ Database service initialized")
         
         # Seed test data for in-memory storage in development
-        if not settings.MONGO_URI and settings.ENVIRONMENT == "development":
+        if not enhanced_config.MONGO_URI and enhanced_config.ENVIRONMENT == "development":
             await seed_development_data()
             logger.info("✅ Development test data seeded")
         
@@ -84,47 +112,32 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Adara Screen Digital Signage Platform",
-    description="Enterprise Multi-Tenant Digital Signage Platform with Enhanced RBAC",
+    description="Enterprise Multi-Tenant Digital Signage Platform with Enhanced Security and RBAC",
     version="2.0.0",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
 
-# Configure CORS based on environment
-if settings.ENVIRONMENT == "development":
-    # In development, allow all localhost/127.0.0.1 origins to handle dynamic Flutter ports
-    cors_origins = [
-        "http://localhost:*",  # This won't work, so we'll use a custom function
-        "http://127.0.0.1:*",  # This won't work, so we'll use a custom function
-    ]
-    # For development, we'll allow all origins (less secure but needed for Flutter)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Allow all origins in development
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["*"],
-    )
-else:
-    # Production: strict CORS policy
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "https://*.adara.com", 
-            "https://*.vercel.app"
-        ],
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["*"],
-    )
+# Configure security middleware
+configure_security_middleware(
+    app,
+    environment=enhanced_config.ENVIRONMENT,
+    allowed_hosts=enhanced_config.ALLOWED_HOSTS,
+    enable_rate_limiting=enhanced_config.ENABLE_RATE_LIMITING,
+    requests_per_minute=enhanced_config.RATE_LIMIT_REQUESTS_PER_MINUTE
+)
+
+# Configure CORS with security-aware settings
+cors_config = get_cors_config(enhanced_config.ENVIRONMENT)
+app.add_middleware(CORSMiddleware, **cors_config)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}")
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if settings.ENVIRONMENT == "production":
+    if enhanced_config.ENVIRONMENT == "production":
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
@@ -135,7 +148,22 @@ async def health_check():
     try:
         if not db_service.connected:
             return JSONResponse(status_code=503, content={"status": "unhealthy", "database": "disconnected"})
-        return {"status": "healthy", "database": "connected", "auth_service": "operational", "rbac_system": "active", "version": "2.0.0"}
+        
+        # Check security services status
+        security_status = {
+            "key_vault": enhanced_config.key_vault_service is not None,
+            "encryption": encryption_service._initialized,
+            "authentication": "operational"
+        }
+        
+        return {
+            "status": "healthy", 
+            "database": "connected", 
+            "auth_service": "operational", 
+            "rbac_system": "active", 
+            "security": security_status,
+            "version": "2.0.0"
+        }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return JSONResponse(status_code=503, content={"status": "unhealthy", "error": str(e)})
@@ -145,10 +173,21 @@ async def root():
     return {
         "message": "Adara Screen Digital Signage Platform API",
         "version": "2.0.0",
+        "security_features": [
+            "Enhanced JWT Authentication",
+            "Refresh Token Support", 
+            "Azure Key Vault Integration",
+            "Field-level PII Encryption",
+            "Security Headers",
+            "Rate Limiting",
+            "RBAC System"
+        ],
         "docs": "/api/docs",
         "health": "/api/health",
         "auth_endpoints": {
             "login": "/api/auth/login",
+            "refresh": "/api/auth/refresh",
+            "logout": "/api/auth/logout",
             "user_profile": "/api/auth/me",
             "users": "/api/auth/users",
             "companies": "/api/auth/companies"
@@ -160,9 +199,18 @@ async def api_info():
     return {
         "title": "Adara Screen Digital Signage Platform API",
         "version": "2.0.0",
-        "description": "Enterprise Multi-Tenant Digital Signage Platform with Enhanced RBAC",
-        "features": ["Clean RBAC System", "Multi-Company Support", "Device Authentication", "Permission-based Access Control"],
-        "authentication": "JWT Bearer Token",
+        "description": "Enterprise Multi-Tenant Digital Signage Platform with Enhanced Security and RBAC",
+        "features": [
+            "Enhanced Security Architecture",
+            "Clean RBAC System", 
+            "Multi-Company Support", 
+            "Device Authentication", 
+            "Permission-based Access Control",
+            "Azure Key Vault Integration",
+            "Field-level Encryption",
+            "Refresh Token Authentication"
+        ],
+        "authentication": "JWT Bearer Token with Refresh",
         "database": "MongoDB",
         "documentation": "/api/docs"
     }
@@ -170,4 +218,4 @@ async def api_info():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=settings.ENVIRONMENT == "development", log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=enhanced_config.ENVIRONMENT == "development", log_level="info")
