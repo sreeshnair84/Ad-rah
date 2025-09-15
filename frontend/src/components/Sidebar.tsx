@@ -316,27 +316,29 @@ export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarPr
       <div className="flex h-full flex-col">
         {!isCollapsed && (
           <div className="border-b px-6 py-4">
-            <div className="flex items-center space-x-2">
-              <Image
-                src="/images/logo.png"
-                alt="Adara Logo"
-                width={32}
-                height={32}
-                className="w-8 h-8 object-contain"
-                onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                  // Fallback to gradient icon if logo fails to load
-                  const target = e.currentTarget as HTMLImageElement;
-                  target.style.display = 'none';
-                  const fallback = target.nextElementSibling as HTMLElement;
-                  if (fallback) fallback.classList.remove('hidden');
-                }}
-              />
-              <div className="hidden flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
-                <span className="text-sm font-bold text-white">A</span>
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
+                <Image
+                  src="/images/logo.png"
+                  alt="Adara Logo"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-contain"
+                  onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                    // Fallback to gradient icon if logo fails to load
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.style.display = 'none';
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.classList.remove('hidden');
+                  }}
+                />
+                <div className="hidden w-full h-full flex items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
+                  <span className="text-sm font-bold text-white">A</span>
+                </div>
               </div>
-              <div>
-                <h2 className="text-sm font-semibold">Adara Screen Platform</h2>
-                <p className="text-xs text-muted-foreground">Digital Signage</p>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold truncate">Adara Screen Platform</h2>
+                <p className="text-xs text-muted-foreground truncate">Digital Signage</p>
               </div>
             </div>
           </div>

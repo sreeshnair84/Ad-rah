@@ -47,10 +47,11 @@ interface ContentItem {
   id: string;
   title: string;
   description?: string;
+  instructions?: string;
   owner_id: string;
   categories: string[];
   tags: string[];
-  status?: 'draft' | 'pending_review' | 'approved' | 'rejected' | 'archived';
+  status?: 'draft' | 'pending_review' | 'quarantine' | 'approved' | 'rejected' | 'archived';
   created_at?: string;
   updated_at?: string;
   filename?: string;
@@ -94,6 +95,7 @@ export function UnifiedContentManager({
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [approvalFormData, setApprovalFormData] = useState({
@@ -108,10 +110,33 @@ export function UnifiedContentManager({
   const [uploadFormData, setUploadFormData] = useState({
     title: '',
     description: '',
+    instructions: '',
     category: '',
     tags: [] as string[],
     priority: 'medium' as 'low' | 'medium' | 'high'
   });
+
+  // Edit form data
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    description: '',
+    instructions: '',
+    category: '',
+    tags: [] as string[],
+    priority: 'medium' as 'low' | 'medium' | 'high'
+  });
+
+  // Map backend status to frontend status
+  const mapBackendStatus = (status?: string) => {
+    switch (status) {
+      case 'quarantine': return 'pending_review';
+      case 'approved': return 'approved';
+      case 'rejected': return 'rejected';
+      case 'draft': return 'draft';
+      case 'archived': return 'archived';
+      default: return 'pending_review';
+    }
+  };
 
   const fetchContent = useCallback(async () => {
     try {
@@ -131,7 +156,15 @@ export function UnifiedContentManager({
 
       if (response.ok) {
         const data = await response.json();
-        setContent(data.content || data || []);
+        const contentList = data.content || data || [];
+
+        // Map backend statuses to frontend statuses
+        const mappedContent = contentList.map((item: any) => ({
+          ...item,
+          status: mapBackendStatus(item.status)
+        }));
+
+        setContent(mappedContent);
       }
     } catch (err) {
       console.error('Failed to fetch content:', err);
@@ -150,7 +183,7 @@ export function UnifiedContentManager({
       filtered = filtered.filter(item => item.owner_id === user.id);
     }
     if (mode === 'review') {
-      filtered = filtered.filter(item => item.status === 'pending_review');
+      filtered = filtered.filter(item => item.status === 'pending_review' || item.status === 'quarantine');
     }
 
     // Filter by search term
@@ -179,6 +212,7 @@ export function UnifiedContentManager({
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-800';
       case 'pending_review': return 'bg-yellow-100 text-yellow-800';
+      case 'quarantine': return 'bg-orange-100 text-orange-800';
       case 'rejected': return 'bg-red-100 text-red-800';
       case 'draft': return 'bg-gray-100 text-gray-800';
       case 'archived': return 'bg-gray-100 text-gray-600';
@@ -190,6 +224,7 @@ export function UnifiedContentManager({
     switch (status) {
       case 'approved': return <CheckCircle className="w-4 h-4" />;
       case 'pending_review': return <Clock className="w-4 h-4" />;
+      case 'quarantine': return <MessageSquare className="w-4 h-4" />;
       case 'rejected': return <XCircle className="w-4 h-4" />;
       case 'draft': return <Edit className="w-4 h-4" />;
       default: return <Eye className="w-4 h-4" />;
@@ -224,6 +259,19 @@ export function UnifiedContentManager({
     } else {
       setSelectedContent(content);
     }
+  };
+
+  const handleEditContent = (content: ContentItem) => {
+    setSelectedContent(content);
+    setEditFormData({
+      title: content.title || '',
+      description: content.description || '',
+      instructions: content.instructions || '',
+      category: content.categories[0] || '',
+      tags: content.tags || [],
+      priority: 'medium'
+    });
+    setShowEditDialog(true);
   };
 
   const handleApproval = async () => {
@@ -281,6 +329,7 @@ export function UnifiedContentManager({
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="approved">Approved</SelectItem>
             <SelectItem value="pending_review">Pending</SelectItem>
+            <SelectItem value="quarantine">Quarantine</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
@@ -368,6 +417,15 @@ export function UnifiedContentManager({
                     onChange={(e) => setUploadFormData({...uploadFormData, description: e.target.value})}
                     placeholder="Content description"
                     rows={3}
+                  />
+                </div>
+                <div>
+                  <Label>Instructions</Label>
+                  <Textarea
+                    value={uploadFormData.instructions}
+                    onChange={(e) => setUploadFormData({...uploadFormData, instructions: e.target.value})}
+                    placeholder="Special instructions for content display, timing, or scheduling"
+                    rows={2}
                   />
                 </div>
                 <div className="text-center text-muted-foreground">
@@ -463,7 +521,10 @@ export function UnifiedContentManager({
                     <Eye className="h-4 w-4" />
                   </Button>
                   {hasPermission("content", "edit") && (
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditContent(item);
+                    }}>
                       <Edit className="h-4 w-4" />
                     </Button>
                   )}
@@ -780,7 +841,7 @@ export function UnifiedContentManager({
               )}
 
               {/* Approval Actions for Review Mode */}
-              {mode === 'review' && selectedContent.status === 'pending_review' && (
+              {mode === 'review' && (selectedContent.status === 'pending_review' || selectedContent.status === 'quarantine') && (
                 <div className="flex gap-2 pt-4 border-t">
                   <Button
                     onClick={() => {
