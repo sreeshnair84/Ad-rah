@@ -26,6 +26,8 @@ from app.security.encryption_service import encryption_service
 # Import API router with all endpoints
 from app.api import api_router
 
+# Import event-driven architecture
+from app.events.event_manager import event_manager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -59,13 +61,20 @@ async def lifespan(app: FastAPI):
         # Initialize database
         await db_service.initialize()
         logger.info("✅ Database service initialized")
-        
-        
+
+        # Initialize event-driven architecture
+        await event_manager.initialize()
+        logger.info("✅ Event-driven architecture initialized")
+
         yield
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
         raise
     finally:
+        # Gracefully shutdown event manager
+        await event_manager.shutdown()
+        logger.info("📤 Event manager shut down")
+
         await db_service.close()
         logger.info("🔌 Database connections closed")
 
@@ -114,12 +123,16 @@ async def health_check():
             "encryption": encryption_service._initialized,
             "authentication": "operational"
         }
-        
+
+        # Check event manager status
+        event_status = event_manager.get_metrics()
+
         return {
-            "status": "healthy", 
-            "database": "connected", 
-            "auth_service": "operational", 
-            "rbac_system": "active", 
+            "status": "healthy",
+            "database": "connected",
+            "auth_service": "operational",
+            "rbac_system": "active",
+            "event_system": event_status,
             "security": security_status,
             "version": "2.0.0"
         }

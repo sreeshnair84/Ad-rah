@@ -348,6 +348,39 @@ async def device_heartbeat(
 
     return result
 
+@router.post("/enhanced-heartbeat", response_model=Dict)
+async def enhanced_device_heartbeat(
+    heartbeat_data: Dict,
+    device_payload: Dict = Depends(verify_device_token)
+):
+    """Process enhanced device heartbeat with comprehensive metrics"""
+    from ..enhanced_device_analytics import process_enhanced_heartbeat
+    
+    device_id = device_payload.get("sub")
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Invalid device token")
+
+    try:
+        # Process the enhanced heartbeat data
+        result = await process_enhanced_heartbeat(heartbeat_data)
+        
+        # Also update the digital twin with real-time data
+        from ..digital_twins import update_digital_twin_realtime
+        await update_digital_twin_realtime(device_id, heartbeat_data)
+        
+        return {
+            "success": True,
+            "message": "Enhanced heartbeat processed successfully",
+            "digital_twin_updated": True,
+            "analytics_recorded": result.get("analytics_recorded", False)
+        }
+    except Exception as e:
+        logging.error(f"Enhanced heartbeat processing failed: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Failed to process enhanced heartbeat: {str(e)}"
+        }
+
 @router.get("/heartbeat/{device_id}/history", response_model=Dict)
 async def get_device_heartbeat_history(
     device_id: str,
@@ -871,7 +904,7 @@ async def create_device(
         raise HTTPException(status_code=403, detail="Access denied: Only company admins and editors can create devices")
 
     device_id = str(uuid.uuid4())
-    device = device_data.dict()
+    device = device_data.model_dump()
     device.update({
         "id": device_id,
         "status": ScreenStatus.ACTIVE,
@@ -932,7 +965,7 @@ async def update_device(
         if device.get("company_id") not in user_company_ids:
             raise HTTPException(status_code=403, detail="Access denied to this device")
 
-    update_data = device_data.dict(exclude_unset=True)
+    update_data = device_data.model_dump(exclude_unset=True)
     success = await repo.update_digital_screen(device_id, update_data)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update device")
@@ -1011,7 +1044,7 @@ async def create_layout_template(
     if not is_platform_admin and template_data.company_id not in accessible_company_ids:
         raise HTTPException(status_code=403, detail="Access denied to create templates for this company")
 
-    template_dict = template_data.dict()
+    template_dict = template_data.model_dump()
     template_dict.update({
         "id": str(uuid.uuid4()),
         "created_by": current_user.get("id"),
@@ -1064,7 +1097,7 @@ async def update_layout_template(
         if template.get("company_id") not in user_company_ids:
             raise HTTPException(status_code=403, detail="Access denied to modify this template")
 
-    update_data = template_data.dict(exclude_unset=True)
+    update_data = template_data.model_dump(exclude_unset=True)
     update_data["updated_at"] = datetime.utcnow()
 
     success = await repo.update_layout_template(template_id, update_data)

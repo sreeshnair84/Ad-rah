@@ -452,5 +452,86 @@ class DatabaseService:
             logger.error(f"Failed to get user by ID: {e}")
             return None
 
+    # Generic database methods for event handlers
+    async def get_document(self, collection: str, query: Dict) -> Optional[Dict]:
+        """Get a single document from collection"""
+        try:
+            return await self.db[collection].find_one(query)
+        except Exception as e:
+            logger.error(f"Failed to get document from {collection}: {e}")
+            return None
+
+    async def update_document(self, collection: str, query: Dict, update: Dict, upsert: bool = False):
+        """Update a document in collection"""
+        try:
+            return await self.db[collection].update_one(query, update, upsert=upsert)
+        except Exception as e:
+            logger.error(f"Failed to update document in {collection}: {e}")
+            return None
+
+    async def insert_document(self, collection: str, document: Dict) -> str:
+        """Insert a document into collection"""
+        try:
+            result = await self.db[collection].insert_one(document)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to insert document into {collection}: {e}")
+            return None
+
+    async def find_documents(self, collection: str, query: Dict, sort: List = None, limit: int = None) -> List[Dict]:
+        """Find multiple documents in collection"""
+        try:
+            cursor = self.db[collection].find(query)
+            if sort:
+                cursor = cursor.sort(sort)
+            if limit:
+                cursor = cursor.limit(limit)
+            return await cursor.to_list(length=limit)
+        except Exception as e:
+            logger.error(f"Failed to find documents in {collection}: {e}")
+            return []
+
+    async def insert_many(self, collection: str, documents: List[Dict]) -> List[str]:
+        """Insert multiple documents into collection"""
+        try:
+            result = await self.db[collection].insert_many(documents)
+            return [str(id) for id in result.inserted_ids]
+        except Exception as e:
+            logger.error(f"Failed to insert documents into {collection}: {e}")
+            return []
+
+    async def update_many(self, collection: str, query: Dict, update: Dict):
+        """Update multiple documents in collection"""
+        try:
+            return await self.db[collection].update_many(query, update)
+        except Exception as e:
+            logger.error(f"Failed to update documents in {collection}: {e}")
+            return None
+
+    async def delete_many(self, collection: str, query: Dict):
+        """Delete multiple documents from collection"""
+        try:
+            return await self.db[collection].delete_many(query)
+        except Exception as e:
+            logger.error(f"Failed to delete documents from {collection}: {e}")
+            return None
+
+    async def distinct(self, collection: str, field: str, query: Dict = None) -> List:
+        """Get distinct values from collection"""
+        try:
+            return await self.db[collection].distinct(field, query or {})
+        except Exception as e:
+            logger.error(f"Failed to get distinct values from {collection}: {e}")
+            return []
+
+    async def aggregate(self, collection: str, pipeline: List[Dict]) -> List[Dict]:
+        """Run aggregation pipeline on collection"""
+        try:
+            cursor = self.db[collection].aggregate(pipeline)
+            return await cursor.to_list(length=None)
+        except Exception as e:
+            logger.error(f"Failed to run aggregation on {collection}: {e}")
+            return []
+
 # Global instance
 db_service = DatabaseService()

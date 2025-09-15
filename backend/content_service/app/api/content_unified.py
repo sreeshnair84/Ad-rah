@@ -31,12 +31,14 @@ from ..models import (
     ContentDeploymentCreate, DeviceAnalytics, ProximityDetection, AnalyticsQuery, AnalyticsSummary,
     UserProfile, ContentHistoryEventType
 )
-from ..auth_service import require_roles, get_current_user, get_user_company_context
+# Updated to use enhanced auth service for consistency
+from app.api.auth import get_current_user, require_roles, get_user_company_context
 from ..repo import repo
 from ..database_service import db_service
 from ..storage import save_media
 from ..utils.serialization import safe_json_response
 from ..history_service import HistoryService
+from app.events.event_manager import publish_content_event
 
 # Import content delivery services
 try:
@@ -325,6 +327,30 @@ async def review_content(
             }
         )
 
+        # Publish content approval/rejection event for background processing
+        try:
+            event_type_str = "content.approved" if review_data.action == "approve" else "content.rejected"
+            await publish_content_event(
+                event_type=event_type_str,
+                content_id=content_id,
+                company_id=current_user.company_id,
+                user_id=current_user.id,
+                payload={
+                    "action": review_data.action,
+                    "reviewer_notes": review_data.reviewer_notes,
+                    "rejection_reason": review_data.rejection_reason if review_data.action == "reject" else None,
+                    "final_categories": review_data.final_categories,
+                    "final_tags": review_data.final_tags,
+                    "automated_decision": False,
+                    "filename": existing_content.get("filename", "Unknown"),
+                    "content_type": existing_content.get("content_type", "Unknown")
+                },
+                correlation_id=content_id
+            )
+            logger.info(f"Published content {review_data.action} event for {content_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish content {review_data.action} event: {e}")
+
         # Create review history record
         await _create_review_history(content_id, current_user.id, review_data, existing_content)
 
@@ -597,45 +623,43 @@ async def upload_content_file(
 
         # Create enhanced content metadata
         content_id = str(uuid.uuid4())
-        content_meta = {
-            "id": content_id,
-            "owner_id": current_user.id,
-            "filename": filename,
-            "content_type": content_type,
-            "size": file_size,
-            "title": title,
-            "description": description,
-            "categories": parsed_categories,
-            "tags": parsed_tags,
-            "content_rating": content_rating,
-            "target_age_min": target_age_min,
-            "target_age_max": target_age_max,
-            "target_gender": target_gender,
-            "start_time": parsed_start_time.isoformat() if parsed_start_time else None,
-            "end_time": parsed_end_time.isoformat() if parsed_end_time else None,
-            "production_notes": production_notes,
-            "usage_guidelines": usage_guidelines,
-            "priority_level": priority_level,
-            "copyright_info": copyright_info,
-            "license_type": license_type,
-            "usage_rights": usage_rights,
-            "duration_seconds": detected_duration,
-            "file_url": file_path,
-            "status": "quarantine",
-            "ai_moderation_status": "pending",
-            "uploaded_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
+        content_meta = ContentMeta(
+            id=content_id,
+            owner_id=current_user.id,
+            filename=filename,
+            content_type=content_type,
+            size=file_size,
+            title=title,
+            description=description,
+            categories=parsed_categories,
+            tags=parsed_tags,
+            content_rating=content_rating,
+            target_age_min=target_age_min,
+            target_age_max=target_age_max,
+            target_gender=target_gender,
+            start_time=parsed_start_time,
+            end_time=parsed_end_time,
+            production_notes=production_notes,
+            usage_guidelines=usage_guidelines,
+            priority_level=priority_level,
+            copyright_info=copyright_info,
+            license_type=license_type,
+            usage_rights=usage_rights,
+            duration_seconds=detected_duration,
+            file_url=file_path,
+            status="quarantine",
+            ai_moderation_status="pending"
+        )
 
         # Save content metadata
         saved_content = await repo.save_content_meta(content_meta)
 
-        # Track content upload event
+        # Track content upload event with event-driven architecture
         await history_service.track_content_event(
             content_id=content_id,
             event_type=ContentHistoryEventType.UPLOADED,
-            company_id=current_user.company_id,
-            user_id=current_user.id,
+            company_id=getattr(current_user, "company_id", "unknown"),
+            user_id=getattr(current_user, "id", "unknown"),
             event_details={
                 "filename": filename,
                 "content_type": content_type,
@@ -649,19 +673,55 @@ async def upload_content_file(
             request=request
         )
 
-        # Trigger AI moderation in background
-        from fastapi import BackgroundTasks
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(_trigger_ai_moderation, content_id, file_path, content_meta)
+        # Publish content upload event for background processing (AI moderation, notifications, etc.)
+        try:
+            await publish_content_event(
+                event_type="content.uploaded",
+                content_id=content_id,
+                company_id=getattr(current_user, "company_id", "unknown"),
+                user_id=getattr(current_user, "id", "unknown"),
+                payload={
+                    "filename": filename,
+                    "content_type": content_type,
+                    "file_size": file_size,
+                    "title": title,
+                    "file_path": file_path,
+                    "categories": parsed_categories,
+                    "tags": parsed_tags,
+                    "priority_level": priority_level
+                },
+                correlation_id=content_id
+            )
+            logger.info(f"Published content upload event for {content_id}")
+        except Exception as e:
+            # Don't fail the upload if event publishing fails
+            logger.error(f"Failed to publish content upload event: {e}")
 
-        return safe_json_response({
+        # Trigger AI moderation in background
+        # from fastapi import BackgroundTasks
+        # background_tasks = BackgroundTasks()
+        # background_tasks.add_task(_trigger_ai_moderation, content_id, file_path, content_meta)
+
+        # Extract user ID safely
+        try:
+            if hasattr(current_user, 'id'):
+                user_id = current_user.id
+            else:
+                user_id = 'unknown'
+        except:
+            user_id = 'unknown'
+
+        response_data = {
             "status": "success",
-            "message": "Content uploaded successfully and sent for AI moderation",
+            "message": "Content uploaded successfully (basic test)",
             "content_id": content_id,
             "filename": filename,
-            "ai_moderation_required": True,
-            "estimated_review_time": "2-5 minutes for AI review, then human review if needed"
-        })
+            "user_id": user_id,
+            "file_size": file_size,
+            "content_type": content_type
+        }
+
+        return response_data
 
     except HTTPException:
         raise

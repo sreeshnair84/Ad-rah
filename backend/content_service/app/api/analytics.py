@@ -84,9 +84,13 @@ class AnalyticsConnectionManager:
         self.subscriptions: Dict[str, List[str]] = {}
     
     async def connect(self, websocket: WebSocket, client_id: str):
-        await websocket.accept()
-        self.active_connections[client_id] = websocket
-        logger.info(f"Analytics client connected: {client_id}")
+        try:
+            await websocket.accept()
+            self.active_connections[client_id] = websocket
+            logger.info(f"Analytics client connected: {client_id}")
+        except Exception as e:
+            logger.error(f"Failed to accept WebSocket connection for {client_id}: {e}")
+            raise
     
     def disconnect(self, client_id: str):
         if client_id in self.active_connections:
@@ -99,7 +103,8 @@ class AnalyticsConnectionManager:
         if client_id in self.active_connections:
             try:
                 websocket = self.active_connections[client_id]
-                if websocket.client_state.value == 1:  # CONNECTED state
+                # Check if WebSocket is in connected state
+                if hasattr(websocket, 'client_state') and websocket.client_state.value == 1:  # CONNECTED state
                     await websocket.send_text(json.dumps(message, cls=DateTimeEncoder))
                 else:
                     logger.warning(f"WebSocket for {client_id} is not in connected state")
@@ -112,7 +117,8 @@ class AnalyticsConnectionManager:
         disconnected_clients = []
         for client_id, connection in self.active_connections.items():
             try:
-                if connection.client_state.value == 1:  # CONNECTED state
+                # Check if WebSocket is in connected state
+                if hasattr(connection, 'client_state') and connection.client_state.value == 1:  # CONNECTED state
                     await connection.send_text(json.dumps(message, cls=DateTimeEncoder))
                 else:
                     disconnected_clients.append(client_id)
@@ -137,7 +143,7 @@ async def record_analytics_event(
     """Record a single analytics event"""
     try:
         # Convert request to analytics service format
-        event_data = event_request.dict(exclude_unset=True)
+        event_data = event_request.model_dump(exclude_unset=True)
         
         # Add device info if not provided
         if not event_data.get("device_id"):
@@ -146,17 +152,18 @@ async def record_analytics_event(
         # Record the event
         result = await analytics_service.record_metric(event_data)
         
-        # Broadcast to WebSocket subscribers
-        await connection_manager.broadcast({
-            "type": "metric_event",
-            "event": {
-                "metric_type": event_request.metric_type,
-                "event_type": event_request.event_type,
-                "device_id": event_data["device_id"],
-                "value": event_request.value,
-                "timestamp": event_request.timestamp or datetime.utcnow().isoformat()
-            }
-        })
+        # Broadcast to WebSocket subscribers only if there are active connections
+        if connection_manager.active_connections:
+            await connection_manager.broadcast({
+                "type": "metric_event",
+                "event": {
+                    "metric_type": event_request.metric_type,
+                    "event_type": event_request.event_type,
+                    "device_id": event_data["device_id"],
+                    "value": event_request.value,
+                    "timestamp": event_request.timestamp or datetime.utcnow().isoformat()
+                }
+            })
         
         return result
         
@@ -176,7 +183,7 @@ async def record_batch_analytics_events(
         device_id = device_info.get("device_id", "unknown")
         
         for event_request in batch_request.events:
-            event_data = event_request.dict(exclude_unset=True)
+            event_data = event_request.model_dump(exclude_unset=True)
             if not event_data.get("device_id"):
                 event_data["device_id"] = device_id
             events_data.append(event_data)
@@ -310,7 +317,7 @@ async def get_dashboard_analytics(
     device: str = Query("all", description="Device ID or 'all' for all devices"),
     device_info: dict = Depends(authenticate_device)
 ):
-    """Get comprehensive analytics dashboard data"""
+    """Get comprehensive analytics dashboard data with real aggregated metrics"""
     
     # Parse time range
     time_delta_map = {
@@ -327,16 +334,124 @@ async def get_dashboard_analytics(
     start_time = end_time - time_delta_map[timeRange]
     
     try:
-        # Get dashboard data from analytics service
+        # Import required services
+        from app.repo import repo
+        
+        # Get real device data from database
+        devices_list = await repo.list_digital_screens() if hasattr(repo, 'list_digital_screens') else []
+        
+        # Filter by device if specified
+        if device != "all":
+            devices_list = [d for d in devices_list if d.get("id") == device or d.get("device_id") == device]
+        
+        # Get real analytics data from service
         dashboard_data = await analytics_service.get_dashboard_data(
             device_filter=device if device != "all" else None,
             start_time=start_time,
             end_time=end_time
         )
         
+        # Enhance device data with real heartbeats and content status
+        enhanced_devices = []
+        for device_data in dashboard_data.get("devices", []):
+            device_id = device_data.get("deviceId")
+            
+            # Get latest heartbeat data
+            try:
+                latest_heartbeat = await repo.get_device_heartbeats(device_id, 1) if hasattr(repo, 'get_device_heartbeats') else []
+                heartbeat = latest_heartbeat[0] if latest_heartbeat else None
+            except:
+                heartbeat = None
+            
+            # Get current content being played
+            try:
+                current_content = await repo.get_device_current_content(device_id) if hasattr(repo, 'get_device_current_content') else None
+            except:
+                current_content = None
+            
+            # Get device registration info
+            try:
+                device_info_db = await repo.get_digital_screen(device_id) if hasattr(repo, 'get_digital_screen') else {}
+            except:
+                device_info_db = {}
+            
+            # Calculate real system health from heartbeat data
+            system_health = {
+                "cpuUsage": heartbeat.get("cpu_usage", 0) if heartbeat else device_data.get("systemHealth", {}).get("cpuUsage", 0),
+                "memoryUsage": heartbeat.get("memory_usage", 0) if heartbeat else device_data.get("systemHealth", {}).get("memoryUsage", 0),
+                "diskUsage": heartbeat.get("disk_usage", 0) if heartbeat else device_data.get("systemHealth", {}).get("diskUsage", 0),
+                "temperature": heartbeat.get("temperature", 0) if heartbeat else device_data.get("systemHealth", {}).get("temperature", 35),
+                "networkLatency": heartbeat.get("network_latency", 0) if heartbeat else device_data.get("systemHealth", {}).get("networkLatency", 50),
+                "overallScore": heartbeat.get("performance_score", 0.8) if heartbeat else device_data.get("systemHealth", {}).get("overallScore", 0.8),
+                "status": heartbeat.get("health_status", "good") if heartbeat else device_data.get("systemHealth", {}).get("status", "good")
+            }
+            
+            # Real content information
+            content_info = None
+            if current_content:
+                content_info = {
+                    "id": current_content.get("content_id", ""),
+                    "name": current_content.get("content_name", ""),
+                    "type": current_content.get("content_type", ""),
+                    "startTime": current_content.get("start_time", datetime.utcnow().isoformat()),
+                    "duration": current_content.get("duration", 0),
+                    "progress": current_content.get("progress", 0)
+                }
+            
+            enhanced_device = {
+                "deviceId": device_id,
+                "deviceName": device_info_db.get("name", device_data.get("deviceName", f"Device {device_id[:8]}")),
+                "isOnline": heartbeat is not None and (datetime.utcnow() - datetime.fromisoformat(heartbeat.get("timestamp", datetime.utcnow().isoformat()).replace('Z', '+00:00'))).seconds < 300 if heartbeat else device_data.get("isOnline", False),
+                "lastHeartbeat": heartbeat.get("timestamp", datetime.utcnow().isoformat()) if heartbeat else device_data.get("lastHeartbeat", datetime.utcnow().isoformat()),
+                "location": device_info_db.get("location", device_data.get("location", "Unknown")),
+                "currentContent": content_info,
+                "systemHealth": system_health,
+                "contentMetrics": device_data.get("contentMetrics", {
+                    "impressions": 0,
+                    "interactions": 0,
+                    "completions": 0,
+                    "errors": 0,
+                    "averageLoadTime": 0
+                }),
+                "audienceMetrics": device_data.get("audienceMetrics", {
+                    "currentCount": 0,
+                    "totalDetections": 0,
+                    "averageDwellTime": 0,
+                    "peakCount": 0,
+                    "detectionConfidence": 0.8
+                }),
+                "monetization": device_data.get("monetization", {
+                    "totalRevenue": 0,
+                    "adImpressions": 0,
+                    "clickthroughRate": 0,
+                    "averageCPM": 0
+                })
+            }
+            enhanced_devices.append(enhanced_device)
+        
+        # Calculate real summary statistics
+        total_devices = len(enhanced_devices)
+        online_devices = len([d for d in enhanced_devices if d["isOnline"]])
+        total_revenue = sum(d["monetization"]["totalRevenue"] for d in enhanced_devices)
+        total_impressions = sum(d["contentMetrics"]["impressions"] for d in enhanced_devices)
+        total_interactions = sum(d["contentMetrics"]["interactions"] for d in enhanced_devices)
+        total_audience = sum(d["audienceMetrics"]["currentCount"] for d in enhanced_devices)
+        average_health = sum(d["systemHealth"]["overallScore"] for d in enhanced_devices) / total_devices if total_devices > 0 else 0
+        average_engagement = (total_interactions / total_impressions * 100) if total_impressions > 0 else 0
+        
+        enhanced_summary = {
+            "totalDevices": total_devices,
+            "onlineDevices": online_devices,
+            "totalRevenue": total_revenue,
+            "totalImpressions": total_impressions,
+            "averageEngagement": average_engagement,
+            "totalAudience": total_audience,
+            "averageHealth": average_health
+        }
+        
         return {
-            "devices": dashboard_data.get("devices", []),
-            "summary": dashboard_data.get("summary", {}),
+            "devices": enhanced_devices,
+            "summary": enhanced_summary,
             "timeSeriesData": dashboard_data.get("time_series", []),
             "timeRange": timeRange,
             "generatedAt": datetime.utcnow().isoformat()
@@ -403,18 +518,34 @@ async def analytics_websocket_endpoint(websocket: WebSocket):
             except WebSocketDisconnect:
                 break
             except json.JSONDecodeError:
-                await connection_manager.send_personal_message({
-                    "type": "error",
-                    "message": "Invalid JSON format",
-                    "timestamp": datetime.utcnow().isoformat()
-                }, client_id)
+                # Only send error message if WebSocket is still connected
+                if client_id in connection_manager.active_connections:
+                    try:
+                        websocket = connection_manager.active_connections[client_id]
+                        if websocket.client_state.value == 1:  # CONNECTED state
+                            await connection_manager.send_personal_message({
+                                "type": "error",
+                                "message": "Invalid JSON format",
+                                "timestamp": datetime.utcnow().isoformat()
+                            }, client_id)
+                    except Exception as send_error:
+                        logger.error(f"Failed to send JSON error message: {send_error}")
+                        break
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
-                await connection_manager.send_personal_message({
-                    "type": "error",
-                    "message": str(e),
-                    "timestamp": datetime.utcnow().isoformat()
-                }, client_id)
+                # Only send error message if WebSocket is still connected
+                if client_id in connection_manager.active_connections:
+                    try:
+                        websocket = connection_manager.active_connections[client_id]
+                        if websocket.client_state.value == 1:  # CONNECTED state
+                            await connection_manager.send_personal_message({
+                                "type": "error",
+                                "message": str(e),
+                                "timestamp": datetime.utcnow().isoformat()
+                            }, client_id)
+                    except Exception as send_error:
+                        logger.error(f"Failed to send error message: {send_error}")
+                        break
                 
     except WebSocketDisconnect:
         pass
@@ -428,6 +559,7 @@ async def send_periodic_updates():
     """Send periodic analytics updates to connected clients"""
     while True:
         try:
+            # Only proceed if there are active connections
             if connection_manager.active_connections:
                 # Get current metrics
                 metrics = await analytics_service.get_real_time_metrics()

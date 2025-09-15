@@ -7,7 +7,8 @@
       "Bash(flutter:*)",
       "Bash(sed:*)",
       "Bash(uv add:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

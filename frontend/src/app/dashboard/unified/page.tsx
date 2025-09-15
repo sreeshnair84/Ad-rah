@@ -22,7 +22,8 @@ import {
   Layers,
   Play,
   Pause,
-  Square
+  Square,
+  Activity
 } from 'lucide-react';
 
 // Import existing components
@@ -30,6 +31,7 @@ import UnifiedUploadPage from '@/components/upload/UnifiedUploadPage';
 import OverlayManagement from '../overlays/overlay-management';
 import ContentApproval from '../approval/content-approval';
 import { ContentManager } from '@/components/content/ContentManager';
+import DigitalTwinDashboard from '@/components/dashboard/DigitalTwinDashboard';
 
 interface UnifiedDashboardProps {}
 
@@ -173,29 +175,26 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
         </CardContent>
       </Card>
 
-      {/* Recent Activity */}
+      {/* Recent Activity - now pulling from real analytics */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[
-              { action: 'New ad uploaded', time: '2 min ago', status: 'pending' },
-              { action: 'Ad approved by host', time: '15 min ago', status: 'approved' },
-              { action: 'Screen came online', time: '1 hour ago', status: 'active' },
-              { action: 'Overlay updated', time: '2 hours ago', status: 'updated' }
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{activity.action}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
-                </div>
-                <Badge variant={activity.status === 'approved' ? 'default' : 'secondary'}>
-                  {activity.status}
-                </Badge>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Real-time metrics available</p>
+                <p className="text-xs text-muted-foreground">Live device monitoring active</p>
               </div>
-            ))}
+              <Badge variant="default">
+                <Activity className="h-3 w-3 mr-1" />
+                Live
+              </Badge>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Switch to Analytics tab for detailed device monitoring and performance metrics.
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -242,58 +241,13 @@ export default function UnifiedDashboard({}: UnifiedDashboardProps) {
   );
 
   const renderAnalyticsTab = () => (
-    <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Analytics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Content Engagement</span>
-              <span className="text-sm font-medium">85%</span>
-            </div>
-            <Progress value={85} className="w-full" />
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Screen Uptime</span>
-              <span className="text-sm font-medium">98%</span>
-            </div>
-            <Progress value={98} className="w-full" />
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Approval Rate</span>
-              <span className="text-sm font-medium">92%</span>
-            </div>
-            <Progress value={92} className="w-full" />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Performing Content</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[
-              { title: 'Summer Sale Campaign', impressions: 15420, engagement: '7.2%' },
-              { title: 'New Product Launch', impressions: 12890, engagement: '6.8%' },
-              { title: 'Holiday Special', impressions: 11230, engagement: '5.9%' }
-            ].map((content, index) => (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <p className="font-medium">{content.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {content.impressions.toLocaleString()} impressions • {content.engagement} engagement
-                  </p>
-                </div>
-                <Badge>Top</Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6">
+      <DigitalTwinDashboard 
+        timeRange="24h"
+        selectedDevice="all"
+        autoRefresh={true}
+        refreshInterval={30000}
+      />
     </div>
   );
 

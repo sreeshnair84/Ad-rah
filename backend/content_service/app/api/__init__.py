@@ -7,6 +7,7 @@ from .companies import router as companies_router
 from .users import router as users_router
 # from .roles import router as roles_router  # Temporarily disabled
 from .events import router as events_router
+from .test_upload import router as test_upload_router
 from .registration import router as registration_router
 from .company_applications import router as company_applications_router
 from .categories import router as categories_router
@@ -62,6 +63,9 @@ from .seed import router as seed_router
 # Import test seed router for testing authentication
 from .test_seed import router as test_seed_router
 
+# Import enhanced device analytics router
+from .enhanced_device_analytics import router as enhanced_device_analytics_router
+
 # Import debug config router
 from .debug_config import router as debug_config_router
 
@@ -78,6 +82,7 @@ api_router.include_router(companies_router)
 api_router.include_router(users_router)
 # api_router.include_router(roles_router)  # Temporarily disabled
 api_router.include_router(events_router)
+api_router.include_router(test_upload_router)  # Test upload endpoint (no auth required)
 api_router.include_router(company_applications_router)
 api_router.include_router(devices_unified_router)  # Unified device management (replaces device_router, screens_router, simple_screens_router)
 api_router.include_router(digital_twins_router)  # Digital twin management
@@ -92,6 +97,7 @@ api_router.include_router(history_router)  # Content history and audit tracking
 api_router.include_router(seed_router)
 api_router.include_router(test_seed_router)  # Test seed router for authentication testing
 # api_router.include_router(temp_auth_router, prefix="/temp-auth")  # Removed - temporary debug router
+api_router.include_router(enhanced_device_analytics_router)  # Enhanced device analytics and heartbeat
 api_router.include_router(debug_config_router, prefix="/debug")
 
 # Include content delivery router if available

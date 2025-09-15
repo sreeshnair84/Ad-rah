@@ -174,7 +174,7 @@ async def update_overlay(
 
         # Update only provided fields
         updated_overlay = existing_overlay.copy()
-        update_data = overlay_data.dict(exclude_unset=True)
+        update_data = overlay_data.model_dump(exclude_unset=True)
 
         for key, value in update_data.items():
             if value is not None:

@@ -119,7 +119,7 @@ async def update_digital_twin(
         user_context = await get_user_company_context(current_user)
         
         # Update fields
-        update_data = twin_update.dict(exclude_unset=True)
+        update_data = twin_update.model_dump(exclude_unset=True)
         if update_data:
             for key, value in update_data.items():
                 existing_twin[key] = value
@@ -175,7 +175,7 @@ async def get_twin_status(
     twin_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Get digital twin status and metrics"""
+    """Get digital twin status and real-time metrics from physical device"""
     try:
         twin = await repo.get_digital_twin(twin_id)
         if not twin:
@@ -184,19 +184,111 @@ async def get_twin_status(
         # Verify user has access to this twin's company
         user_context = await get_user_company_context(current_user)
         
-        # Return status and mock metrics
+        # Get real-time data from the physical device
+        screen_id = twin["screen_id"]
+        
+        # Get latest device heartbeat for real metrics
+        try:
+            latest_heartbeat = await repo.get_device_heartbeats(screen_id, 1) if hasattr(repo, 'get_device_heartbeats') else []
+            heartbeat = latest_heartbeat[0] if latest_heartbeat else None
+        except:
+            heartbeat = None
+        
+        # Get current content being played (simplified - use content metadata if available)
+        current_content = None
+        try:
+            # Try to get screen info which might contain current content
+            screen_info = await repo.get_digital_screen(screen_id)
+            if screen_info and "current_content" in screen_info:
+                current_content = screen_info["current_content"]
+        except:
+            current_content = None
+        
+        # Get real-time audience data
+        try:
+            from app.analytics.real_time_analytics import analytics_service
+            device_analytics = await analytics_service.get_device_analytics(screen_id, 1)  # Last 1 hour
+            audience_data = device_analytics.get("audience_metrics", {})
+        except:
+            audience_data = {}
+        
+        # Build comprehensive status response
+        device_online = heartbeat is not None and (datetime.utcnow() - datetime.fromisoformat((heartbeat.get("timestamp") or datetime.utcnow().isoformat()).replace('Z', '+00:00'))).seconds < 300 if heartbeat else False
+        network_latency = heartbeat.get("network_latency", 999) if heartbeat else 999
+        
+        real_time_metrics = {
+            # Device connectivity and status
+            "deviceOnline": device_online,
+            "lastHeartbeat": heartbeat.get("timestamp") if heartbeat else None,
+            "connectionQuality": "excellent" if device_online and network_latency < 50 else "good" if device_online else "poor",
+            
+            # Current content playback
+            "currentContent": {
+                "id": current_content.get("content_id") if current_content else None,
+                "name": current_content.get("content_name") if current_content else None,
+                "type": current_content.get("content_type") if current_content else None,
+                "startTime": current_content.get("start_time") if current_content else None,
+                "progress": current_content.get("progress", 0) if current_content else 0,
+                "isPlaying": current_content.get("status") == "playing" if current_content else False
+            },
+            
+            # Real-time system metrics from device
+            "systemMetrics": {
+                "cpuUsage": heartbeat.get("cpu_usage", 0) if heartbeat else 0,
+                "memoryUsage": heartbeat.get("memory_usage", 0) if heartbeat else 0,
+                "diskUsage": heartbeat.get("disk_usage", 0) if heartbeat else 0,
+                "temperature": heartbeat.get("temperature", 0) if heartbeat else 0,
+                "networkLatency": heartbeat.get("network_latency", 999) if heartbeat else 999,
+                "uptime": heartbeat.get("uptime", 0) if heartbeat else 0,
+                "batteryLevel": heartbeat.get("battery_level", 100) if heartbeat else 100
+            },
+            
+            # Display metrics
+            "displayMetrics": {
+                "frameRate": heartbeat.get("frame_rate", 0) if heartbeat else 0,
+                "droppedFrames": heartbeat.get("dropped_frames", 0) if heartbeat else 0,
+                "brightness": heartbeat.get("brightness", 0.8) if heartbeat else 0.8,
+                "resolution": heartbeat.get("resolution", "1920x1080") if heartbeat else "1920x1080",
+                "orientation": heartbeat.get("orientation", "landscape") if heartbeat else "landscape"
+            },
+            
+            # Real-time audience metrics
+            "audienceMetrics": {
+                "currentCount": audience_data.get("current_count", 0),
+                "averageDwellTime": audience_data.get("average_dwell_time", 0),
+                "totalDetections": audience_data.get("total_detections", 0),
+                "detectionConfidence": audience_data.get("detection_confidence", 0.8),
+                "peakCount": audience_data.get("peak_count", 0)
+            },
+            
+            # Performance and health indicators
+            "healthIndicators": {
+                "overallScore": heartbeat.get("performance_score", 0.8) if heartbeat else 0.0,
+                "status": heartbeat.get("health_status", "unknown") if heartbeat else "offline",
+                "warnings": heartbeat.get("warnings", []) if heartbeat else ["Device offline"],
+                "errors": heartbeat.get("errors", []) if heartbeat else [],
+                "lastMaintenanceCheck": heartbeat.get("timestamp") if heartbeat else None
+            },
+            
+            # Network and connectivity
+            "networkMetrics": {
+                "latency": heartbeat.get("network_latency", 999) if heartbeat else 999,
+                "bandwidth": heartbeat.get("network_bandwidth", 0) if heartbeat else 0,
+                "signalStrength": heartbeat.get("wifi_signal_strength", 0) if heartbeat else 0,
+                "dataUsage": heartbeat.get("data_usage", 0) if heartbeat else 0
+            }
+        }
+        
         return {
             "id": twin["id"],
             "status": twin["status"],
             "last_accessed": twin.get("last_accessed"),
-            "metrics": {
-                "fps": 60,
-                "cpu_usage": 25,
-                "memory_usage": 512,
-                "network_latency": 45,
-                "uptime": "2h 34m"
-            }
+            "screen_id": screen_id,
+            "is_live_mirror": twin.get("is_live_mirror", False),
+            "realTimeMetrics": real_time_metrics,
+            "timestamp": datetime.utcnow().isoformat()
         }
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -261,3 +353,52 @@ async def stop_digital_twin(
     except Exception as e:
         logger.error(f"Error stopping digital twin {twin_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to stop digital twin")
+
+async def update_digital_twin_realtime(device_id: str, heartbeat_data: dict):
+    """Update digital twin with real-time data from device heartbeat"""
+    try:
+        # Find the digital twin associated with this device using the screen_id
+        device_twin = await repo.get_digital_twin_by_screen(device_id)
+        
+        if not device_twin:
+            logger.warning(f"No digital twin found for device {device_id}")
+            return
+        
+        # Extract metrics from heartbeat data
+        current_time = datetime.utcnow()
+        
+        # Update the existing twin data with real-time metrics
+        device_twin.update({
+            "last_heartbeat": current_time,
+            "status": DigitalTwinStatus.RUNNING,
+            "real_time_metrics": {
+                "system_health": {
+                    "cpu_usage": heartbeat_data.get("system_metrics", {}).get("cpu_usage", 0),
+                    "memory_usage": heartbeat_data.get("system_metrics", {}).get("memory_usage", 0),
+                    "disk_usage": heartbeat_data.get("system_metrics", {}).get("disk_usage", 0),
+                    "temperature": heartbeat_data.get("system_metrics", {}).get("temperature", 0),
+                },
+                "display_status": {
+                    "brightness": heartbeat_data.get("display_metrics", {}).get("brightness", 50),
+                    "resolution": heartbeat_data.get("display_metrics", {}).get("resolution", "1920x1080"),
+                    "frame_rate": heartbeat_data.get("display_metrics", {}).get("frame_rate", 60),
+                },
+                "audience_data": heartbeat_data.get("audience_metrics", {}),
+                "current_content": heartbeat_data.get("current_content", {}),
+                "uptime_seconds": heartbeat_data.get("uptime", 0),
+                "last_restart": heartbeat_data.get("last_restart"),
+                "software_version": heartbeat_data.get("software_version", "unknown"),
+                "errors": heartbeat_data.get("errors", []),
+                "warnings": heartbeat_data.get("warnings", [])
+            },
+            "updated_at": current_time
+        })
+        
+        # Convert to model and save the updated twin
+        twin_model = DigitalTwin(**device_twin)
+        await repo.save_digital_twin(twin_model)
+        
+        logger.info(f"Updated digital twin for device {device_id} with real-time metrics")
+        
+    except Exception as e:
+        logger.error(f"Failed to update digital twin for device {device_id}: {e}")

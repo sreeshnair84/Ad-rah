@@ -54,7 +54,7 @@ class RBACService:
             created_by=created_by
         )
         
-        user_result = await self.db.create_record("users", user.dict())
+        user_result = await self.db.create_record("users", user.model_dump())
         if not user_result.success:
             raise ValueError(f"Failed to create super user: {user_result.error}")
         saved_user = user_result.data
@@ -71,7 +71,7 @@ class RBACService:
             assigned_by=created_by or saved_user["id"]
         )
         
-        user_role_result = await self.db.create_record("user_roles", user_role.dict())
+        user_role_result = await self.db.create_record("user_roles", user_role.model_dump())
         if not user_role_result.success:
             raise ValueError(f"Failed to assign user role: {user_role_result.error}")
         
@@ -110,7 +110,7 @@ class RBACService:
             created_by=created_by
         )
         
-        saved_user = await repo.save_user(user.dict())
+        saved_user = await repo.save_user(user.model_dump())
         
         # Get or create company role
         role = await self._get_or_create_company_role(company_id, company_role, company.get("type"))
@@ -124,7 +124,7 @@ class RBACService:
             assigned_by=created_by
         )
         
-        await repo.save_user_role(user_role.dict())
+        await repo.save_user_role(user_role.model_dump())
         
         await self._log_audit(
             user_id=created_by,
@@ -279,7 +279,7 @@ class RBACService:
                 **permissions
             )
             
-            await repo.save_content_share(content_share.dict())
+            await repo.save_content_share(content_share.model_dump())
             
             # Update company shared_with list
             await self._update_company_sharing_list(
@@ -412,7 +412,7 @@ class RBACService:
                 registered_by=registered_by
             )
             
-            saved_device = await repo.save_device_role(device_role.dict())
+            saved_device = await repo.save_device_role(device_role.model_dump())
             
             await self._log_audit(
                 user_id=registered_by,
@@ -531,7 +531,7 @@ class RBACService:
             is_system_role=True
         )
         
-        return await repo.save_role(super_role.dict())
+        return await repo.save_role(super_role.model_dump())
     
     async def _get_or_create_company_role(self, company_id: str, company_role: CompanyRole, 
                                         company_type: str) -> Dict:
@@ -555,7 +555,7 @@ class RBACService:
             is_system_role=True
         )
         
-        return await repo.save_role(new_role.dict())
+        return await repo.save_role(new_role.model_dump())
     
     async def _check_cross_company_permission(self, user_id: str, user_company_id: str,
                                             target_company_id: str, resource_type: str, 
@@ -647,7 +647,7 @@ class RBACService:
                 error_message=error_message
             )
             
-            await repo.save_audit_log(audit_log.dict())
+            await repo.save_audit_log(audit_log.model_dump())
             
         except Exception as e:
             self.logger.error(f"Failed to log audit event: {e}")

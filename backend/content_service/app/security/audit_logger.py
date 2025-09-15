@@ -88,7 +88,8 @@ class AuditLogger:
         }
         
         # Calculate checksum for integrity
-        entry_str = json.dumps(entry, sort_keys=True, exclude=["checksum"])
+        entry_copy = {k: v for k, v in entry.items() if k != "checksum"}
+        entry_str = json.dumps(entry_copy, sort_keys=True)
         entry["checksum"] = hashlib.sha256(entry_str.encode()).hexdigest()
         
         return entry
