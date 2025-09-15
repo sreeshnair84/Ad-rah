@@ -15,11 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database_service import db_service
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 from app.config import enhanced_config, initialize_config, settings
 
 # Import enhanced security services
-from app.security.enhanced_auth_service import initialize_auth_service
+from app.auth_service import initialize_auth_service
 from app.security.security_middleware import configure_security_middleware, get_cors_config
 from app.security.encryption_service import encryption_service
 

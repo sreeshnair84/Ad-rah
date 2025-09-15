@@ -33,7 +33,8 @@ from ..models import (
     DeviceFingerprint, DeviceType, ScreenCreate, ScreenUpdate, ContentOverlay, ContentOverlayCreate,
     ContentOverlayUpdate, LayoutTemplate, LayoutTemplateCreate, LayoutTemplateUpdate
 )
-from ..auth_service import require_roles, get_current_user, get_user_company_context, get_current_user_with_super_admin_bypass
+from app.api.auth import require_roles, get_user_company_context
+from app.auth_service import get_current_user, get_current_user_with_super_admin_bypass
 from ..repo import repo
 from ..device_auth import device_auth_service
 from ..database_service import db_service

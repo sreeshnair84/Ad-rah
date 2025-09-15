@@ -1,576 +1,621 @@
-# Consolidated Authentication Service
+"""
+Enhanced Authentication Service with Refresh Tokens and Security Features
+Provides secure authentication with JWT tokens, refresh tokens, and security monitoring
+"""
+
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-import hashlib
-from fastapi import HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-
-try:
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    BCRYPT_AVAILABLE = True
-except ImportError:
-    pwd_context = None
-    BCRYPT_AVAILABLE = False
-
-from app.config import settings
-from app.database_service import db_service
-from app.repo import repo
-from app.rbac_models import *
+from typing import Optional, Dict, Any, Tuple
+from fastapi import HTTPException, Depends, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from passlib.context import CryptContext
+import jwt
+from jwt import InvalidTokenError
+import secrets
+import asyncio
+from functools import wraps
+from typing import Optional, Dict, Any, Tuple
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-ALGORITHM = settings.ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+# Security configuration
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+class TokenType(Enum):
+    ACCESS = "access"
+    REFRESH = "refresh"
+
+@dataclass
+class TokenData:
+    user_id: str
+    user_type: str
+    company_id: Optional[str]
+    permissions: list
+    token_type: TokenType
+    issued_at: datetime
+    expires_at: datetime
+    jti: str  # JWT ID for token revocation
+
+@dataclass
+class AuthContext:
+    user_id: str
+    user_type: str
+    company_id: Optional[str]
+    permissions: list
+    ip_address: str
+    user_agent: str
+    session_id: str
+
+class SecurityEvent(Enum):
+    LOGIN_SUCCESS = "login_success"
+    LOGIN_FAILED = "login_failed"
+    TOKEN_REFRESH = "token_refresh"
+    LOGOUT = "logout"
+    SUSPICIOUS_ACTIVITY = "suspicious_activity"
+    ACCOUNT_LOCKED = "account_locked"
 
 class AuthService:
+    """Enhanced authentication service with security features"""
+    
     def __init__(self):
-        if not BCRYPT_AVAILABLE:
-            logger.warning("⚠️ BCRYPT not available - using fallback password hashing")
-
+        self.jwt_secret = None
+        self.refresh_secret = None
+        self.redis_client = None
+        self.failed_attempts = {}
+        self.max_failed_attempts = 5
+        self.lockout_duration = timedelta(minutes=30)
+        self.access_token_expire = timedelta(minutes=15)  # Shorter for security
+        self.refresh_token_expire = timedelta(days=7)
+        
+        # In-memory storage for tokens (Redis alternative)
+        self.refresh_tokens = {}  # jti -> user_id
+        self.blacklisted_tokens = {}  # jti -> expiry_time
+    
+    async def initialize(self, jwt_secret: str, refresh_secret: str, redis_url: Optional[str] = None):
+        """Initialize the authentication service"""
+        self.jwt_secret = jwt_secret
+        self.refresh_secret = refresh_secret
+        
+        # For now, Redis is optional - we'll use in-memory storage
+        if redis_url:
+            logger.info("Redis URL provided but using in-memory token management for now")
+            # In a future update, we can add proper Redis async support
+        
+        logger.info("Enhanced authentication service initialized with in-memory token management")
+    
     def hash_password(self, password: str) -> str:
-        if not password:
-            raise ValueError("Password cannot be empty")
-
-        if BCRYPT_AVAILABLE and pwd_context:
-            return pwd_context.hash(password)
-        else:
-            salt = settings.SECRET_KEY
-            return hashlib.sha256((salt + password).encode()).hexdigest()
-
+        """Hash a password securely"""
+        return pwd_context.hash(password)
+    
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        if not plain_password or not hashed_password:
+        """Verify a password against its hash"""
+        return pwd_context.verify(plain_password, hashed_password)
+    
+    async def is_account_locked(self, identifier: str) -> bool:
+        """Check if an account is locked due to failed attempts"""
+        if identifier not in self.failed_attempts:
             return False
-
-        if BCRYPT_AVAILABLE and pwd_context:
-            try:
-                return pwd_context.verify(plain_password, hashed_password)
-            except Exception:
-                return False
+        
+        attempts, last_attempt = self.failed_attempts[identifier]
+        if attempts >= self.max_failed_attempts:
+            if datetime.utcnow() - last_attempt < self.lockout_duration:
+                return True
+            else:
+                # Lockout period expired, reset attempts
+                del self.failed_attempts[identifier]
+        
+        return False
+    
+    async def record_failed_attempt(self, identifier: str):
+        """Record a failed login attempt"""
+        now = datetime.utcnow()
+        if identifier in self.failed_attempts:
+            attempts, _ = self.failed_attempts[identifier]
+            self.failed_attempts[identifier] = (attempts + 1, now)
         else:
-            salt = settings.SECRET_KEY
-            expected_hash = hashlib.sha256((salt + plain_password).encode()).hexdigest()
-            return expected_hash == hashed_password
-
-    def _get_jwt_secret(self) -> str:
-        """Get JWT secret from settings"""
-        secret = settings.JWT_SECRET_KEY
-        if not secret:
-            # Fallback to legacy SECRET_KEY
-            secret = getattr(settings, 'SECRET_KEY', None)
-            if not secret:
-                raise ValueError("JWT_SECRET_KEY not configured")
-        return secret
-
-    def create_access_token(self, user_profile: UserProfile) -> str:
-        secret_key = self._get_jwt_secret()
-        expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        expire = datetime.utcnow() + expires_delta
-
-        token_data = {
-            "sub": user_profile.id,
-            "email": user_profile.email,
-            "user_type": user_profile.user_type.value,
-            "company_id": user_profile.company_id,
-            "company_role": user_profile.company_role.value if user_profile.company_role else None,
-            "permissions": user_profile.permissions,
-            "is_super_admin": user_profile.user_type == UserType.SUPER_USER,
-            "exp": expire,
-            "iat": datetime.utcnow(),
-            "type": "access_token"
-        }
-
-        return jwt.encode(token_data, secret_key, algorithm=ALGORITHM)
-
-    def create_refresh_token(self, user_profile: UserProfile) -> str:
-        secret_key = self._get_jwt_secret()
-        expires_delta = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        expire = datetime.utcnow() + expires_delta
-
-        token_data = {
-            "sub": user_profile.id,
-            "email": user_profile.email,
-            "type": "refresh_token",
-            "exp": expire,
-            "iat": datetime.utcnow()
-        }
-
-        return jwt.encode(token_data, secret_key, algorithm=ALGORITHM)
-
-    def verify_token(self, token: str) -> dict:
-        secret_key = self._get_jwt_secret()
+            self.failed_attempts[identifier] = (1, now)
+        
+        attempts, _ = self.failed_attempts[identifier]
+        if attempts >= self.max_failed_attempts:
+            await self.log_security_event(SecurityEvent.ACCOUNT_LOCKED, {
+                "identifier": identifier,
+                "attempts": attempts
+            })
+    
+    async def reset_failed_attempts(self, identifier: str):
+        """Reset failed login attempts for an identifier"""
+        if identifier in self.failed_attempts:
+            del self.failed_attempts[identifier]
+    
+    async def authenticate_user(self, email: str, password: str) -> Optional[Dict[str, Any]]:
+        """Authenticate user with email and password"""
         try:
-            payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
-
-            if payload.get("type") != "access_token":
-                raise JWTError("Invalid token type")
-
-            user_id = payload.get("sub")
-            email = payload.get("email")
-
-            if not user_id or not email:
-                raise JWTError("Invalid token format")
-
-            return payload
-        except JWTError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-
-    async def authenticate_user(self, email: str, password: str) -> Optional[UserProfile]:
-        try:
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Check if account is locked
+            if await self.is_account_locked(email):
+                await self.log_security_event(SecurityEvent.ACCOUNT_LOCKED, {"email": email})
+                raise HTTPException(status_code=423, detail="Account temporarily locked due to multiple failed attempts")
+            
+            # Get user by email
             user_data = await db_service.get_user_by_email(email)
             if not user_data:
+                await self.record_failed_attempt(email)
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "user_not_found"})
                 return None
-
+            
+            # Verify password
             if not self.verify_password(password, user_data.get("hashed_password", "")):
+                await self.record_failed_attempt(email)
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "invalid_password"})
                 return None
-
+            
+            # Check if user is active
             if not user_data.get("is_active", True):
-                return None
-
+                await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "account_inactive"})
+                raise HTTPException(status_code=403, detail="Account is inactive")
+            
+            # Reset failed attempts on successful authentication
+            await self.reset_failed_attempts(email)
+            
+            # Get user profile
             user_profile = await db_service.get_user_profile(user_data["id"])
             if user_profile:
                 await db_service.update_user_login(user_data["id"])
-
+                await self.log_security_event(SecurityEvent.LOGIN_SUCCESS, {"email": email, "user_id": user_data["id"]})
+            
             return user_profile
+            
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Authentication error for {email}: {e}")
+            await self.log_security_event(SecurityEvent.LOGIN_FAILED, {"email": email, "reason": "system_error"})
             return None
-
-    async def login(self, login_request: LoginRequest) -> LoginResponse:
-        user_profile = await self.authenticate_user(login_request.email, login_request.password)
-
-        if not user_profile:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-
-        access_token = self.create_access_token(user_profile)
-
-        return LoginResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            user=user_profile
-        )
-
-    async def get_current_user(self, token: str) -> UserProfile:
-        payload = self.verify_token(token)
-        user_id = payload["sub"]
-
-        # Log debug info for troubleshooting
-        logger.debug(f"Getting user profile for user_id: {user_id}")
-
-        user_profile = await db_service.get_user_profile(user_id)
-        if not user_profile:
-            # Additional debugging - try to find user by email from token
-            user_email = payload.get("email")
-            if user_email:
-                logger.debug(f"User profile not found by ID, trying email: {user_email}")
-                user_data = await db_service.get_user_by_email(user_email)
-                if user_data:
-                    user_profile = await db_service.get_user_profile(user_data["id"])
-
+    
+    async def login(self, login_request) -> Dict[str, Any]:
+        """Login endpoint compatible with existing auth service"""
+        try:
+            # Import here to avoid circular imports
+            from app.rbac_models import LoginRequest, LoginResponse
+            
+            # Handle both dict and LoginRequest object
+            if hasattr(login_request, 'email'):
+                email = login_request.email
+                password = login_request.password
+            else:
+                email = login_request.get('email')
+                password = login_request.get('password')
+            
+            if not email or not password:
+                raise HTTPException(status_code=400, detail="Email and password are required")
+            
+            # Authenticate user
+            user_profile = await self.authenticate_user(email, password)
             if not user_profile:
-                logger.error(f"User profile not found for user_id: {user_id}, email: {user_email}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found",
+                    detail="Invalid email or password",
                     headers={"WWW-Authenticate": "Bearer"}
                 )
-
-        if not user_profile.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User account is inactive",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-
-        logger.debug(f"Successfully retrieved user profile for: {user_profile.email}")
-        return user_profile
-
-    async def get_current_user_with_roles(self, token: str) -> Dict[str, Any]:
-        """Get current user with expanded roles and companies"""
-        logger.debug("Starting get_current_user_with_roles")
-
-        # Get basic user data
-        user_data = await self.get_current_user(token)
-        user_dict = user_data.model_dump() if hasattr(user_data, 'model_dump') else (user_data.__dict__ if hasattr(user_data, '__dict__') else user_data)
-
-        # Get user roles from database
-        user_roles = await repo.get_user_roles(user_dict.get("id", user_dict.get("_id")))
-        user_dict["roles"] = user_roles
-
-        # Get all companies for user's roles
-        companies = []
-        for role in user_roles:
-            try:
-                company_id = role.get("company_id")
-                if company_id and company_id != "global":
-                    company = await db_service.get_company(company_id)
-                    if company:
-                        companies.append(company)
-                    else:
-                        logger.warning(f"Company not found for ID: {company_id}")
-            except Exception as e:
-                logger.error(f"Error getting company {role.get('company_id')}: {e}")
-
-        user_dict["companies"] = companies
-
-        # Expand roles with role details
-        expanded_roles = []
-        for user_role in user_roles:
-            role_id = user_role.get("role_id")
-            if role_id and role_id.strip():
-                try:
-                    role = await repo.get_role(role_id)
-                    if role:
-                        expanded_role = {
-                            **user_role,
-                            "role": role.get("role_group"),
-                            "role_name": role.get("name"),
-                            "role_details": role
-                        }
-                        expanded_roles.append(expanded_role)
-                        logger.debug(f"Expanded role: {role.get('name')}")
-                    else:
-                        # Role not found, use fallback
-                        expanded_roles.append(self._get_fallback_role(user_role, user_dict))
-                except Exception as e:
-                    logger.error(f"Error getting role {role_id}: {e}")
-                    expanded_roles.append(self._get_fallback_role(user_role, user_dict))
-            else:
-                # No role_id, use fallback
-                expanded_roles.append(self._get_fallback_role(user_role, user_dict))
-
-        user_dict["roles"] = expanded_roles
-
-        # Convert ObjectId to string for JSON serialization
-        if "_id" in user_dict:
-            user_dict["id"] = str(user_dict["_id"])
-            del user_dict["_id"]
-
-        for role in user_dict.get("roles", []):
-            if "_id" in role:
-                role["id"] = str(role["_id"])
-                del role["_id"]
-            if "role_details" in role and role["role_details"]:
-                role_details = role["role_details"]
-                if "_id" in role_details:
-                    role_details["id"] = str(role_details["_id"])
-                    del role_details["_id"]
-
-        for company in companies:
-            if "_id" in company:
-                company["id"] = str(company["_id"])
-                del company["_id"]
-
-        logger.debug(f"get_current_user_with_roles completed for user: {user_dict.get('email')}")
-        return user_dict
-
-    def _get_fallback_role(self, user_role: Dict, user_dict: Dict) -> Dict:
-        """Get fallback role when role lookup fails"""
-        company_id = user_role.get("company_id")
-        user_email = user_dict.get("email", "").lower()
-
-        # Special handling for admin users
-        if "admin" in user_email and company_id == "global":
-            fallback_role = "ADMIN"
-            fallback_name = "System Administrator"
-        elif company_id and company_id != "global":
-            fallback_role = "HOST"
-            fallback_name = "Host Manager"
-        else:
-            fallback_role = "USER"
-            fallback_name = "User"
-
-        return {
-            **user_role,
-            "role": fallback_role,
-            "role_name": fallback_name
-        }
-
-    async def get_user_company_context(self, user) -> Dict[str, Any]:
-        """Get user's company context for filtering data"""
-        # Handle both UserProfile objects and dictionaries
-        if hasattr(user, 'user_type'):
-            # This is a UserProfile object
-            user_type = user.user_type.value
-            user_email = user.email.lower()
-            user_id = user.id
-            user_roles = []  # UserProfile doesn't have roles attribute
-            user_company_id = user.company_id
-        else:
-            # This is a dictionary
-            user_id = user.get("id")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User not authenticated")
-
-            user_type = user.get("user_type")
-            user_email = user.get("email", "").lower()
-            user_roles = user.get("roles", [])
-            user_company_id = user.get("company_id")
-
-        logger.debug(f"Checking user context for {user_email}, user_type: {user_type}")
-
-        # SUPER_USER gets access to everything
-        if user_type == "SUPER_USER" or user_email == "admin@adara.com":
-            logger.debug("SUPER_USER detected - granting platform access")
-            all_companies = await db_service.list_companies()
-            # Convert Company objects to dicts
-            all_companies_dicts = [company.model_dump() for company in all_companies]
-            return {"is_platform_admin": True, "accessible_companies": all_companies_dicts}
-
-        # Check roles for admin privileges
-        is_platform_admin = False
-        for user_role in user_roles:
-            if hasattr(user_role, 'role'):
-                # This is a UserRole object
-                role_name = user_role.role.value if hasattr(user_role.role, 'value') else str(user_role.role)
-                role_id = user_role.role_id
-                company_id = user_role.company_id
-            else:
-                # This is a dictionary
-                role_name = user_role.get("role")
-                role_id = user_role.get("role_id")
-                company_id = user_role.get("company_id")
-
-            logger.debug(f"Checking role - role_name: {role_name}, role_id: {role_id}, company_id: {company_id}")
-
-            # Only ADMIN role_group should grant platform admin access
-            if role_name == "ADMIN":
-                is_platform_admin = True
-                logger.debug("Found ADMIN role group - granting platform access")
-                break
-            elif role_id:
-                # Fallback: check role details from database
-                role = await repo.get_role(role_id)
-                logger.debug(f"Role from DB: {role}")
-                if role and role.get("role_group") == "ADMIN":
-                    is_platform_admin = True
-                    logger.debug("Found ADMIN role group via DB lookup - granting platform access")
-                    break
-
-        logger.debug(f"is_platform_admin: {is_platform_admin}")
-
-        if is_platform_admin:
-            all_companies = await db_service.list_companies()
-            # Convert Company objects to dicts
-            all_companies_dicts = [company.model_dump() for company in all_companies]
-            logger.debug(f"Admin accessing {len(all_companies_dicts)} companies")
-            return {"is_platform_admin": True, "accessible_companies": all_companies_dicts}
-        else:
-            # Regular user - get their company
-            if user_company_id:
-                company = await db_service.get_company(user_company_id)
-                accessible_companies = [company.model_dump()] if company else []
-            else:
-                accessible_companies = []
-
-            logger.debug(f"Regular user accessing {len(accessible_companies)} companies")
-            return {
-                "is_platform_admin": False,
-                "accessible_companies": accessible_companies
+            
+            # Prepare user data for token creation
+            user_data = {
+                "id": user_profile.id if hasattr(user_profile, 'id') else user_profile['id'],
+                "user_type": user_profile.user_type.value if hasattr(user_profile, 'user_type') and hasattr(user_profile.user_type, 'value') else user_profile.get('user_type'),
+                "company_id": user_profile.company_id if hasattr(user_profile, 'company_id') else user_profile.get('company_id'),
+                "permissions": user_profile.permissions if hasattr(user_profile, 'permissions') else user_profile.get('permissions', [])
             }
-
-    async def get_current_user_with_super_admin_bypass(self, token: str) -> Dict[str, Any]:
-        """Get current user with SUPER_USER bypass for authentication failures"""
+            
+            # Create token pair
+            access_token, refresh_token = await self.create_token_pair(user_data)
+            
+            # Return response compatible with existing auth endpoints
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "expires_in": int(self.access_token_expire.total_seconds()),
+                "user": user_profile
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Login error: {e}")
+            raise HTTPException(status_code=500, detail="Login failed due to server error")
+    
+    async def register_user(self, user_data) -> Dict[str, Any]:
+        """Register a new user"""
         try:
-            # First try normal authentication
-            return await self.get_current_user_with_roles(token)
-        except HTTPException as e:
-            # If authentication fails, check if this might be a SUPER_USER
-            if e.status_code == 401:
-                logger.debug("Authentication failed, checking for SUPER_USER bypass")
-                try:
-                    # Try to decode the token to get the user info
-                    secret_key = self._get_jwt_secret()
-                    payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
-                    user_email = payload.get("email")
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Handle both dict and UserCreate object
+            if hasattr(user_data, 'password'):
+                password = user_data.password
+                email = user_data.email
+            else:
+                password = user_data.get('password')
+                email = user_data.get('email')
+            
+            if not password or not email:
+                raise HTTPException(status_code=400, detail="Email and password are required")
+            
+            # Hash password
+            hashed_password = self.hash_password(password)
+            
+            # Create user
+            user = await db_service.create_user(user_data, hashed_password)
+            user_profile = await db_service.get_user_profile(user.id)
+            
+            if not user_profile:
+                raise HTTPException(status_code=500, detail="Failed to create user profile")
+            
+            await self.log_security_event(SecurityEvent.LOGIN_SUCCESS, {"email": email, "user_id": user.id, "action": "registration"})
+            return user_profile
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"User registration error: {e}")
+            raise HTTPException(status_code=500, detail="Registration failed")
+    
+    def create_access_token(self, user_data: Dict[str, Any]) -> str:
+        """Create a JWT access token"""
+        now = datetime.utcnow()
+        expire = now + self.access_token_expire
+        jti = secrets.token_urlsafe(16)
+        
+        payload = {
+            "sub": user_data["id"],
+            "user_type": user_data["user_type"],
+            "company_id": user_data.get("company_id"),
+            "permissions": user_data.get("permissions", []),
+            "type": TokenType.ACCESS.value,
+            "iat": now,
+            "exp": expire,
+            "jti": jti
+        }
+        
+        return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+    
+    def create_refresh_token(self, user_data: Dict[str, Any]) -> str:
+        """Create a JWT refresh token"""
+        now = datetime.utcnow()
+        expire = now + self.refresh_token_expire
+        jti = secrets.token_urlsafe(16)
+        
+        payload = {
+            "sub": user_data["id"],
+            "user_type": user_data["user_type"],
+            "company_id": user_data.get("company_id"),
+            "type": TokenType.REFRESH.value,
+            "iat": now,
+            "exp": expire,
+            "jti": jti
+        }
+        
+        return jwt.encode(payload, self.refresh_secret, algorithm="HS256")
+    
+    async def create_token_pair(self, user_data: Dict[str, Any]) -> Tuple[str, str]:
+        """Create both access and refresh tokens"""
+        access_token = self.create_access_token(user_data)
+        refresh_token = self.create_refresh_token(user_data)
+        
+        # Store refresh token hash in memory for revocation
+        try:
+            payload = jwt.decode(refresh_token, self.refresh_secret, algorithms=["HS256"])
+            # Store in memory instead of Redis
+            self.refresh_tokens[payload['jti']] = user_data["id"]
+            logger.debug(f"Stored refresh token for user {user_data['id']}")
+        except Exception as e:
+            logger.warning(f"Failed to store refresh token: {e}")
+        
+        return access_token, refresh_token
+    
+    async def verify_token(self, token: str, token_type: TokenType = TokenType.ACCESS) -> TokenData:
+        """Verify and decode a JWT token"""
+        try:
+            secret = self.jwt_secret if token_type == TokenType.ACCESS else self.refresh_secret
+            payload = jwt.decode(token, secret, algorithms=["HS256"])
+            
+            # Check token type
+            if payload.get("type") != token_type.value:
+                raise HTTPException(status_code=401, detail="Invalid token type")
+            
+            # Check if token is blacklisted
+            if await self.is_token_blacklisted(payload.get("jti")):
+                raise HTTPException(status_code=401, detail="Token has been revoked")
+            
+            return TokenData(
+                user_id=payload["sub"],
+                user_type=payload["user_type"],
+                company_id=payload.get("company_id"),
+                permissions=payload.get("permissions", []),
+                token_type=token_type,
+                issued_at=datetime.fromtimestamp(payload["iat"]),
+                expires_at=datetime.fromtimestamp(payload["exp"]),
+                jti=payload.get("jti")
+            )
+            
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token has expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    
+    async def refresh_access_token(self, refresh_token: str) -> str:
+        """Create a new access token using a refresh token"""
+        # Verify refresh token
+        token_data = await self.verify_token(refresh_token, TokenType.REFRESH)
+        
+        # Check if refresh token is still valid in memory
+        try:
+            stored_user_id = self.refresh_tokens.get(token_data.jti)
+            if not stored_user_id or stored_user_id != token_data.user_id:
+                raise HTTPException(status_code=401, detail="Refresh token not found or invalid")
+        except Exception as e:
+            logger.warning(f"Token validation check failed: {e}")
+        
+        # Create new access token
+        user_data = {
+            "id": token_data.user_id,
+            "user_type": token_data.user_type,
+            "company_id": token_data.company_id,
+            "permissions": token_data.permissions
+        }
+        
+        new_access_token = self.create_access_token(user_data)
+        
+        await self.log_security_event(SecurityEvent.TOKEN_REFRESH, {
+            "user_id": token_data.user_id,
+            "jti": token_data.jti
+        })
+        
+        return new_access_token
+    
+    async def revoke_token(self, jti: str, token_type: TokenType = TokenType.REFRESH):
+        """Add a token to the blacklist"""
+        try:
+            # Store in memory blacklist with expiration time
+            expire_time = self.refresh_token_expire if token_type == TokenType.REFRESH else self.access_token_expire
+            expiry = datetime.utcnow() + expire_time
+            self.blacklisted_tokens[jti] = expiry
+            logger.debug(f"Token {jti} added to blacklist")
+        except Exception as e:
+            logger.error(f"Failed to blacklist token: {e}")
+    
+    async def is_token_blacklisted(self, jti: str) -> bool:
+        """Check if a token is blacklisted"""
+        if not jti:
+            return False
+        
+        try:
+            # Check in-memory blacklist
+            if jti in self.blacklisted_tokens:
+                expiry = self.blacklisted_tokens[jti]
+                if datetime.utcnow() < expiry:
+                    return True
+                else:
+                    # Token expired from blacklist, remove it
+                    del self.blacklisted_tokens[jti]
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to check token blacklist: {e}")
+            return False
+    
+    async def logout(self, access_token: str, refresh_token: str):
+        """Logout user by revoking tokens"""
+        try:
+            # Decode tokens to get JTIs
+            access_data = await self.verify_token(access_token, TokenType.ACCESS)
+            refresh_data = await self.verify_token(refresh_token, TokenType.REFRESH)
+            
+            # Revoke both tokens
+            await self.revoke_token(access_data.jti, TokenType.ACCESS)
+            await self.revoke_token(refresh_data.jti, TokenType.REFRESH)
+            
+            # Remove refresh token from memory
+            if refresh_data.jti in self.refresh_tokens:
+                del self.refresh_tokens[refresh_data.jti]
+            
+            await self.log_security_event(SecurityEvent.LOGOUT, {
+                "user_id": access_data.user_id
+            })
+            
+        except Exception as e:
+            logger.error(f"Logout failed: {e}")
+    
+    async def log_security_event(self, event: SecurityEvent, data: Dict[str, Any]):
+        """Log security events for monitoring"""
+        log_entry = {
+            "event": event.value,
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": data
+        }
+        
+        # In production, this would go to a security monitoring system
+        logger.info(f"Security event: {log_entry}")
+    
+    async def get_current_user_from_token(self, token: str):
+        """Get current user from JWT token (compatible with existing auth service)"""
+        try:
+            # Import here to avoid circular imports
+            from app.database_service import db_service
+            
+            # Check if JWT secret is available
+            if not self.jwt_secret:
+                raise HTTPException(status_code=500, detail="Authentication service not properly configured")
+            
+            # Verify token
+            payload = jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
+            
+            # Check token type - accept both "access" and "access_token"
+            token_type = payload.get("type")
+            if token_type not in ["access", "access_token"]:
+                raise HTTPException(status_code=401, detail="Invalid token type")
+            
+            # Check if token is blacklisted
+            if await self.is_token_blacklisted(payload.get("jti")):
+                raise HTTPException(status_code=401, detail="Token has been revoked")
+            
+            user_id = payload.get("sub")
+            email = payload.get("email")
+            
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token format")
+            
+            # Get user profile
+            user_profile = await db_service.get_user_profile(user_id)
+            
+            if not user_profile:
+                # Try to find user by email
+                if email:
+                    user_data = await db_service.get_user_by_email(email)
+                    if user_data:
+                        user_profile = await db_service.get_user_profile(user_data["id"])
+                
+                if not user_profile:
+                    raise HTTPException(status_code=401, detail="User not found")
+            
+            # Check if user is active
+            if hasattr(user_profile, 'is_active'):
+                if not user_profile.is_active:
+                    raise HTTPException(status_code=401, detail="User account is inactive")
+            elif isinstance(user_profile, dict):
+                if not user_profile.get('is_active', True):
+                    raise HTTPException(status_code=401, detail="User account is inactive")
+            
+            return user_profile
+            
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token has expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Get current user error: {e}")
+            raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    async def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
+        """Get current user from JWT token"""
+        try:
+            token_data = await self.verify_token(credentials.credentials)
+            return token_data
+        except Exception as e:
+            logger.warning(f"Authentication failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        """Get current user from JWT token"""
+        try:
+            token_data = await self.verify_token(credentials.credentials)
+            return token_data
+        except Exception as e:
+            logger.warning(f"Authentication failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    async def require_permissions(self, required_permissions: list):
+        """Dependency to require specific permissions"""
+        async def _check_permissions(token_data: TokenData = Depends(self.get_current_user)):
+            if not all(perm in token_data.permissions for perm in required_permissions):
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+            return token_data
+        return _check_permissions
+    
+    async def require_user_type(self, allowed_types: list):
+        """Dependency to require specific user types"""
+        async def _check_user_type(token_data: TokenData = Depends(self.get_current_user)):
+            if token_data.user_type not in allowed_types:
+                raise HTTPException(status_code=403, detail="Access denied for user type")
+            return token_data
+        return _check_user_type
 
-                    if user_email:
-                        logger.debug(f"Checking if user {user_email} is SUPER_USER")
-                        user_data = await db_service.get_user_by_email(user_email)
-
-                        if user_data and user_data.get("user_type") == "SUPER_USER":
-                            logger.info(f"SUPER_USER bypass activated for {user_email}")
-                            # Get user roles
-                            user_roles = await repo.get_user_roles(user_data["id"])
-                            user_data["roles"] = user_roles
-                            return user_data
-                        else:
-                            logger.debug(f"User {user_email} is not SUPER_USER, re-raising authentication error")
-                except Exception as bypass_error:
-                    logger.debug(f"SUPER_USER bypass failed: {bypass_error}")
-
-            # Re-raise the original authentication error
-            raise e
-
-    async def get_user_accessible_companies(self, user) -> List[Dict]:
-        """Get list of companies the current user can access"""
-        if hasattr(user, '__dict__'):
-            user_id = user.id
-        else:
-            user_id = user.get("id")
-
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User not authenticated")
-
-        return await repo.get_user_accessible_companies(user_id)
-
-    async def register_user(self, user_data: UserCreate) -> UserProfile:
-        hashed_password = self.hash_password(user_data.password)
-        user = await db_service.create_user(user_data, hashed_password)
-        user_profile = await db_service.get_user_profile(user.id)
-        if not user_profile:
-            raise HTTPException(status_code=500, detail="Failed to create user profile")
-        return user_profile
-
-# Global instance
+# Global authentication service instance
 auth_service = AuthService()
 
-# FastAPI Dependencies
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserProfile:
-    return await auth_service.get_current_user(token)
+async def initialize_auth_service(jwt_secret: str, refresh_secret: str, redis_url: Optional[str] = None):
+    """Initialize the global authentication service"""
+    await auth_service.initialize(jwt_secret, refresh_secret, redis_url)
+    logger.info("Enhanced authentication service initialized")
 
-async def get_current_active_user(current_user: UserProfile = Depends(get_current_user)) -> UserProfile:
-    if not current_user.is_active:
-        raise HTTPException(status_code=403, detail="Inactive user account")
-    return current_user
+# Convenience functions for FastAPI dependencies
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
+    """Get current authenticated user"""
+    return await auth_service.get_current_user(credentials)
 
-async def get_current_user_with_roles(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    return await auth_service.get_current_user_with_roles(token)
+def require_permissions(*permissions):
+    """Require specific permissions"""
+    return auth_service.require_permissions(list(permissions))
 
-async def get_current_user_with_super_admin_bypass(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    return await auth_service.get_current_user_with_super_admin_bypass(token)
+def require_user_types(*user_types):
+    """Require specific user types"""
+    return auth_service.require_user_type(list(user_types))
 
-async def get_user_company_context(user=Depends(get_current_user)) -> Dict[str, Any]:
-    return await auth_service.get_user_company_context(user)
+def require_super_user():
+    """Require super user access"""
+    return require_user_types("SUPER_USER")
 
-async def get_user_accessible_companies(user=Depends(get_current_user)) -> List[Dict]:
-    return await auth_service.get_user_accessible_companies(user)
+def require_company_admin():
+    """Require company admin access"""
+    return require_user_types("SUPER_USER", "COMPANY_USER")
 
-def require_permission(permission: str):
-    async def permission_dependency(current_user: UserProfile = Depends(get_current_active_user)) -> UserProfile:
-        if current_user.user_type != UserType.SUPER_USER and permission not in current_user.permissions:
-            raise HTTPException(status_code=403, detail=f"Permission required: {permission}")
-        return current_user
-    return permission_dependency
+async def get_current_user_with_super_admin_bypass(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """Get current user with SUPER_USER bypass for authentication failures"""
+    try:
+        # First try normal authentication
+        token_data = await auth_service.get_current_user(credentials)
+        # Convert TokenData to dict format expected by callers
+        return {
+            "id": token_data.user_id,
+            "user_type": token_data.user_type,
+            "company_id": token_data.company_id,
+            "permissions": token_data.permissions
+        }
+    except HTTPException as e:
+        # If authentication fails, check if this might be a SUPER_USER
+        if e.status_code == 401:
+            logger.debug("Authentication failed, checking for SUPER_USER bypass")
+            try:
+                # Try to decode the token to get the user info
+                secret_key = auth_service.jwt_secret
+                if not secret_key:
+                    raise ValueError("JWT secret not configured")
+                payload = jwt.decode(credentials.credentials, secret_key, algorithms=["HS256"])
+                user_email = payload.get("email")
 
-def require_user_type(*allowed_types: UserType):
-    async def user_type_dependency(current_user: UserProfile = Depends(get_current_active_user)) -> UserProfile:
-        if current_user.user_type not in allowed_types:
-            raise HTTPException(status_code=403, detail=f"User type required: {[t.value for t in allowed_types]}")
-        return current_user
-    return user_type_dependency
+                if user_email:
+                    logger.debug(f"Checking if user {user_email} is SUPER_USER")
+                    # Import here to avoid circular imports
+                    from app.database_service import db_service
+                    user_data = await db_service.get_user_by_email(user_email)
 
-def require_roles(*allowed_roles):
-    async def role_checker(user=Depends(get_current_user)):
-        user_roles = user.get("roles", []) if isinstance(user, dict) else []
+                    if user_data and user_data.get("user_type") == "SUPER_USER":
+                        logger.info(f"SUPER_USER bypass activated for {user_email}")
+                        # Get user roles
+                        from app.repo import repo
+                        user_roles = await repo.get_user_roles(user_data["id"])
+                        user_data["roles"] = user_roles
+                        return user_data
+                    else:
+                        logger.debug(f"User {user_email} is not SUPER_USER, re-raising authentication error")
+            except Exception as bypass_error:
+                logger.debug(f"SUPER_USER bypass failed: {bypass_error}")
 
-        # Get role details for each user role
-        for user_role in user_roles:
-            role_id = user_role.get("role_id") if isinstance(user_role, dict) else user_role.role_id
-            if role_id:
-                role = await repo.get_role(role_id)
-                if role and role.get("role_group") in allowed_roles:
-                    return user
+        # Re-raise the original authentication error
+        raise e
 
-        raise HTTPException(status_code=403, detail="Insufficient role")
-    return role_checker
-
-def require_company_role(company_id: str, *allowed_roles):
-    async def company_role_checker(user=Depends(get_current_user)):
-        user_roles = user.get("roles", []) if isinstance(user, dict) else []
-
-        # Check if user has required role for the specific company
-        for user_role in user_roles:
-            if isinstance(user_role, dict):
-                role_company_id = user_role.get("company_id")
-                role_id = user_role.get("role_id")
-            else:
-                role_company_id = user_role.company_id
-                role_id = user_role.role_id
-
-            if (role_company_id == company_id and role_id):
-                role = await repo.get_role(role_id)
-                if role and role.get("role_group") in allowed_roles:
-                    return user
-
-        raise HTTPException(status_code=403, detail="Insufficient permissions for this company")
-    return company_role_checker
-
-def require_company_access(company_id: str):
-    """Require user to have access to a specific company"""
-    async def company_access_checker(user=Depends(get_current_user)):
-        if isinstance(user, dict):
-            user_id = user.get("id")
-        else:
-            user_id = user.id
-
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User not authenticated")
-
-        has_access = await db_service.check_user_company_access(user_id, company_id)
-        if not has_access:
-            raise HTTPException(status_code=403, detail="Access denied: You don't belong to this company")
-
-        return user
-    return company_access_checker
-
-def require_company_role_type(company_id: str, *allowed_role_types):
-    """Require user to have specific role types within a company"""
-    async def company_role_type_checker(user=Depends(get_current_user)):
-        if isinstance(user, dict):
-            user_id = user.get("id")
-        else:
-            user_id = user.id
-
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User not authenticated")
-
-        # First check company access
-        has_access = await repo.check_user_company_access(user_id, company_id)
-        if not has_access:
-            raise HTTPException(status_code=403, detail="Access denied: You don't belong to this company")
-
-        # Check role type
-        user_role = await repo.get_user_role_in_company(user_id, company_id)
-        if not user_role:
-            raise HTTPException(status_code=403, detail="No role found for this company")
-
-        role_details = user_role.get("role_details", {})
-        company_role_type = role_details.get("company_role_type")
-
-        if company_role_type not in allowed_role_types:
-            raise HTTPException(status_code=403, detail=f"Required role types: {allowed_role_types}")
-
-        return user
-    return company_role_type_checker
-
-def require_content_access(content_owner_id: str, action: str = "view"):
-    """Require user to have access to content based on company isolation"""
-    async def content_access_checker(user=Depends(get_current_user)):
-        if isinstance(user, dict):
-            user_id = user.get("id")
-        else:
-            user_id = user.id
-
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User not authenticated")
-
-        has_access = await repo.check_content_access_permission(user_id, content_owner_id, action)
-        if not has_access:
-            raise HTTPException(status_code=403, detail=f"Access denied: Cannot {action} this content")
-
-        return user
-    return content_access_checker
+# Rate limiting decorator
+def rate_limit(requests_per_minute: int = 60):
+    """Rate limiting decorator for authentication endpoints"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(request: Request, *args, **kwargs):
+            # Implementation would use Redis or in-memory store
+            # For now, it's a placeholder
+            return await func(request, *args, **kwargs)
+        return wrapper
+    return decorator

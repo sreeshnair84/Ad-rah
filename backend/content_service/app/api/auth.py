@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer
 from typing import List, Optional
 
 # Use the enhanced auth service instead of the old one
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 from app.database_service import db_service
 from app.rbac_models import LoginRequest, LoginResponse, UserCreate
 from app.models import UserProfile

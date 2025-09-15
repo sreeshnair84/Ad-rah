@@ -11,7 +11,7 @@ import uuid
 import logging
 
 from ..models import DigitalTwin, DigitalTwinCreate, DigitalTwinUpdate, DigitalTwinStatus
-from ..auth_service import get_current_user, get_user_company_context
+from .auth import get_current_user, get_user_company_context
 from ..repo import repo
 from ..utils.serialization import safe_json_response
 

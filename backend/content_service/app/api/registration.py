@@ -6,7 +6,7 @@ import hashlib
 from app.models import UserRegistration, UserInvitation, PasswordResetRequest, PasswordReset, User
 from app.repo import repo
 from app.api.auth import get_current_user, require_roles
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 from app.email_service import email_service, EmailSchema
 
 router = APIRouter(prefix="/auth", tags=["auth"])

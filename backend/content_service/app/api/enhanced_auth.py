@@ -10,7 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.security.enhanced_auth_service import (
+from app.auth_service import (
     auth_service, get_current_user, require_permissions, 
     TokenData, SecurityEvent
 )

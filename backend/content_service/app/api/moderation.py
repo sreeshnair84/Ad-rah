@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Form, UploadFile, File
-from app.auth_service import get_current_user, get_user_company_context
+from app.api.auth import get_current_user, get_user_company_context
 from app.models import ModerationResult, Review
 from app.repo import repo
 import uuid

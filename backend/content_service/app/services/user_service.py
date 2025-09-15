@@ -90,7 +90,7 @@ def convert_permissions_to_frontend_format(page_permissions_list: List[PagePermi
     
     return list(set(frontend_permissions))  # Remove duplicates
 from app.models import User, UserCreate, UserUpdate, UserProfile
-from app.security.enhanced_auth_service import auth_service  # Use enhanced auth service
+from app.auth_service import auth_service  # Use enhanced auth service
 
 logger = logging.getLogger(__name__)
 

@@ -90,7 +90,8 @@ async def debug_list_users():
 async def debug_test_login():
     """Test login with common credentials (no auth required)"""
     try:
-        from app.services.auth_service import AuthService
+        from app.auth_service import AuthService
+        from app.rbac_models import LoginRequest
         auth_service = AuthService()
         
         # Test common admin credentials
@@ -105,22 +106,18 @@ async def debug_test_login():
         results = []
         for creds in test_credentials:
             try:
-                result = await auth_service.login(creds["email"], creds["password"])
-                if result.success:
-                    user_data = result.data
-                    results.append({
-                        "credentials": creds,
-                        "status": "SUCCESS",
-                        "user_type": user_data.get("user", {}).get("user_type"),
-                        "email": user_data.get("user", {}).get("email")
-                    })
-                    break  # Stop on first success
-                else:
-                    results.append({
-                        "credentials": creds,
-                        "status": "FAILED",
-                        "error": result.error
-                    })
+                login_request = LoginRequest(email=creds["email"], password=creds["password"])
+                result = await auth_service.login(login_request)
+                # If we get here, login was successful
+                user_data = result
+                results.append({
+                    "credentials": creds,
+                    "status": "SUCCESS",
+                    "user_type": user_data.user.user_type.value if hasattr(user_data.user.user_type, 'value') else str(user_data.user.user_type),
+                    "email": user_data.user.email,
+                    "access_token": user_data.access_token
+                })
+                break  # Stop on first success
             except Exception as e:
                 results.append({
                     "credentials": creds,

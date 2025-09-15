@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 
-from app.auth_service import get_current_user, get_user_company_context
+from app.api.auth import get_current_user, get_user_company_context
 from app.models import ContentMeta, UserProfile
 from app.repo import repo
 from app.storage import save_media, presign_local

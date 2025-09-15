@@ -16,7 +16,7 @@ from app.models import (
 from app.repo import repo
 from app.api.auth import get_current_user
 from app.models import UserProfile
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 
 router = APIRouter(prefix="/company-applications", tags=["company-applications"])
 

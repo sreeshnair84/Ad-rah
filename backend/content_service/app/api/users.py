@@ -11,7 +11,8 @@ except ImportError:
         ObjectId = None
 from app.models import User, UserCreate, UserUpdate, UserRole, UserProfile, Role, RoleCreate, RoleUpdate, PermissionCheck
 from app.repo import repo
-from app.auth_service import require_roles, auth_service, get_user_company_context, get_current_user_with_super_admin_bypass
+from app.api.auth import require_roles, get_user_company_context
+from app.auth_service import get_current_user_with_super_admin_bypass
 from app.auth_service import get_current_user
 # Data initialization is handled at server startup
 

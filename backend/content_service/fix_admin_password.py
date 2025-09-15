@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 async def fix_admin_password():
     """Fix admin user password in database"""
     from app.database_service import db_service
-    from app.security.enhanced_auth_service import auth_service
+    from app.auth_service import auth_service
     
     try:
         # Initialize database

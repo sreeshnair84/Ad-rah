@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from app.repo import repo
 from app.models import User
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 import uuid
 from datetime import datetime
 

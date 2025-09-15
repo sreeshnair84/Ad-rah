@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 from app.models import Role, User, UserRole, Company
 from app.repo import repo
-from app.security.enhanced_auth_service import auth_service
+from app.auth_service import auth_service
 from passlib.context import CryptContext
 
 # Password hashing
