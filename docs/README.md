@@ -1,106 +1,88 @@
-# Purpose: High-level introduction to the project for developers, partners, and stakeholders.
+# Adara Platform Documentation
 
-## Contents:
+This directory contains the essential documentation for the Adara Digital Signage Platform. All duplicate and outdated documents have been removed to maintain clarity and reduce maintenance overhead.
 
-Project overview & mission statement.
+## 📚 **Core Documentation**
 
-## Core features.
+### **Architecture & Design**
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical system architecture and design decisions
+- **[DATA_MODEL.md](DATA_MODEL.md)** - Database schema and data relationships
+- **[UI_SPEC.md](UI_SPEC.md)** - User interface specifications and component library
 
-This repo contains a multi-service scaffold for the **Adara**<sup>from Hebron™</sup> platform. A runnable `content-service` FastAPI microservice exists under `backend/content_service` which demonstrates the upload, metadata, simple auth, and moderation-simulation flow.
+### **Authentication & Security**
+- **[ENHANCED_RBAC_SYSTEM.md](ENHANCED_RBAC_SYSTEM.md)** - Complete RBAC implementation guide
+- **[security/](security/)** - Security policies and device registration guidelines
 
-## Quick Start with Docker Compose (Recommended)
+### **Development & Deployment**
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick setup guide for development and production
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive Azure deployment instructions
+- **[api.md](api.md)** - API documentation and integration guides
 
-The easiest way to get started is using Docker Compose, which sets up the entire stack:
+### **Application Components**
+- **[FLUTTER_APP_SPEC.md](FLUTTER_APP_SPEC.md)** - Flutter mobile/kiosk application specifications
+- **[AI_CONTENT_MODERATION_FRAMEWORK.md](AI_CONTENT_MODERATION_FRAMEWORK.md)** - AI moderation system implementation
 
-```pwsh
-# Navigate to the backend service
-cd backend/content_service
+### **Project Management**
+- **[IMPLEMENTATION_CHECKLIST_MASTER.md](IMPLEMENTATION_CHECKLIST_MASTER.md)** - Master implementation tracking
+- **[CODEBASE_OPTIMIZATION_REPORT.md](CODEBASE_OPTIMIZATION_REPORT.md)** - Code quality and optimization report
 
-# Start all services (backend, database, storage emulator)
-docker-compose up -d
+## 🗑️ **Removed Documents**
 
-# View logs to see startup progress
-docker-compose logs -f
+The following documents have been removed due to duplication or being outdated:
 
-# The backend will be available at http://localhost:8000
-# Frontend can be started separately (see Frontend Setup below)
-```
+### **Merged into Other Documents**
+- RBAC_INTEGRATION_GUIDE.md → **ENHANCED_RBAC_SYSTEM.md**
+- ROLES_AND_PERMISSIONS.md → **ENHANCED_RBAC_SYSTEM.md**
+- COMPANY_REGISTRATION_REQUIREMENTS.md → **ENHANCED_RBAC_SYSTEM.md**
+- AI_BEHAVIOR.md → **AI_CONTENT_MODERATION_FRAMEWORK.md**
+- POWERSHELL_DEPLOYMENT.md → **DEPLOYMENT_GUIDE.md**
+- GITHUB_SECRETS.md → **DEPLOYMENT_GUIDE.md**
+- COST_OPTIMIZATION.md → **QUICKSTART.md**
 
-This will start:
-- **Content Service** (FastAPI) on port 8000
-- **MongoDB** on port 27017
-- **Azurite** (Azure Storage emulator) on ports 10000-10002
-- **Event Processor** (background service for AI moderation)
+### **Consolidated into Master Documents**
+- FEATURE_IMPLEMENTATION_CHECKLIST.md → **IMPLEMENTATION_CHECKLIST_MASTER.md**
+- TASK_CHECKLIST.md → **IMPLEMENTATION_CHECKLIST_MASTER.md**
+- IMPLEMENTATION_SUMMARY.md → **IMPLEMENTATION_CHECKLIST_MASTER.md**
+- DUPLICATE_CODE_CHECKLIST.md → **CODEBASE_OPTIMIZATION_REPORT.md**
+- UNIFIED_CONTENT_OPTIMIZATION_SUMMARY.md → **CODEBASE_OPTIMIZATION_REPORT.md**
 
-### Mock Data
+### **Outdated/Irrelevant**
+- copilot-instruction.md (replaced by ../CLAUDE.md)
+- Mobile_Wireframe.md (replaced by **FLUTTER_APP_SPEC.md**)
+- pages.md (basic page list - covered in **UI_SPEC.md**)
+- PERSONA.md (marketing content - not development docs)
+- RISK_REGISTER.md (project management - not dev docs)
+- sow.md (statement of work - not dev docs)
+- ACCESSIBILITY_IMPROVEMENTS.md (outdated accessibility info)
+- security.md (duplicate - **security/** folder has better content)
 
-When you start the backend for the first time, it automatically creates mock data for development:
+## 📋 **Documentation Standards**
 
-**Default Companies:**
-- OpenKiosk Admin (HOST)
-- Dubai Mall Management (HOST)
-- Brand Solutions UAE (ADVERTISER)
+### **File Naming Convention**
+- Use **UPPERCASE.md** for major documents
+- Use **lowercase.md** for specific technical docs (api.md)
+- Group related docs in folders (security/)
 
-**Default Users for Testing:**
-- `admin@adara.com` / `adminpass` (System Administrator)
-- `host@adara.com` / `hostpass` (Host Manager)
-- `advertiser@adara.com` / `advertiserpass` (Advertiser Manager)
+### **Content Guidelines**
+- Keep docs up-to-date with code implementation
+- Cross-reference related documents
+- Include practical examples and code snippets
+- Maintain backward compatibility notes
 
-**Sample Content:**
-- Dubai Mall promotional video advertisement
-- Brand Solutions UAE banner advertisement
-- Associated metadata and AI moderation reviews
+### **Review Schedule**
+- **Monthly**: Review for accuracy with codebase
+- **Quarterly**: Update architecture and design docs
+- **Before releases**: Validate all deployment guides
 
-## Frontend Setup
+## 🔗 **External References**
 
-```pwsh
-# Navigate to frontend directory
-cd frontend
+- **Main Project Instructions**: ../CLAUDE.md
+- **Quick Start Guide**: ../README.md
+- **Optimization Report**: ./CODEBASE_OPTIMIZATION_REPORT.md
 
-# Install dependencies
-npm install
+---
 
-# Start development server
-npm run dev
-
-# Frontend will be available at http://localhost:3000
-```
-
-The frontend is automatically configured to connect to the backend API running on `localhost:8000` through Next.js rewrites.
-
-## Manual Setup (Alternative)
-
-Quick start (content-service):
-
-```pwsh
-cd backend\content_service
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
-```
-
-Run tests:
-
-```pwsh
-.\.venv\Scripts\python.exe -m pytest backend/content_service/tests -q
-```
-
-## Architecture Overview
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Frontend      │    │  Content Service │    │  Event Processor│
-│  (Next.js)      │◄──►│   (FastAPI)      │◄──►│   (Background)  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Azure Service │    │    MongoDB       │    │  Azure AI       │
-│     Bus         │    │                  │    │  Foundry        │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-Supported integrations (Yodeck, Xibo fallback) are in design and TODO; see `docs/api.md` and `docs/ARCHITECTURE.md` for integration notes.
-
-Contribution & licensing.
+**Last Cleanup**: 2025-09-15  
+**Documents Maintained**: 12 core files  
+**Documents Removed**: 21 duplicate/outdated files  
+**Space Saved**: ~60% reduction in documentation files

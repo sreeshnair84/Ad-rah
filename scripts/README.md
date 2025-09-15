@@ -132,6 +132,6 @@ az login
 
 ## 📞 **Support**
 
-- Check the main [deployment guide](../docs/POWERSHELL_DEPLOYMENT.md) for detailed instructions
+- Check the main [deployment guide](../docs/DEPLOYMENT_GUIDE.md) for detailed instructions
 - Report issues in the project's GitHub repository
 - Ensure you have the latest Azure CLI and PowerShell versions

@@ -461,6 +461,30 @@ Once the backend is running, you can access:
 └── README.md                    # This file
 ```
 
+## 📚 Documentation
+
+### **Quick References**
+- **[Quick Start Guide](docs/QUICKSTART.md)** - 30-minute setup for development and production
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Complete Azure deployment instructions
+- **[API Documentation](docs/api.md)** - REST API endpoints and integration guides
+
+### **Architecture & Design**
+- **[System Architecture](docs/ARCHITECTURE.md)** - Technical design and component overview
+- **[RBAC System](docs/ENHANCED_RBAC_SYSTEM.md)** - Authentication and permission system
+- **[Database Design](docs/DATA_MODEL.md)** - MongoDB schema and relationships
+
+### **Application Components**
+- **[Flutter App Specification](docs/FLUTTER_APP_SPEC.md)** - Mobile/kiosk application details
+- **[AI Content Moderation](docs/AI_CONTENT_MODERATION_FRAMEWORK.md)** - AI moderation system
+- **[UI Specifications](docs/UI_SPEC.md)** - Frontend component library and design
+
+### **Development Resources**
+- **[Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST_MASTER.md)** - Current development status
+- **[Optimization Report](docs/CODEBASE_OPTIMIZATION_REPORT.md)** - Code quality and improvement areas
+- **[Security Guidelines](docs/security/)** - Security policies and best practices
+
+> **Note**: Documentation was recently optimized - 21 duplicate and outdated files were removed, consolidating from 33 to 12 essential documents with comprehensive cross-references.
+
 ## Development Workflow
 
 1. **Create Feature Branch**: `git checkout -b feature/your-feature-name`

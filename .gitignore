@@ -337,3 +337,8 @@ flutter/adarah_digital_signage/.packages
 flutter/adarah_digital_signage/.metadata
 flutter/adarah_digital_signage/pubspec.lock
 flutter/adarah_digital_signage/build/
+# Optimization backups
+backup_*/
+# Consolidated documentation (old files)
+ENHANCED_DIGITAL_SIGNAGE_CHECKLIST.md.bak
+DIGITAL_SIGNAGE_IMPLEMENTATION_CHECKLIST.md.bak

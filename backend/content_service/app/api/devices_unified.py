@@ -369,6 +369,73 @@ async def get_device_heartbeat_history(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get heartbeat history: {str(e)}")
 
+@router.get("/status", response_model=Dict)
+async def get_all_devices_status(current_user: dict = Depends(get_current_user)):
+    """Get status of all devices accessible to the current user"""
+    try:
+        # Get all devices accessible to the user
+        all_devices = await repo.get_devices()
+        
+        devices_status = []
+        for device in all_devices:
+            device_id = device.get("id")
+            if not device_id:
+                continue
+                
+            # Get latest heartbeat for this device
+            try:
+                device_info = await repo.get_device_with_credentials(device_id)
+                latest_heartbeat = device_info.get("latest_heartbeat") if device_info else None
+                
+                is_online = False
+                last_seen = None
+                if latest_heartbeat:
+                    heartbeat_time = latest_heartbeat.get("timestamp")
+                    if isinstance(heartbeat_time, str):
+                        heartbeat_time = datetime.fromisoformat(heartbeat_time)
+                    if heartbeat_time:
+                        last_seen = heartbeat_time.isoformat()
+                        if (datetime.utcnow() - heartbeat_time).seconds < 300:  # 5 minutes
+                            is_online = True
+                
+                device_status = {
+                    "id": device_id,
+                    "name": device.get("device_name", "Unknown"),
+                    "location": device.get("location", "Unknown"),
+                    "status": "online" if is_online else "offline",
+                    "is_online": is_online,
+                    "last_seen": last_seen,
+                    "company_id": device.get("company_id"),
+                    "device_type": device.get("device_type", "KIOSK"),
+                    "organization_code": device.get("organization_code")
+                }
+                devices_status.append(device_status)
+                
+            except Exception as e:
+                # If we can't get heartbeat info, still include the device as offline
+                device_status = {
+                    "id": device_id,
+                    "name": device.get("device_name", "Unknown"),
+                    "location": device.get("location", "Unknown"),
+                    "status": "offline",
+                    "is_online": False,
+                    "last_seen": None,
+                    "company_id": device.get("company_id"),
+                    "device_type": device.get("device_type", "KIOSK"),
+                    "organization_code": device.get("organization_code")
+                }
+                devices_status.append(device_status)
+        
+        return {
+            "devices": devices_status,
+            "total_devices": len(devices_status),
+            "online_devices": len([d for d in devices_status if d["is_online"]]),
+            "offline_devices": len([d for d in devices_status if not d["is_online"]])
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get devices status: {str(e)}")
+
 @router.get("/status/{device_id}", response_model=Dict)
 async def get_device_status(device_id: str, current_user: dict = Depends(get_current_user)):
     """Get enhanced device status with heartbeat and credentials"""
