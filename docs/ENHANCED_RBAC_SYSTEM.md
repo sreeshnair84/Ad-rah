@@ -356,10 +356,737 @@ companies = await rbac_service.get_accessible_companies(user_id)
 
 ## Future Enhancements
 
-1. **Role Templates** - Predefined role configurations
-2. **Time-based Permissions** - Temporary access grants
-3. **API Rate Limiting** - Per-user/company rate limits
-4. **Advanced Audit Queries** - Complex audit log analysis
-5. **Multi-factor Authentication** - Enhanced security
-6. **Single Sign-On Integration** - Enterprise authentication
-7. **Permission Delegation** - Temporary permission sharing
+### Planned Security Features
+1. **Machine Learning**: Behavioral analysis for anomaly detection
+2. **Geographic Restrictions**: Location-based registration controls
+3. **Certificate Pinning**: Enhanced device certificate validation
+4. **Biometric Verification**: Hardware-based device attestation
+5. **Zero Trust**: Continuous device verification
+
+### Integration Opportunities
+1. **SIEM Integration**: Export security events to SIEM systems
+2. **Threat Intelligence**: Integration with IP reputation services
+3. **Analytics Platform**: Advanced security analytics dashboard
+4. **Mobile Device Management**: Integration with MDM solutions
+
+---
+
+## 🔄 Advanced Permission Features
+
+### Dynamic Permission Evaluation
+
+The RBAC system supports dynamic permission evaluation based on runtime context:
+
+```python
+class DynamicPermissionEvaluator:
+    async def evaluate_permission(
+        self,
+        user_id: str,
+        permission: str,
+        resource_type: str,
+        resource_id: str,
+        context: dict = None
+    ) -> PermissionResult:
+        """
+        Evaluate permission with contextual information
+        """
+        # Get base user permissions
+        base_permissions = await self._get_user_permissions(user_id)
+
+        # Apply contextual rules
+        if resource_type == "content":
+            return await self._evaluate_content_permission(
+                user_id, permission, resource_id, context
+            )
+        elif resource_type == "device":
+            return await self._evaluate_device_permission(
+                user_id, permission, resource_id, context
+            )
+
+        return PermissionResult(
+            granted=permission in base_permissions,
+            reason="Base permission check"
+        )
+```
+
+### Time-Based Permissions
+
+Implement time-based access controls for temporary permissions:
+
+```python
+class TimeBasedPermission:
+    def __init__(self, permission: str, start_time: datetime, end_time: datetime):
+        self.permission = permission
+        self.start_time = start_time
+        self.end_time = end_time
+
+    def is_active(self, current_time: datetime = None) -> bool:
+        if current_time is None:
+            current_time = datetime.utcnow()
+        return self.start_time <= current_time <= self.end_time
+
+# Usage in permission checking
+async def check_time_based_permission(
+    user_id: str,
+    permission: str,
+    current_time: datetime = None
+) -> bool:
+    time_permissions = await get_user_time_permissions(user_id)
+
+    for tp in time_permissions:
+        if tp.permission == permission and tp.is_active(current_time):
+            return True
+
+    return False
+```
+
+### Hierarchical Permission Inheritance
+
+Support for hierarchical permission structures:
+
+```python
+PERMISSION_HIERARCHY = {
+    "content_admin": ["content_create", "content_edit", "content_delete", "content_approve"],
+    "device_admin": ["device_create", "device_edit", "device_delete", "device_control"],
+    "user_admin": ["user_create", "user_edit", "user_delete", "user_view"],
+    "super_admin": ["content_admin", "device_admin", "user_admin", "system_settings"]
+}
+
+def expand_permissions(assigned_permissions: List[str]) -> Set[str]:
+    """
+    Expand hierarchical permissions to individual permissions
+    """
+    expanded = set(assigned_permissions)
+
+    for permission in assigned_permissions:
+        if permission in PERMISSION_HIERARCHY:
+            expanded.update(PERMISSION_HIERARCHY[permission])
+
+    return expanded
+```
+
+## 🏢 Multi-Tenant Architecture Extensions
+
+### Cross-Company Content Sharing
+
+Advanced content sharing with granular permissions:
+
+```python
+class ContentSharingManager:
+    async def share_content(
+        self,
+        content_id: str,
+        from_company_id: str,
+        to_company_id: str,
+        permissions: List[str],
+        expires_at: datetime = None
+    ) -> str:
+        """
+        Share content between companies with specific permissions
+        """
+        share_id = str(uuid4())
+
+        share_record = {
+            "_id": share_id,
+            "content_id": content_id,
+            "from_company_id": from_company_id,
+            "to_company_id": to_company_id,
+            "permissions": permissions,
+            "expires_at": expires_at,
+            "created_at": datetime.utcnow(),
+            "status": "ACTIVE"
+        }
+
+        await self.db.content_shares.insert_one(share_record)
+        return share_id
+
+    async def check_shared_access(
+        self,
+        user_id: str,
+        content_id: str,
+        required_permission: str
+    ) -> bool:
+        """
+        Check if user has access to shared content
+        """
+        user_company = await self.get_user_company(user_id)
+
+        share = await self.db.content_shares.find_one({
+            "content_id": content_id,
+            "to_company_id": user_company,
+            "status": "ACTIVE",
+            "$or": [
+                {"expires_at": {"$exists": False}},
+                {"expires_at": {"$gt": datetime.utcnow()}}
+            ]
+        })
+
+        if not share:
+            return False
+
+        return required_permission in share.get("permissions", [])
+```
+
+### Company-Based Resource Quotas
+
+Implement resource quotas per company:
+
+```python
+class CompanyQuotaManager:
+    async def check_quota(
+        self,
+        company_id: str,
+        resource_type: str,
+        requested_amount: int = 1
+    ) -> QuotaCheckResult:
+        """
+        Check if company has quota for resource usage
+        """
+        quota = await self.get_company_quota(company_id, resource_type)
+        current_usage = await self.get_current_usage(company_id, resource_type)
+
+        available = quota - current_usage
+
+        return QuotaCheckResult(
+            allowed=available >= requested_amount,
+            available=available,
+            requested=requested_amount,
+            quota=quota
+        )
+
+    async def allocate_resource(
+        self,
+        company_id: str,
+        resource_type: str,
+        amount: int = 1
+    ) -> bool:
+        """
+        Allocate resource quota for company
+        """
+        quota_check = await self.check_quota(company_id, resource_type, amount)
+
+        if not quota_check.allowed:
+            return False
+
+        # Allocate the resource
+        await self.increment_usage(company_id, resource_type, amount)
+        return True
+```
+
+## 🔐 Advanced Security Features
+
+### Session Management
+
+Enhanced session tracking and management:
+
+```python
+class SessionManager:
+    async def create_session(
+        self,
+        user_id: str,
+        device_info: dict,
+        ip_address: str
+    ) -> str:
+        """
+        Create a new user session with tracking
+        """
+        session_id = str(uuid4())
+
+        session_data = {
+            "_id": session_id,
+            "user_id": user_id,
+            "device_info": device_info,
+            "ip_address": ip_address,
+            "created_at": datetime.utcnow(),
+            "last_activity": datetime.utcnow(),
+            "status": "ACTIVE",
+            "token_hash": None  # Will be set when token is issued
+        }
+
+        await self.db.sessions.insert_one(session_data)
+        return session_id
+
+    async def validate_session(
+        self,
+        session_id: str,
+        token_hash: str = None
+    ) -> SessionValidationResult:
+        """
+        Validate session and update activity
+        """
+        session = await self.db.sessions.find_one({"_id": session_id})
+
+        if not session or session["status"] != "ACTIVE":
+            return SessionValidationResult(valid=False, reason="Invalid session")
+
+        # Check session expiry (24 hours default)
+        if datetime.utcnow() - session["created_at"] > timedelta(hours=24):
+            await self.invalidate_session(session_id)
+            return SessionValidationResult(valid=False, reason="Session expired")
+
+        # Update last activity
+        await self.db.sessions.update_one(
+            {"_id": session_id},
+            {"$set": {"last_activity": datetime.utcnow()}}
+        )
+
+        return SessionValidationResult(valid=True)
+```
+
+### Audit Trail Enhancements
+
+Comprehensive audit logging with advanced features:
+
+```python
+class AdvancedAuditLogger:
+    async def log_action(
+        self,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        details: dict = None,
+        severity: str = "INFO"
+    ) -> str:
+        """
+        Log user action with enhanced details
+        """
+        audit_entry = {
+            "_id": str(uuid4()),
+            "timestamp": datetime.utcnow(),
+            "user_id": user_id,
+            "company_id": await self.get_user_company(user_id),
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "details": details or {},
+            "severity": severity,
+            "ip_address": await self.get_client_ip(),
+            "user_agent": await self.get_user_agent(),
+            "session_id": await self.get_current_session_id(),
+            "location": await self.get_geolocation()
+        }
+
+        await self.db.audit_logs.insert_one(audit_entry)
+
+        # Check for suspicious activity
+        if await self.detect_suspicious_activity(audit_entry):
+            await self.trigger_security_alert(audit_entry)
+
+        return audit_entry["_id"]
+
+    async def detect_suspicious_activity(self, audit_entry: dict) -> bool:
+        """
+        Detect potentially suspicious user activity
+        """
+        # Check for rapid successive actions
+        recent_actions = await self.get_recent_user_actions(
+            audit_entry["user_id"], minutes=5
+        )
+
+        if len(recent_actions) > 10:  # More than 10 actions in 5 minutes
+            return True
+
+        # Check for actions on unusual hours
+        if await self.is_unusual_hour(audit_entry["timestamp"]):
+            return True
+
+        # Check for actions from unusual locations
+        if await self.is_unusual_location(audit_entry["location"]):
+            return True
+
+        return False
+```
+
+## 📊 Analytics and Reporting
+
+### Permission Usage Analytics
+
+Track permission usage patterns:
+
+```python
+class PermissionAnalytics:
+    async def get_permission_usage_report(
+        self,
+        company_id: str = None,
+        start_date: datetime = None,
+        end_date: datetime = None
+    ) -> dict:
+        """
+        Generate permission usage analytics
+        """
+        pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": start_date, "$lte": end_date},
+                **({"company_id": company_id} if company_id else {})
+            }},
+            {"$group": {
+                "_id": {
+                    "action": "$action",
+                    "user_id": "$user_id"
+                },
+                "count": {"$sum": 1},
+                "last_used": {"$max": "$timestamp"}
+            }},
+            {"$group": {
+                "_id": "$_id.action",
+                "total_uses": {"$sum": "$count"},
+                "unique_users": {"$addToSet": "$_id.user_id"},
+                "avg_uses_per_user": {"$avg": "$count"}
+            }}
+        ]
+
+        results = await self.db.audit_logs.aggregate(pipeline).to_list(None)
+
+        return {
+            "period": {"start": start_date, "end": end_date},
+            "company_id": company_id,
+            "permission_usage": results
+        }
+
+    async def get_role_effectiveness_report(self, company_id: str) -> dict:
+        """
+        Analyze role effectiveness and permission utilization
+        """
+        # Get all users and their roles
+        users = await self.db.users.find({"company_id": company_id}).to_list(None)
+
+        role_stats = {}
+        for user in users:
+            role = user.get("company_role", "UNKNOWN")
+            if role not in role_stats:
+                role_stats[role] = {
+                    "user_count": 0,
+                    "total_actions": 0,
+                    "avg_actions_per_user": 0
+                }
+
+            role_stats[role]["user_count"] += 1
+
+            # Get user's action count
+            action_count = await self.db.audit_logs.count_documents({
+                "user_id": user["_id"],
+                "timestamp": {"$gte": datetime.utcnow() - timedelta(days=30)}
+            })
+
+            role_stats[role]["total_actions"] += action_count
+
+        # Calculate averages
+        for role, stats in role_stats.items():
+            if stats["user_count"] > 0:
+                stats["avg_actions_per_user"] = stats["total_actions"] / stats["user_count"]
+
+        return role_stats
+```
+
+## 🔧 API Integration Examples
+
+### FastAPI Permission Decorators
+
+Enhanced permission decorators for FastAPI:
+
+```python
+from fastapi import Depends, HTTPException
+from typing import Callable, Any
+import functools
+
+def require_permissions(*required_permissions: str, require_all: bool = True):
+    """
+    Decorator to require specific permissions
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract current user from kwargs (injected by auth middleware)
+            current_user = kwargs.get("current_user")
+            if not current_user:
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+            # Check permissions
+            user_permissions = set(current_user.get("permissions", []))
+            required_set = set(required_permissions)
+
+            if require_all:
+                has_permission = required_set.issubset(user_permissions)
+            else:
+                has_permission = bool(required_set.intersection(user_permissions))
+
+            if not has_permission:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Missing required permissions: {required_permissions}"
+                )
+
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+# Usage in API endpoints
+@router.post("/content/{content_id}/approve")
+@require_permissions("content_approve")
+async def approve_content(
+    content_id: str,
+    approval_data: ApprovalRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Approve content with proper permission checking"""
+    return await content_service.approve_content(content_id, approval_data, current_user)
+```
+
+### Advanced Resource-Based Access Control
+
+Implement attribute-based access control (ABAC):
+
+```python
+class AttributeBasedAccessControl:
+    async def check_access(
+        self,
+        user: dict,
+        action: str,
+        resource: dict,
+        context: dict = None
+    ) -> AccessDecision:
+        """
+        Check access based on user attributes, resource attributes, and context
+        """
+        # User attributes
+        user_attrs = {
+            "role": user.get("company_role"),
+            "department": user.get("department"),
+            "clearance_level": user.get("clearance_level", 1),
+            "company_id": user.get("company_id")
+        }
+
+        # Resource attributes
+        resource_attrs = {
+            "owner_id": resource.get("owner_id"),
+            "sensitivity": resource.get("sensitivity", "normal"),
+            "department": resource.get("department"),
+            "classification": resource.get("classification", "internal")
+        }
+
+        # Context attributes
+        context_attrs = context or {}
+        context_attrs.update({
+            "time_of_day": datetime.utcnow().hour,
+            "location": await self.get_request_location(),
+            "device_type": await self.get_device_type()
+        })
+
+        # Evaluate policies
+        policies = await self.get_applicable_policies(action, resource_attrs)
+
+        for policy in policies:
+            if await self.evaluate_policy(policy, user_attrs, resource_attrs, context_attrs):
+                return AccessDecision(
+                    granted=True,
+                    policy_id=policy["_id"],
+                    reason=f"Granted by policy: {policy['name']}"
+                )
+
+        return AccessDecision(
+            granted=False,
+            reason="No applicable policy grants access"
+        )
+
+    async def evaluate_policy(
+        self,
+        policy: dict,
+        user_attrs: dict,
+        resource_attrs: dict,
+        context_attrs: dict
+    ) -> bool:
+        """
+        Evaluate a single policy against attributes
+        """
+        conditions = policy.get("conditions", [])
+
+        for condition in conditions:
+            if not await self.evaluate_condition(condition, user_attrs, resource_attrs, context_attrs):
+                return False
+
+        return True
+```
+
+## 📈 Performance Optimization
+
+### Permission Caching Strategy
+
+Implement efficient permission caching:
+
+```python
+class PermissionCache:
+    def __init__(self, redis_client, ttl_seconds: int = 300):
+        self.redis = redis_client
+        self.ttl = ttl_seconds
+
+    async def get_user_permissions(self, user_id: str) -> Optional[List[str]]:
+        """
+        Get cached user permissions
+        """
+        cache_key = f"user_permissions:{user_id}"
+        cached = await self.redis.get(cache_key)
+
+        if cached:
+            return json.loads(cached)
+
+        return None
+
+    async def set_user_permissions(self, user_id: str, permissions: List[str]):
+        """
+        Cache user permissions
+        """
+        cache_key = f"user_permissions:{user_id}"
+        await self.redis.setex(
+            cache_key,
+            self.ttl,
+            json.dumps(permissions)
+        )
+
+    async def invalidate_user_permissions(self, user_id: str):
+        """
+        Invalidate user permission cache
+        """
+        cache_key = f"user_permissions:{user_id}"
+        await self.redis.delete(cache_key)
+
+    async def get_company_permissions(self, company_id: str) -> Optional[dict]:
+        """
+        Get cached company permission structure
+        """
+        cache_key = f"company_permissions:{company_id}"
+        cached = await self.redis.get(cache_key)
+
+        if cached:
+            return json.loads(cached)
+
+        return None
+```
+
+### Database Query Optimization
+
+Optimized database queries for permission checking:
+
+```python
+class OptimizedPermissionQueries:
+    async def get_user_permissions_optimized(self, user_id: str) -> List[str]:
+        """
+        Optimized query to get user permissions with minimal database calls
+        """
+        # Use aggregation pipeline for efficient permission resolution
+        pipeline = [
+            {"$match": {"_id": ObjectId(user_id)}},
+            {"$lookup": {
+                "from": "user_roles",
+                "localField": "_id",
+                "foreignField": "user_id",
+                "as": "user_roles"
+            }},
+            {"$unwind": "$user_roles"},
+            {"$lookup": {
+                "from": "roles",
+                "localField": "user_roles.role_id",
+                "foreignField": "_id",
+                "as": "role_details"
+            }},
+            {"$unwind": "$role_details"},
+            {"$group": {
+                "_id": None,
+                "permissions": {"$addToSet": "$role_details.permissions"}
+            }},
+            {"$project": {
+                "permissions": {
+                    "$reduce": {
+                        "input": "$permissions",
+                        "initialValue": [],
+                        "in": {"$setUnion": ["$$value", "$$this"]}
+                    }
+                }
+            }}
+        ]
+
+        result = await self.db.users.aggregate(pipeline).to_list(1)
+
+        if result:
+            return result[0].get("permissions", [])
+
+        return []
+```
+
+## 🔍 Monitoring and Observability
+
+### Permission Metrics Collection
+
+Collect comprehensive permission usage metrics:
+
+```python
+class PermissionMetricsCollector:
+    async def record_permission_check(
+        self,
+        user_id: str,
+        permission: str,
+        resource_type: str,
+        granted: bool,
+        response_time_ms: float,
+        context: dict = None
+    ):
+        """
+        Record permission check metrics
+        """
+        metric_data = {
+            "timestamp": datetime.utcnow(),
+            "user_id": user_id,
+            "permission": permission,
+            "resource_type": resource_type,
+            "granted": granted,
+            "response_time_ms": response_time_ms,
+            "context": context or {}
+        }
+
+        # Store in time-series database or metrics system
+        await self.metrics_db.permission_checks.insert_one(metric_data)
+
+        # Update real-time counters
+        await self.update_realtime_counters(metric_data)
+
+    async def get_permission_metrics(
+        self,
+        time_range: str = "1h",
+        group_by: str = "permission"
+    ) -> dict:
+        """
+        Get permission usage metrics
+        """
+        # Calculate time range
+        end_time = datetime.utcnow()
+        if time_range.endswith("h"):
+            start_time = end_time - timedelta(hours=int(time_range[:-1]))
+        elif time_range.endswith("d"):
+            start_time = end_time - timedelta(days=int(time_range[:-1]))
+        else:
+            start_time = end_time - timedelta(hours=1)
+
+        pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": start_time, "$lte": end_time}
+            }},
+            {"$group": {
+                "_id": f"${group_by}",
+                "total_checks": {"$sum": 1},
+                "granted": {"$sum": {"$cond": ["$granted", 1, 0]}},
+                "denied": {"$sum": {"$cond": ["$granted", 0, 1]}},
+                "avg_response_time": {"$avg": "$response_time_ms"},
+                "max_response_time": {"$max": "$response_time_ms"}
+            }}
+        ]
+
+        results = await self.metrics_db.permission_checks.aggregate(pipeline).to_list(None)
+
+        return {
+            "time_range": {"start": start_time, "end": end_time},
+            "group_by": group_by,
+            "metrics": results
+        }
+```
+
+This enhanced RBAC system provides enterprise-grade access control with advanced features like dynamic permissions, time-based access, hierarchical inheritance, comprehensive audit trails, and performance optimizations. The system is designed to scale with growing business needs while maintaining security and compliance requirements.

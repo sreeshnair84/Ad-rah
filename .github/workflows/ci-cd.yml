@@ -35,17 +35,32 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv sync
-        uv add --dev pytest pytest-asyncio pytest-cov
+        uv sync --dev
+        # Ensure pytest and coverage are available
+        uv add --dev pytest pytest-asyncio pytest-cov httpx
 
     - name: Run linting
       run: |
-        uv run ruff check . || echo "Ruff not configured, skipping..."
-        uv run black --check . || echo "Black not configured, skipping..."
+        # Only run if tools are available
+        uv run ruff check . --exit-zero || echo "Ruff not configured, skipping..."
+        uv run black --check . --quiet || echo "Black not configured, skipping..."
 
     - name: Run tests
       run: |
-        uv run pytest --cov=app --cov-report=xml --maxfail=1 --disable-warnings -v || echo "No tests found"
+        # Set basic environment variables for testing
+        export MONGO_URI="mongodb://localhost:27017/test"
+        export SECRET_KEY="test-secret-key"
+        export JWT_SECRET_KEY="test-jwt-secret"
+        export ENVIRONMENT="test"
+        
+        # Run tests if they exist, otherwise skip gracefully
+        if find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+          uv run pytest --cov=app --cov-report=xml --maxfail=1 --disable-warnings -v
+        else
+          echo "No test files found, creating placeholder coverage report"
+          mkdir -p coverage
+          echo '<?xml version="1.0" ?><coverage></coverage>' > coverage.xml
+        fi
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
@@ -75,7 +90,12 @@ jobs:
         cache-dependency-path: './frontend/package-lock.json'
 
     - name: Install dependencies
-      run: npm ci
+      run: |
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
 
     - name: Run linting
       run: npm run lint
@@ -90,6 +110,7 @@ jobs:
       run: npm run build
       env:
         NEXT_PUBLIC_API_URL: http://localhost:8000
+        NODE_ENV: production
 
   # Security Scans
   security-scan:
@@ -108,7 +129,7 @@ jobs:
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
@@ -177,12 +198,22 @@ jobs:
     - name: Start backend service
       working-directory: './backend/content_service'
       run: |
-        uv sync
+        uv sync --dev
         export MONGO_URI="mongodb://admin:password@localhost:27017/test?authSource=admin"
-        export SECRET_KEY="test-secret-key"
-        export JWT_SECRET_KEY="test-jwt-secret"
-        uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-        sleep 10
+        export SECRET_KEY="test-secret-key-for-integration"
+        export JWT_SECRET_KEY="test-jwt-secret-for-integration"
+        export ENVIRONMENT="test"
+        export ACCESS_TOKEN_EXPIRE_MINUTES="30"
+        
+        # Start the service in background
+        nohup uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+        
+        # Wait for service to be ready
+        timeout 30 bash -c 'until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 1; done' || {
+          echo "Backend failed to start, showing logs:"
+          cat backend.log
+          exit 1
+        }
 
     - name: Run integration tests
       run: |

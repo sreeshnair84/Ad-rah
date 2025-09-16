@@ -41,7 +41,7 @@ jobs:
         uv run pytest --maxfail=1 --disable-warnings -q || echo "Tests not found, skipping..."
 
     - name: Azure Login
-      uses: azure/login@v1
+      uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
