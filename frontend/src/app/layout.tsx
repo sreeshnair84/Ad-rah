@@ -1,3 +1,10 @@
+// Copyright (c) 2025 Adara Screen by Hebron
+// Owner: Sujesh M S
+// All Rights Reserved
+//
+// This software is proprietary to Adara Screen by Hebron.
+// Unauthorized use, reproduction, or distribution is strictly prohibited.
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";

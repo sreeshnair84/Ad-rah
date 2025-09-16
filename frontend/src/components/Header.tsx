@@ -1,3 +1,10 @@
+// Copyright (c) 2025 Adara Screen by Hebron
+// Owner: Sujesh M S
+// All Rights Reserved
+//
+// This software is proprietary to Adara Screen by Hebron.
+// Unauthorized use, reproduction, or distribution is strictly prohibited.
+
 'use client';
 
 import { Bell, Search, User, Building2, Shield, Menu, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';

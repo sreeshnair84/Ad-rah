@@ -1,3 +1,10 @@
+<!-- Copyright (c) 2025 Adara Screen by Hebron
+Owner: Sujesh M S
+All Rights Reserved
+
+This software is proprietary to Adara Screen by Hebron.
+Unauthorized use, reproduction, or distribution is strictly prohibited. -->
+
 # Adara Screen Digital Signage Platform
 
 A comprehensive, enterprise-grade digital signage platform with advanced Role-Based Access Control (RBAC), multi-tenant architecture, and AI-powered content moderation.

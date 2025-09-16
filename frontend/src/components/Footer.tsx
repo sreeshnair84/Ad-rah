@@ -1,3 +1,10 @@
+// Copyright (c) 2025 Adara Screen by Hebron
+// Owner: Sujesh M S
+// All Rights Reserved
+//
+// This software is proprietary to Adara Screen by Hebron.
+// Unauthorized use, reproduction, or distribution is strictly prohibited.
+
 export function Footer() {
   return (
     <footer className="w-full bg-gradient-to-r from-slate-50 to-gray-50 border-t border-gray-200 mt-auto">
