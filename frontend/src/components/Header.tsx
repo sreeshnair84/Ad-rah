@@ -102,12 +102,12 @@ export function Header({
           </Button>
         )}
         <div className="flex items-center space-x-3">
-            <div className="flex items-center justify-center w-auto h-15 rounded-lg">
+            <div className="flex items-center justify-center w-auto h-25 rounded-lg">
             <Image 
               src="/images/logo.png" 
               alt="Adara from Hebron™" 
-              width={200} // Increased width from 150 to 200
-              height={60}
+              width={300} // Increased width from 150 to 200
+              height={110}
               className="w-32 h-20 object-contain" // Increased Tailwind width from w-20 to w-32
               priority
               onError={(e) => {

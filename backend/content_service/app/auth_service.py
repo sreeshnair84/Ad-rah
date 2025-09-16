@@ -619,3 +619,40 @@ def rate_limit(requests_per_minute: int = 60):
             return await func(request, *args, **kwargs)
         return wrapper
     return decorator
+
+
+# Additional dependency functions for compatibility
+def require_role(allowed_roles: list):
+    """Require specific user roles (expects a list of roles)"""
+    async def role_checker(current_user: TokenData = Depends(get_current_user)):
+        # Super users bypass all role checks
+        if current_user.user_type == "SUPER_USER":
+            return current_user
+
+        # For compatibility, convert user_type to role-like string
+        user_role = current_user.user_type.lower() if current_user.user_type else ""
+
+        # Map user types to role names for compatibility
+        role_mapping = {
+            "company_user": "admin",  # Company users are treated as admins for their company
+            "device_user": "device"
+        }
+
+        mapped_role = role_mapping.get(user_role, user_role)
+
+        # Check if user has any of the required roles
+        if mapped_role in [role.lower() for role in allowed_roles]:
+            return current_user
+
+        # Also check permissions for more granular control
+        for role in allowed_roles:
+            permission = f"{role}_access"
+            if permission in current_user.permissions:
+                return current_user
+
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied. Required roles: {allowed_roles}, user role: {user_role}"
+        )
+
+    return role_checker

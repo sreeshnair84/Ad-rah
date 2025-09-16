@@ -3,7 +3,11 @@ import secrets
 import logging
 import asyncio
 from typing import Optional
+from dotenv import load_dotenv
 from app.security.key_vault_service import KeyVaultService
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { MediaPreview } from './MediaPreview';
+import { ContentEditForm } from './ContentEditForm';
 import { useContent } from '@/hooks/useContent';
 import { useAuth } from '@/hooks/useAuth';
 import { PageLayout } from '@/components/shared/PageLayout';
@@ -88,6 +91,7 @@ export function UnifiedContentManager({
 }: UnifiedContentManagerProps) {
   const { user, hasRole, hasPermission, isSuperUser, getDisplayName, getRoleDisplay } = useAuth();
   const { loading, error, uploadFile, getContentList, approveContent, rejectContent } = useContent();
+  const router = useRouter();
 
   const [content, setContent] = useState<ContentItem[]>([]);
   const [filteredContent, setFilteredContent] = useState<ContentItem[]>([]);
@@ -95,7 +99,7 @@ export function UnifiedContentManager({
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [approvalFormData, setApprovalFormData] = useState({
@@ -108,16 +112,6 @@ export function UnifiedContentManager({
 
   // Upload form data
   const [uploadFormData, setUploadFormData] = useState({
-    title: '',
-    description: '',
-    instructions: '',
-    category: '',
-    tags: [] as string[],
-    priority: 'medium' as 'low' | 'medium' | 'high'
-  });
-
-  // Edit form data
-  const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
     instructions: '',
@@ -258,34 +252,31 @@ export function UnifiedContentManager({
       onContentSelect(content);
     } else {
       setSelectedContent(content);
+      setShowEditForm(true);
     }
   };
 
   const handleEditContent = (content: ContentItem) => {
     setSelectedContent(content);
-    setEditFormData({
-      title: content.title || '',
-      description: content.description || '',
-      instructions: content.instructions || '',
-      category: content.categories[0] || '',
-      tags: content.tags || [],
-      priority: 'medium'
-    });
-    setShowEditDialog(true);
+    setShowEditForm(true);
+  };
+
+  const handleEditFormSaved = () => {
+    setShowEditForm(false);
+    setSelectedContent(null);
+    fetchContent(); // Refresh the content list
   };
 
   const handleDeleteContent = async (contentId: string) => {
-    if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
-      return;
-    }
-
     try {
       const token = localStorage.getItem('access_token');
       if (!token) return;
 
       const response = await fetch(`/api/content/${contentId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (response.ok) {
@@ -388,11 +379,19 @@ export function UnifiedContentManager({
     return (
       <div className="flex items-center gap-2">
         {showUpload && hasPermission("content", "upload") && (
+          <Button onClick={() => router.push('/dashboard/content/upload')}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Content
+          </Button>
+        )}
+
+        {/* Keep the dialog for inline upload functionality if needed */}
+        {false && (
           <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
             <DialogTrigger asChild>
               <Button>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload Content
+                Upload Content (Old)
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
@@ -494,7 +493,7 @@ export function UnifiedContentManager({
         {filteredContent.map((item) => (
           <Card
             key={item.id}
-            className="hover:shadow-md transition-shadow cursor-pointer"
+            className="hover:shadow-md transition-shadow cursor-pointer group"
             onClick={() => handleContentClick(item)}
           >
             <CardHeader className="pb-3">
@@ -509,6 +508,48 @@ export function UnifiedContentManager({
               </div>
             </CardHeader>
             <CardContent>
+              {/* Media Preview */}
+              {item.filename && (
+                <div className="mb-3 relative overflow-hidden rounded-lg bg-gray-50 h-32 flex items-center justify-center">
+                  {item.content_type?.startsWith('image/') ? (
+                    <img
+                      src={`/api/content/files/${item.filename}`}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fallback) {
+                          fallback.style.display = 'flex';
+                        }
+                      }}
+                    />
+                  ) : item.content_type?.startsWith('video/') ? (
+                    <video
+                      src={`/api/content/files/${item.filename}`}
+                      className="w-full h-full object-cover"
+                      muted
+                      onMouseEnter={(e) => e.currentTarget.play()}
+                      onMouseLeave={(e) => e.currentTarget.pause()}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center text-gray-400">
+                      {getContentTypeIcon(item.content_type)}
+                      <span className="text-xs mt-1">{item.filename}</span>
+                    </div>
+                  )}
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ display: 'none' }}
+                  >
+                    <div className="flex flex-col items-center text-white">
+                      {getContentTypeIcon(item.content_type)}
+                      <span className="text-xs mt-1">Preview not available</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {item.description && (
                 <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                   {item.description}
@@ -540,15 +581,15 @@ export function UnifiedContentManager({
                   <Building2 className="h-3 w-3" />
                   {item.company_name || 'Unknown Company'}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="sm" title="View Details">
                     <Eye className="h-4 w-4" />
                   </Button>
                   {hasPermission("content", "edit") && (
                     <Button variant="ghost" size="sm" onClick={(e) => {
                       e.stopPropagation();
                       handleEditContent(item);
-                    }}>
+                    }} title="Edit Content">
                       <Edit className="h-4 w-4" />
                     </Button>
                   )}
@@ -556,7 +597,7 @@ export function UnifiedContentManager({
                     <Button variant="ghost" size="sm" onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteContent(item.id);
-                    }}>
+                    }} title="Delete Content">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -806,7 +847,7 @@ export function UnifiedContentManager({
       )}
 
       {/* Content Detail Dialog */}
-      <Dialog open={!!selectedContent && !showApprovalDialog && !showEditDialog} onOpenChange={() => setSelectedContent(null)}>
+      <Dialog open={!!selectedContent && !showApprovalDialog && !showEditForm} onOpenChange={() => setSelectedContent(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{selectedContent?.title}</DialogTitle>
@@ -898,82 +939,17 @@ export function UnifiedContentManager({
         </DialogContent>
       </Dialog>
 
-      {/* Edit Content Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Content</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label>Title *</Label>
-                <Input
-                  value={editFormData.title}
-                  onChange={(e) => setEditFormData({...editFormData, title: e.target.value})}
-                  placeholder="Content title"
-                />
-              </div>
-              <div>
-                <Label>Category *</Label>
-                <Select
-                  value={editFormData.category}
-                  onValueChange={(value) => setEditFormData({...editFormData, category: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="advertising">Advertising</SelectItem>
-                    <SelectItem value="promotional">Promotional</SelectItem>
-                    <SelectItem value="informational">Informational</SelectItem>
-                    <SelectItem value="entertainment">Entertainment</SelectItem>
-                    <SelectItem value="food">Food & Dining</SelectItem>
-                    <SelectItem value="retail">Retail</SelectItem>
-                    <SelectItem value="services">Services</SelectItem>
-                    <SelectItem value="healthcare">Healthcare</SelectItem>
-                    <SelectItem value="education">Education</SelectItem>
-                    <SelectItem value="technology">Technology</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                value={editFormData.description}
-                onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
-                placeholder="Content description"
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label>Instructions</Label>
-              <Textarea
-                value={editFormData.instructions}
-                onChange={(e) => setEditFormData({...editFormData, instructions: e.target.value})}
-                placeholder="Special instructions for content display, timing, or scheduling"
-                rows={2}
-              />
-            </div>
-            <div className="flex gap-2 pt-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowEditDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button className="flex-1">
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {renderApprovalDialog()}
+
+      {/* Content Edit Form */}
+      {showEditForm && selectedContent && (
+        <ContentEditForm
+          contentId={selectedContent.id}
+          isOpen={showEditForm}
+          onClose={() => setShowEditForm(false)}
+          onSaved={handleEditFormSaved}
+        />
+      )}
     </PageLayout>
   );
 }

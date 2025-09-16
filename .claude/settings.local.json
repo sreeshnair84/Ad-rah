@@ -8,7 +8,9 @@
       "Bash(sed:*)",
       "Bash(uv add:*)",
       "Bash(npm install)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(timeout 10 uv run:*)",
+      "Bash(docker-compose:*)"
     ],
     "deny": [],
     "ask": []

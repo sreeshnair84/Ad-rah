@@ -130,21 +130,148 @@ async def update_content(
     content_data: Dict,
     current_user: dict = Depends(get_current_user)
 ):
-    """Update existing content"""
+    """Update existing content metadata and properties"""
     try:
         existing_content = await repo.get_content_meta(content_id)
         if not existing_content:
             raise HTTPException(status_code=404, detail="Content not found")
 
-        content_data["updated_at"] = datetime.utcnow().isoformat()
-        content_data["updated_by"] = current_user.get("id")
+        # Check if user has permission to edit this content
+        if not _can_edit_content(existing_content, current_user):
+            raise HTTPException(status_code=403, detail="Permission denied")
 
-        updated_content = await repo.update_content_meta(content_id, content_data)
+        # Preserve certain fields from being overwritten
+        protected_fields = {"id", "created_at", "created_by", "filename", "file_url", "size", "content_type"}
+        filtered_data = {k: v for k, v in content_data.items() if k not in protected_fields}
+        
+        filtered_data["updated_at"] = datetime.utcnow().isoformat()
+        filtered_data["updated_by"] = current_user.get("id")
+
+        # Track content update event
+        await history_service.track_content_event(
+            content_id=content_id,
+            event_type=ContentHistoryEventType.UPDATED,
+            company_id=getattr(current_user, "company_id", "unknown"),
+            user_id=current_user.get("id"),
+            event_details={"updated_fields": list(filtered_data.keys())}
+        )
+
+        updated_content = await repo.update_content_meta(content_id, filtered_data)
         return safe_json_response(updated_content)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update content: {e}")
+
+@router.get("/{content_id}/details", response_model=Dict)
+async def get_content_details(
+    content_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed content information including file metadata and access URLs"""
+    try:
+        content = await repo.get_content_meta(content_id)
+        if not content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Check if user has permission to view this content
+        if not _can_view_content(content, current_user):
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        # Add computed fields for better frontend handling
+        enhanced_content = dict(content)
+        
+        # Add file access URL if available
+        if content.get("filename"):
+            enhanced_content["preview_url"] = f"/api/content/files/{content['filename']}"
+        
+        # Add file metadata
+        if content.get("content_type"):
+            enhanced_content["file_info"] = {
+                "is_image": content["content_type"].startswith("image/"),
+                "is_video": content["content_type"].startswith("video/"),
+                "is_text": content["content_type"].startswith("text/"),
+                "is_audio": content["content_type"].startswith("audio/"),
+                "formatted_size": _format_file_size(content.get("size", 0))
+            }
+
+        # Add edit permissions
+        enhanced_content["permissions"] = {
+            "can_edit": _can_edit_content(content, current_user),
+            "can_delete": _can_delete_content(content, current_user),
+            "can_approve": _can_approve_content(content, current_user),
+            "can_replace_file": _can_replace_file(content, current_user)
+        }
+
+        return safe_json_response(enhanced_content)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get content details: {e}")
+
+@router.post("/{content_id}/replace-file")
+async def replace_content_file(
+    content_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Replace the file for existing content while preserving metadata"""
+    try:
+        existing_content = await repo.get_content_meta(content_id)
+        if not existing_content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Check if user has permission to replace files
+        if not _can_replace_file(existing_content, current_user):
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        # Validate file
+        if file.size > 100 * 1024 * 1024:  # 100MB limit
+            raise HTTPException(status_code=413, detail="File too large")
+
+        # Read file content
+        file_content = await file.read()
+
+        # Save new file
+        from ..storage import save_media
+        file_url = save_media(file.filename, file_content, file.content_type)
+
+        # Update content with new file information
+        update_data = {
+            "filename": file.filename,
+            "file_url": file_url,
+            "content_type": file.content_type,
+            "size": len(file_content),
+            "updated_at": datetime.utcnow().isoformat(),
+            "updated_by": current_user.get("id"),
+            "status": "quarantine"  # Re-quarantine for review after file replacement
+        }
+
+        # Track content file replacement event
+        await history_service.track_content_event(
+            content_id=content_id,
+            event_type=ContentHistoryEventType.UPDATED,
+            company_id=getattr(current_user, "company_id", "unknown"),
+            user_id=current_user.get("id"),
+            event_details={
+                "action": "file_replaced",
+                "old_filename": existing_content.get("filename"),
+                "new_filename": file.filename,
+                "new_size": len(file_content),
+                "new_content_type": file.content_type
+            }
+        )
+
+        updated_content = await repo.update_content_meta(content_id, update_data)
+        return safe_json_response({
+            "message": "File replaced successfully",
+            "content": updated_content
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to replace file: {e}")
 
 @router.delete("/{content_id}")
 async def delete_content(
@@ -1844,3 +1971,132 @@ async def _notify_content_rejection(content_id: str, content_meta: Dict, ai_anal
         # )
     except Exception as e:
         logger.error(f"Failed to send rejection notification: {e}")
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR CONTENT PERMISSIONS AND UTILITIES
+# ============================================================================
+
+def _can_view_content(content: Dict, current_user: Dict) -> bool:
+    """Check if user can view this content"""
+    user_id = current_user.get("id")
+    user_type = current_user.get("user_type", "")
+    company_id = current_user.get("company_id")
+    
+    # Super users can view everything
+    if user_type == "SUPER_USER":
+        return True
+    
+    # Users can view their own content
+    if content.get("owner_id") == user_id:
+        return True
+    
+    # Company users can view content from their company
+    if company_id and content.get("company_id") == company_id:
+        return True
+        
+    # Content moderators can view everything
+    permissions = current_user.get("permissions", [])
+    if "content_moderate" in permissions or "content_approve" in permissions:
+        return True
+        
+    # Public content can be viewed by anyone
+    if content.get("visibility_level") == "public":
+        return True
+        
+    return False
+
+
+def _can_edit_content(content: Dict, current_user: Dict) -> bool:
+    """Check if user can edit this content"""
+    user_id = current_user.get("id")
+    user_type = current_user.get("user_type", "")
+    permissions = current_user.get("permissions", [])
+    
+    # Super users can edit everything
+    if user_type == "SUPER_USER":
+        return True
+    
+    # Users can edit their own content if it's not approved
+    if content.get("owner_id") == user_id:
+        status = content.get("status", "")
+        # Allow editing if content is in draft, quarantine, or rejected status
+        return status in ["draft", "quarantine", "rejected", "pending"]
+    
+    # Content moderators can edit everything
+    if "content_moderate" in permissions or "content_edit" in permissions:
+        return True
+        
+    return False
+
+
+def _can_delete_content(content: Dict, current_user: Dict) -> bool:
+    """Check if user can delete this content"""
+    user_id = current_user.get("id")
+    user_type = current_user.get("user_type", "")
+    permissions = current_user.get("permissions", [])
+    
+    # Super users can delete everything
+    if user_type == "SUPER_USER":
+        return True
+    
+    # Users can delete their own content if it's not approved
+    if content.get("owner_id") == user_id:
+        status = content.get("status", "")
+        return status in ["draft", "quarantine", "rejected"]
+    
+    # Content moderators can delete everything
+    if "content_moderate" in permissions or "content_delete" in permissions:
+        return True
+        
+    return False
+
+
+def _can_approve_content(content: Dict, current_user: Dict) -> bool:
+    """Check if user can approve this content"""
+    user_type = current_user.get("user_type", "")
+    permissions = current_user.get("permissions", [])
+    
+    # Super users can approve everything
+    if user_type == "SUPER_USER":
+        return True
+        
+    # Content moderators can approve
+    if "content_moderate" in permissions or "content_approve" in permissions:
+        return True
+        
+    return False
+
+
+def _can_replace_file(content: Dict, current_user: Dict) -> bool:
+    """Check if user can replace the file for this content"""
+    user_id = current_user.get("id")
+    user_type = current_user.get("user_type", "")
+    permissions = current_user.get("permissions", [])
+    
+    # Super users can replace everything
+    if user_type == "SUPER_USER":
+        return True
+    
+    # Users can replace files for their own content if it's not approved
+    if content.get("owner_id") == user_id:
+        status = content.get("status", "")
+        return status in ["draft", "quarantine", "rejected"]
+    
+    # Content moderators can replace files
+    if "content_moderate" in permissions:
+        return True
+        
+    return False
+
+
+def _format_file_size(size_bytes: int) -> str:
+    """Format file size in human readable format"""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"

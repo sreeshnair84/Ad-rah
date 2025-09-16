@@ -219,16 +219,16 @@ export default function LoginPage() {
               {/* Logo positioned at top-left of card */}
               <div className="flex items-start justify-between mb-6">
                 <motion.div
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 2.05 }}
                   transition={{ type: "spring", stiffness: 300 }}
                   className="flex items-center gap-3"
                 >
                   <Image
                     src="/images/logo.png"
                     alt="Adara Screen Logo"
-                    width={200}
-                    height={60}
-                    className="h-12 w-auto object-contain"
+                    width={500}
+                    height={160}
+                    className="h-52 w-auto object-contain"
                     priority
                     onError={(e) => {
                       console.log('Logo failed to load, showing fallback');

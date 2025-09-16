@@ -72,6 +72,14 @@ from .debug_config import router as debug_config_router
 # Import history router for content tracking
 from .history import router as history_router
 
+# Import new ad slot management API routers
+from .host_management import router as host_management_router
+from .advertiser_portal import router as advertiser_portal_router
+from .admin_management import router as admin_management_router
+from .content_moderation import router as content_moderation_router
+from .billing_invoicing import router as billing_invoicing_router
+from .analytics_reporting import router as analytics_reporting_router
+
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(registration_router)
@@ -99,6 +107,14 @@ api_router.include_router(test_seed_router)  # Test seed router for authenticati
 # api_router.include_router(temp_auth_router, prefix="/temp-auth")  # Removed - temporary debug router
 api_router.include_router(enhanced_device_analytics_router)  # Enhanced device analytics and heartbeat
 api_router.include_router(debug_config_router, prefix="/debug")
+
+# Include new ad slot management API routers
+api_router.include_router(host_management_router)          # Host company management APIs
+api_router.include_router(advertiser_portal_router)        # Advertiser portal APIs  
+api_router.include_router(admin_management_router)         # Admin management APIs
+api_router.include_router(content_moderation_router)       # Content moderation workflow APIs
+api_router.include_router(billing_invoicing_router)        # Billing and invoicing APIs
+api_router.include_router(analytics_reporting_router)      # Analytics and reporting APIs
 
 # Include content delivery router if available
 if CONTENT_DELIVERY_ROUTER_AVAILABLE:
