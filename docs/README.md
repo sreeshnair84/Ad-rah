@@ -2,11 +2,6 @@
 
 This directory contains the essential documentation for the Adara Digital Signage Platform. All duplicate and outdated documents have been removed to maintain clarity and reduce maintenance overhead.
 
-**Copyright © 2024 Adara Screen by Hebron. All rights reserved.**  
-**Owner: Sugesh M S**
-
-This documentation is proprietary to Adara Screen by Hebron and contains confidential information. Unauthorized reproduction, distribution, or disclosure may result in legal action.
-
 ## 📚 **Core Documentation**
 
 ### **Architecture & Design**

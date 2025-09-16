@@ -32,7 +32,6 @@ import {
   Calendar,
   Filter,
   Share,
-  ReviewIcon as BookOpen,
   Zap,
   Bell,
   Moon,
@@ -48,7 +47,6 @@ import {
 // Import existing components
 import UnifiedUploadPage from '@/components/upload/UnifiedUploadPage';
 import OverlayManagement from './overlays/overlay-management';
-import ContentApproval from './approval/content-approval';
 import { ContentManager } from '@/components/content/ContentManager';
 import DigitalTwinDashboard from '@/components/dashboard/DigitalTwinDashboard';
 
@@ -387,16 +385,6 @@ export default function DashboardPage() {
 
             {isHostCompany() && (
               <>
-                <Card className="group hover:shadow-md transition-all cursor-pointer border-amber-100 hover:border-amber-200"
-                      onClick={() => setActiveTab('approve')}>
-                  <CardContent className="p-6 text-center">
-                    <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <Check className="h-6 w-6 text-white" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900 mb-1">Review Queue</h3>
-                    <p className="text-xs text-gray-500">{stats.pendingApprovals} pending</p>
-                  </CardContent>
-                </Card>
                 <Card className="group hover:shadow-md transition-all cursor-pointer border-purple-100 hover:border-purple-200"
                       onClick={() => setActiveTab('overlay')}>
                   <CardContent className="p-6 text-center">
@@ -527,18 +515,6 @@ export default function DashboardPage() {
     </div>
   );
 
-  const renderApprovalTab = () => (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Content Approval</h2>
-        <p className="text-muted-foreground">
-          Review and approve advertiser content for your screens
-        </p>
-      </div>
-      <ContentApproval />
-    </div>
-  );
-
   const renderOverlayTab = () => (
     <div>
       <div className="mb-6">
@@ -588,7 +564,6 @@ export default function DashboardPage() {
           )}
           {isHostCompany() && (
             <>
-              <TabsTrigger value="approve">Approve</TabsTrigger>
               <TabsTrigger value="overlay">Overlays</TabsTrigger>
             </>
           )}
@@ -611,9 +586,6 @@ export default function DashboardPage() {
 
         {isHostCompany() && (
           <>
-            <TabsContent value="approve" className="mt-6">
-              {renderApprovalTab()}
-            </TabsContent>
             <TabsContent value="overlay" className="mt-6">
               {renderOverlayTab()}
             </TabsContent>

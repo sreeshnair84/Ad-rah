@@ -36,7 +36,8 @@ logger = logging.getLogger(__name__)
 from app.database_service import db_service
 from app.rbac_models import CompanyType, UserType, CompanyRole
 from app.auth_service import auth_service
-from app.models import DeviceRegistrationKey, DeviceRegistrationCreate, Company
+from app.models import DeviceRegistrationKey, DeviceRegistrationCreate
+from app.rbac_models import Company
 from app.repo import repo
 from app.api.devices_unified import generate_secure_key
 from app.config import settings

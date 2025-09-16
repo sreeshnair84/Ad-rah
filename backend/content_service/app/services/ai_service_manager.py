@@ -291,6 +291,8 @@ class AIServiceManager:
                 
         except Exception as e:
             logger.error(f"Failed to enable agent {agent_name}: {str(e)}")
+            # Disable the agent since creation failed
+            self.agent_configs[agent_name].enabled = False
             return False
     
     def disable_agent(self, agent_name: str) -> bool:

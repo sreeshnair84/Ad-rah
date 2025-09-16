@@ -7,7 +7,8 @@ import string
 from typing import Optional, List, Dict, Any
 
 from app.database import get_db_service, QueryFilter, FilterOperation, QueryOptions, DatabaseResult
-from app.models import Company, CompanyCreate, CompanyUpdate
+from app.models import CompanyCreate, CompanyUpdate
+from app.rbac_models import Company
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,9 @@ class CompanyService:
             # Prepare company record
             company_record = {
                 "name": company_data.name,
-                "company_type": company_data.type,
+                "company_type": company_data.company_type,
                 "organization_code": organization_code,
-                "business_license": company_data.business_license if hasattr(company_data, 'business_license') else None,
+                "business_license": getattr(company_data, 'business_license', None),
                 "email": company_data.email,
                 "phone": company_data.phone,
                 "address": company_data.address,
@@ -104,8 +105,8 @@ class CompanyService:
             if update_data.name is not None:
                 update_record["name"] = update_data.name
             
-            if update_data.type is not None:
-                update_record["company_type"] = update_data.type
+            if update_data.company_type is not None:
+                update_record["company_type"] = update_data.company_type
             
             if update_data.email is not None:
                 update_record["email"] = update_data.email

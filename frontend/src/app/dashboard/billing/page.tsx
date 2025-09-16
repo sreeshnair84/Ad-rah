@@ -1,5 +1,8 @@
 'use client';
 
+import React from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { PermissionGate } from '@/components/PermissionGate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -47,13 +50,27 @@ export default function BillingPage() {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Billing & Invoices</h2>
-        <Button>Download All Invoices</Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <PermissionGate 
+      permission={{ resource: "billing", action: "read" }}
+      fallback={
+        <div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="text-center text-muted-foreground">
+                You don't have permission to view billing information.
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl font-bold">Billing & Invoices</h2>
+          <PermissionGate permission={{ resource: "billing", action: "export" }}>
+            <Button>Download All Invoices</Button>
+          </PermissionGate>
+        </div>      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardHeader>
             <CardTitle>Total Spent</CardTitle>
@@ -113,9 +130,11 @@ export default function BillingPage() {
                   <TableCell>${invoice.amount.toFixed(2)}</TableCell>
                   <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm">
-                      Download
-                    </Button>
+                    <PermissionGate permission={{ resource: "billing", action: "download" }}>
+                      <Button variant="outline" size="sm">
+                        Download
+                      </Button>
+                    </PermissionGate>
                   </TableCell>
                 </TableRow>
               ))}
@@ -124,5 +143,6 @@ export default function BillingPage() {
         </CardContent>
       </Card>
     </div>
+    </PermissionGate>
   );
 }

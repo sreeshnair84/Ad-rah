@@ -3,11 +3,12 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from app.models import (
-    ContentMetadata, ContentMeta, Company, User, UserRole, Role, RolePermission, UserProfile, 
+    ContentMetadata, ContentMeta, User, UserRole, Role, RolePermission, UserProfile, 
     UserInvitation, PasswordResetToken, CompanyApplication, CompanyApplicationStatus, 
     DigitalScreen, DigitalTwin, DeviceRegistrationKey, ContentCategory, ContentTag, HostPreference,
     DeviceCredentials, DeviceHeartbeat, DeviceFingerprint, DeviceCapabilities
 )
+from app.rbac_models import Company
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -958,6 +959,9 @@ class InMemoryRepo:
 
 
 class MongoRepo:
+    async def get_devices(self, company_id: Optional[str] = None) -> List[Dict]:
+        """Return all devices (digital screens), optionally filtered by company_id."""
+        return await self.list_digital_screens(company_id)
     def __init__(self, uri: str):
         if motor is None:
             raise RuntimeError("Motor not available")
@@ -1176,12 +1180,40 @@ class MongoRepo:
             import uuid
             data["id"] = str(uuid.uuid4())
         
-        await self._company_col.replace_one({"id": data["id"]}, data, upsert=True)
+        # Transform Company model fields to database field names for backward compatibility
+        db_data = {
+            **data,
+            "type": data.get("company_type"),  # Store as 'type' for backward compatibility
+            "contact_email": data.get("email"),  # Store as 'contact_email' for backward compatibility
+            "address_line1": data.get("address"),  # Store as 'address_line1' for backward compatibility
+            "state": data.get("city"),  # Store as 'state' for backward compatibility
+            "postal_code": data.get("country"),  # Store as 'postal_code' for backward compatibility
+        }
+        
+        await self._company_col.replace_one({"id": data["id"]}, db_data, upsert=True)
         logger.info(f"Created new company: {data['name']} (ID: {data['id']})")
         return data
 
     async def get_company(self, _id: str) -> Optional[dict]:
-        return await self._company_col.find_one({"_id": _id})
+        doc = await self._company_col.find_one({"_id": _id})
+        if not doc:
+            return None
+            
+        # Convert ObjectIds to strings
+        if _OBJECTID_AVAILABLE and ObjectId is not None:
+            doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+        
+        # Transform database fields to match Company model expectations
+        transformed_doc = {
+            **doc,
+            "company_type": doc.get("company_type") or doc.get("type"),  # Handle both field names
+            "email": doc.get("email") or doc.get("contact_email"),  # Handle both field names
+            "address": doc.get("address") or doc.get("address_line1"),  # Handle both field names
+            "city": doc.get("city") or doc.get("state"),  # Handle both field names
+            "country": doc.get("country") or doc.get("postal_code"),  # Handle both field names
+        }
+        
+        return transformed_doc
 
     async def list_companies(self) -> List[Dict]:
         cursor = self._company_col.find({})
@@ -1190,7 +1222,18 @@ class MongoRepo:
             # Convert ObjectIds to strings
             if _OBJECTID_AVAILABLE and ObjectId is not None:
                 doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
-            companies.append(doc)
+            
+            # Transform database fields to match Company model expectations
+            transformed_doc = {
+                **doc,
+                "company_type": doc.get("company_type") or doc.get("type"),  # Handle both field names
+                "email": doc.get("email") or doc.get("contact_email"),  # Handle both field names
+                "address": doc.get("address") or doc.get("address_line1"),  # Handle both field names
+                "city": doc.get("city") or doc.get("state"),  # Handle both field names
+                "country": doc.get("country") or doc.get("postal_code"),  # Handle both field names
+            }
+            
+            companies.append(transformed_doc)
         return companies
 
     async def delete_company(self, _id: str) -> bool:

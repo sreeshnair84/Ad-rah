@@ -755,30 +755,34 @@ async def upload_content_file(
 
         # Create enhanced content metadata
         content_id = str(uuid.uuid4())
+        
+        # Get company_id safely - handle both dict and object formats
+        if isinstance(current_user, dict):
+            user_company_id = current_user.get("company_id")
+        else:
+            user_company_id = getattr(current_user, "company_id", None)
+        
+        # Ensure company_id is a string, default to "unknown" if None
+        company_id = str(user_company_id) if user_company_id is not None else "unknown"
+        
         content_meta = ContentMeta(
             id=content_id,
-            owner_id=current_user.id,
-            filename=filename,
-            content_type=content_type,
-            size=file_size,
             title=title,
             description=description,
-            categories=parsed_categories,
+            file_type=content_type,  # Map content_type to file_type for legacy model
+            file_size=file_size,     # Use file_size instead of size
+            created_by=current_user.id if hasattr(current_user, 'id') else str(current_user.get('id', 'unknown')),  # Use created_by instead of owner_id
+            company_id=company_id,  # Use the safely extracted company_id
+            content_rating=content_rating or "G",  # Ensure content_rating has a default
+            license_type=license_type or "proprietary",  # Ensure license_type has a default
+            usage_rights=usage_rights or {},  # Ensure usage_rights is a dict
             tags=parsed_tags,
-            content_rating=content_rating,
-            target_age_min=target_age_min,
-            target_age_max=target_age_max,
-            target_gender=target_gender,
-            start_time=parsed_start_time,
-            end_time=parsed_end_time,
-            production_notes=production_notes,
-            usage_guidelines=usage_guidelines,
-            priority_level=priority_level,
-            copyright_info=copyright_info,
-            license_type=license_type,
-            usage_rights=usage_rights,
-            duration_seconds=detected_duration,
-            file_url=file_path,
+            category_id=parsed_categories[0] if parsed_categories else None,
+            duration=detected_duration,  # Use detected_duration instead of undefined duration_seconds
+            thumbnail_url=None,
+            preview_url=None,
+            moderation_status="pending",
+            approval_status="pending",  # Add approval_status for legacy model
             status="quarantine",
             ai_moderation_status="pending"
         )

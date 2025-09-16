@@ -1,6 +1,7 @@
 from datetime import datetime
 import uuid
-from app.models import Role, User, UserRole, Company
+from app.models import Role, User, UserRole
+from app.rbac_models import Company, CompanyType
 from app.repo import repo
 from app.auth_service import auth_service
 from passlib.context import CryptContext
@@ -95,19 +96,21 @@ async def initialize_companies():
     else:
         # MongoRepo - use proper async methods
         for company_data in companies:
-            from app.models import Company
+            from app.rbac_models import Company
             # Create Company object with proper datetime conversion
             company = Company(
                 id=company_data["id"],
                 name=company_data["name"],
-                type=company_data["type"],
+                company_type=CompanyType(company_data["type"]),
+                organization_code=company_data.get("organization_code", "ORG-DEFAULT"),
+                registration_key=company_data.get("registration_key", "DEFAULT-KEY"),
                 address=company_data["address"],
                 city=company_data["city"],
                 country=company_data["country"],
                 phone=company_data.get("phone"),
                 email=company_data.get("email"),
                 website=company_data.get("website"),
-                status=company_data["status"],
+                status="active" if company_data["status"] == "active" else "inactive",
                 created_at=datetime.fromisoformat(company_data["created_at"]),
                 updated_at=datetime.fromisoformat(company_data["updated_at"])
             )

@@ -6,7 +6,8 @@ import {
   Settings, Users, Shield, Building2, UserPlus, FileImage, PlayCircle,
   Eye, Zap, DollarSign, Key, Layers, Share2, Clock, Activity,
   CheckSquare, Globe, Smartphone, TrendingUp, Calendar, GitBranch,
-  CreditCard, Database, Headphones
+  CreditCard, Database, Headphones, MapPin, Target, Receipt, BookOpen,
+  Timer, Wallet, PieChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,78 +67,33 @@ const navigationGroups = [
   {
     label: "Content Management",
     items: [
-      { 
-        key: "content", 
-        label: "All Content", 
-        icon: <FileImage className="h-5 w-5" />, 
+      {
+        key: "content",
+        label: "All Content",
+        icon: <FileImage className="h-5 w-5" />,
         description: "View all content",
         permission: { resource: "content", action: "read" }
       },
-      { 
-        key: "content/upload", 
-        label: "Upload Content", 
-        icon: <Upload className="h-5 w-5" />, 
-        description: "Upload new content",
-        permission: { resource: "content", action: "upload" }
-      },
-      { 
-        key: "content/review", 
-        label: "Review Queue", 
-        icon: <Eye className="h-5 w-5" />, 
-        description: "Review AI-analyzed content",
-        permission: { resource: "content", action: "approve" }
-      },
-      { 
-        key: "content/distribute", 
-        label: "Distribute Content", 
-        icon: <Share2 className="h-5 w-5" />, 
-        description: "Distribute content to devices",
-        permission: { resource: "content", action: "distribute" }
-      },
-      { 
-        key: "content-overlay", 
-        label: "Overlay Designer", 
-        icon: <Layers className="h-5 w-5" />, 
+      {
+        key: "content-overlay",
+        label: "Overlay Designer",
+        icon: <Layers className="h-5 w-5" />,
         description: "Design content overlays",
         permission: { resource: "overlay", action: "create" }
       },
-      { 
-        key: "digital-twin", 
-        label: "Digital Twin", 
-        icon: <Smartphone className="h-5 w-5" />, 
+      {
+        key: "digital-twin",
+        label: "Digital Twin",
+        icon: <Smartphone className="h-5 w-5" />,
         description: "Test in virtual environment",
         permission: { resource: "digital_twin", action: "view" }
       },
-      { 
-        key: "my-ads", 
-        label: "My Ads", 
-        icon: <PlayCircle className="h-5 w-5" />, 
-        description: "Manage advertisements",
-        permission: { resource: "content", action: "read" },
-        companyTypes: ["ADVERTISER"]
-      },
-      { 
-        key: "moderation", 
-        label: "Moderation", 
-        icon: <Eye className="h-5 w-5" />, 
+      {
+        key: "moderation",
+        label: "Moderation",
+        icon: <Eye className="h-5 w-5" />,
         description: "Content moderation",
         permission: { resource: "content", action: "moderate" }
-      },
-      { 
-        key: "ads-approval", 
-        label: "Ads Approval", 
-        icon: <CheckSquare className="h-5 w-5" />, 
-        description: "Approve advertisements",
-        permission: { resource: "content", action: "approve" },
-        companyTypes: ["HOST"]
-      },
-      { 
-        key: "host-review", 
-        label: "Host Review", 
-        icon: <Shield className="h-5 w-5" />, 
-        description: "Host content review",
-        permission: { resource: "content", action: "approve" },
-        companyTypes: ["HOST"]
       },
     ]
   },
@@ -170,6 +126,61 @@ const navigationGroups = [
     ]
   },
   {
+    label: "Ad Slot Management",
+    items: [
+      {
+        key: "ad-slots",
+        label: "Ad Slots",
+        icon: <MapPin className="h-5 w-5" />,
+        description: "Manage advertising slots",
+        permission: { resource: "ad_slot", action: "read" }
+      },
+      {
+        key: "bookings",
+        label: "Bookings",
+        icon: <BookOpen className="h-5 w-5" />,
+        description: "Manage slot bookings",
+        permission: { resource: "booking", action: "read" }
+      },
+      {
+        key: "locations",
+        label: "Locations",
+        icon: <Building2 className="h-5 w-5" />,
+        description: "Manage locations",
+        permission: { resource: "location", action: "read" },
+        companyTypes: ["HOST"]
+      },
+      {
+        key: "campaigns",
+        label: "Campaigns",
+        icon: <Target className="h-5 w-5" />,
+        description: "Ad campaigns",
+        permission: { resource: "campaign", action: "read" },
+        companyTypes: ["ADVERTISER"]
+      },
+    ]
+  },
+  {
+    label: "Billing & Payments",
+    items: [
+      {
+        key: "billing",
+        label: "Billing",
+        icon: <Receipt className="h-5 w-5" />,
+        description: "Billing & invoices",
+        permission: { resource: "billing", action: "read" }
+      },
+      {
+        key: "payouts",
+        label: "Payouts",
+        icon: <Wallet className="h-5 w-5" />,
+        description: "Host payouts",
+        permission: { resource: "payout", action: "read" },
+        companyTypes: ["HOST"]
+      },
+    ]
+  },
+  {
     label: "Analytics & Reports",
     items: [
       { 
@@ -196,19 +207,6 @@ const navigationGroups = [
     ]
   },
   {
-    label: "Scheduling & Planning",
-    items: [
-      { 
-        key: "schedules", 
-        label: "Schedules", 
-        icon: <Calendar className="h-5 w-5" />, 
-        description: "Content scheduling",
-        permission: { resource: "content", action: "update" },
-        companyTypes: ["HOST"]
-      },
-    ]
-  },
-  {
     label: "System & Admin",
     items: [
       { 
@@ -225,14 +223,6 @@ const navigationGroups = [
         description: "Manage master data",
         permission: { resource: "settings", action: "manage" },
         userTypes: ["SUPER_USER"]
-      },
-      { 
-        key: "billing", 
-        label: "Billing", 
-        icon: <CreditCard className="h-5 w-5" />, 
-        description: "Billing & payments",
-        permission: { resource: "settings", action: "read" },
-        requiredRoles: ["ADMIN"]
       },
     ]
   },

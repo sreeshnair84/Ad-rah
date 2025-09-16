@@ -10,7 +10,9 @@
       "Bash(npm install)",
       "Bash(taskkill:*)",
       "Bash(timeout 10 uv run:*)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "WebSearch",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

@@ -302,14 +302,21 @@ async def logout(
 @router.post("/users", response_model=User)
 async def create_user(
     user_data: UserCreate,
-    current_user: User = Depends(require_permission("user_create"))
+    current_user: UserProfile = Depends(require_permission("user_create"))
 ):
-    # Only SUPER_ADMIN and company roles can create users
-    if current_user.role not in ["super_admin", "admin"]:
+    # Get user type and role for authorization
+    user_type = current_user.user_type
+    company_role = current_user.company_role
+    
+    # Only SUPER_USER and company admins can create users
+    is_super_user = user_type == "SUPER_USER"
+    is_company_admin = user_type == "COMPANY_USER" and company_role == "ADMIN"
+    
+    if not (is_super_user or is_company_admin):
         raise HTTPException(status_code=403, detail="Only administrators can create users")
     
     # Company admin can only create users for their own company
-    if current_user.role != "super_admin":
+    if not is_super_user:
         if not current_user.company_id:
             raise HTTPException(status_code=400, detail="Company admin must have a company")
         if user_data.company_id != current_user.company_id:
@@ -320,39 +327,85 @@ async def create_user(
 @router.get("/users", response_model=List[User])
 async def list_users(
     company_id: Optional[str] = None,
-    current_user: User = Depends(get_current_active_user)
+    current_user: UserProfile = Depends(get_current_active_user)
 ):
     import logging
     logger = logging.getLogger(__name__)
     
     print(f"DEBUG: list_users endpoint called by {current_user.email}")
-    logger.info(f"list_users called by user: {current_user.email} (role: {current_user.role})")
+    logger.info(f"list_users called by user: {current_user.email} (user_type: {current_user.user_type}, company_role: {current_user.company_role})")
     
-    # Only SUPER_ADMIN and company roles can access user listing
-    if current_user.role not in ["super_admin", "admin"]:
-        logger.warning(f"Access denied - user {current_user.email} is not admin")
+    # Get user type and role for authorization
+    user_type = current_user.user_type
+    company_role = current_user.company_role
+    
+    # Only SUPER_USER and company admins can access user listing
+    is_super_user = user_type == "SUPER_USER"
+    is_company_admin = user_type == "COMPANY_USER" and company_role == "ADMIN"
+    
+    if not (is_super_user or is_company_admin):
+        logger.warning(f"Access denied - user {current_user.email} is not admin (user_type: {user_type}, company_role: {company_role})")
         raise HTTPException(status_code=403, detail="Only administrators can manage users")
     
     # Super users can see all users, company admins see only their company's users
-    if current_user.role == "super_admin":
+    from app.rbac_models import Company
+    def userprofile_to_user(up):
+        company_obj = None
+        company_data = getattr(up, 'company', None)
+        if company_data:
+            try:
+                company_obj = Company(**company_data)
+            except Exception:
+                company_obj = None
+        # Required fields for User model
+        username = getattr(up, 'email', None)
+        first_name = getattr(up, 'first_name', '')
+        last_name = getattr(up, 'last_name', '')
+        full_name = (first_name + ' ' + last_name).strip() or username
+        role = getattr(up, 'company_role', None) or 'USER'
+        password_hash = None
+        return User(
+            id=getattr(up, 'id', None),
+            email=getattr(up, 'email', None),
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            full_name=full_name,
+            role=role,
+            password_hash=password_hash,
+            phone=getattr(up, 'phone', None),
+            user_type=getattr(up, 'user_type', None),
+            company_id=getattr(up, 'company_id', None),
+            company_role=getattr(up, 'company_role', None),
+            permissions=getattr(up, 'permissions', []),
+            is_active=getattr(up, 'is_active', True),
+            email_verified=getattr(up, 'email_verified', False),
+            last_login=getattr(up, 'last_login', None),
+            created_at=getattr(up, 'created_at', None),
+            updated_at=getattr(up, 'updated_at', None),
+            company=company_obj
+        )
+    if is_super_user:
         logger.info("Getting all users for super user")
-        users = await db_service.list_all_users()
-        logger.info(f"Retrieved {len(users)} users")
+        user_profiles = await db_service.list_all_users()
+        logger.info(f"Retrieved {len(user_profiles)} users")
+        users = [userprofile_to_user(up) for up in user_profiles]
         return users
     else:
         logger.info(f"Getting company users for company_id: {current_user.company_id}")
         # Company admins can only see users from their own company
         if current_user.company_id:
-            users = await db_service.list_users_by_company(current_user.company_id)
-            logger.info(f"Retrieved {len(users)} company users")
+            user_profiles = await db_service.list_users_by_company(current_user.company_id)
+            logger.info(f"Retrieved {len(user_profiles)} company users")
+            users = [userprofile_to_user(up) for up in user_profiles]
             return users
         else:
             logger.warning("Company admin has no company_id")
             return []
 
 @router.get("/companies")
-async def list_companies(current_user: User = Depends(get_current_active_user)):
-    if current_user.role == "super_admin":
+async def list_companies(current_user: UserProfile = Depends(get_current_active_user)):
+    if current_user.user_type == "SUPER_USER":
         return await db_service.list_companies()
     else:
         if current_user.company_id:
@@ -361,18 +414,24 @@ async def list_companies(current_user: User = Depends(get_current_active_user)):
         return []
 
 @router.get("/navigation", response_model=List[str])
-async def get_accessible_navigation(current_user: User = Depends(get_current_active_user)):
-    # Get accessible navigation for the current user based on role
-    if current_user.role == "super_admin":
+async def get_accessible_navigation(current_user: UserProfile = Depends(get_current_active_user)):
+    # Get accessible navigation for the current user based on user_type and company_role
+    user_type = current_user.user_type
+    company_role = current_user.company_role
+    
+    if user_type == "SUPER_USER":
         accessible_nav = ["admin", "host", "advertiser", "content"]
-    elif current_user.role == "admin":
-        accessible_nav = ["admin", "host", "advertiser"]
-    elif current_user.role == "host":
-        accessible_nav = ["host", "content"]
-    elif current_user.role == "advertiser":
-        accessible_nav = ["advertiser", "content"]
-    elif current_user.role == "reviewer":
-        accessible_nav = ["content", "moderation"]
+    elif user_type == "COMPANY_USER":
+        if company_role == "ADMIN":
+            accessible_nav = ["admin", "host", "advertiser"]
+        elif company_role == "REVIEWER":
+            accessible_nav = ["content", "moderation"]
+        elif company_role == "EDITOR":
+            accessible_nav = ["content"]
+        elif company_role == "VIEWER":
+            accessible_nav = ["content"]
+        else:
+            accessible_nav = []
     else:
         accessible_nav = []
     

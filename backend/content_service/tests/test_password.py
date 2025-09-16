@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
-from app.services.user_service import hash_password, verify_password
+from app.auth_service import auth_service
 
 def test_password_functions():
     """Test that password hashing and verification work correctly"""
@@ -17,15 +17,15 @@ def test_password_functions():
     print(f"Original password: {test_password}")
     
     # Hash the password
-    hashed = hash_password(test_password)
+    hashed = auth_service.hash_password(test_password)
     print(f"Hashed password: {hashed[:50]}...")
     
     # Verify the password
-    is_valid = verify_password(test_password, hashed)
+    is_valid = auth_service.verify_password(test_password, hashed)
     print(f"Password verification: {'✓ PASS' if is_valid else '✗ FAIL'}")
     
     # Test with wrong password
-    wrong_is_valid = verify_password("WrongPassword123!", hashed)
+    wrong_is_valid = auth_service.verify_password("WrongPassword123!", hashed)
     print(f"Wrong password verification: {'✗ FAIL (expected)' if not wrong_is_valid else '✓ PASS (unexpected)'}")
     
     return is_valid and not wrong_is_valid

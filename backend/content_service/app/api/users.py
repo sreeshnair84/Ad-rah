@@ -746,7 +746,7 @@ async def delete_user(
                     user_role = await repo.get_user_role_in_company(current_user_id, company_id)
                     if user_role:
                         role_details = user_role.get("role_details", {})
-                        company_type = company.get("type", "").upper()
+                        company_type = company.get("company_type", "").upper()
                         if role_details.get("company_role_type") == "COMPANY_ADMIN" and company_type == "HOST":
                             user_can_delete = True
                             break

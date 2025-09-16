@@ -33,8 +33,8 @@ import json
 # Add the app directory to the path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
-from services.ai_service_manager import get_ai_service_manager, switch_ai_provider
-from services.ai_agent_framework import AnalysisRequest, ContentType
+from app.services.ai_service_manager import get_ai_service_manager, switch_ai_provider
+from app.services.ai_agent_framework import AnalysisRequest, ContentType
 
 class AIManagerCLI:
     def __init__(self):

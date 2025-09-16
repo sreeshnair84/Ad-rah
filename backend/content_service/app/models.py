@@ -154,7 +154,7 @@ class Screen(str, Enum):
 
 class CompanyCreate(BaseModel):
     name: str
-    type: str = Field(..., pattern="^(HOST|ADVERTISER)$")  # HOST or ADVERTISER
+    company_type: str = Field(..., pattern="^(HOST|ADVERTISER)$")  # HOST or ADVERTISER
     address: str
     city: str
     country: str
@@ -167,32 +167,14 @@ class CompanyCreate(BaseModel):
 
 class CompanyUpdate(BaseModel):
     name: Optional[str] = None
-    type: Optional[str] = None
+    company_type: Optional[str] = None  # Changed from 'type' to match database field
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
     phone: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[str] = None  # Changed from 'contact_email' to match database field
     website: Optional[str] = None
     status: Optional[str] = None
-
-
-class Company(BaseModel):
-    model_config = {"from_attributes": True}
-    
-    id: Optional[str] = None
-    name: str
-    type: str
-    address: str
-    city: str
-    country: str
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    website: Optional[str] = None
-    organization_code: Optional[str] = None  # Unique code for device registration
-    status: str = "active"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class RolePermission(BaseModel):

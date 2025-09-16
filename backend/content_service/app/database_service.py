@@ -257,21 +257,58 @@ class DatabaseService:
         result = await self.db.companies.insert_one(company_doc)
         company_doc["_id"] = result.inserted_id
         company_doc = self._object_id_to_str(company_doc)
-        return Company(**company_doc)
+
+        # Transform the created document to match Company model expectations
+        transformed_doc = {
+            **company_doc,
+            "company_type": company_doc.get("company_type") or company_doc.get("type"),  # Handle both field names
+            "email": company_doc.get("email") or company_doc.get("contact_email"),  # Handle both field names
+            "address": company_doc.get("address") or company_doc.get("address_line1"),  # Handle both field names
+            "city": company_doc.get("city") or company_doc.get("state"),  # Handle both field names
+            "country": company_doc.get("country") or company_doc.get("postal_code"),  # Handle both field names
+        }
+
+        return Company(**transformed_doc)
     
     async def get_company(self, company_id: str) -> Optional[Company]:
         company = await self.db.companies.find_one({"_id": company_id})
         if not company:
             return None
         company = self._object_id_to_str(company)
-        return Company(**company)
+
+        # Normalize and map fields for Pydantic Company model
+        transformed_doc = {
+            **company,
+            "company_type": str((company.get("company_type") or company.get("type") or "host")).lower(),
+            "contact_email": company.get("contact_email") or company.get("email") or "",
+            "address_line1": company.get("address_line1") or company.get("address") or "",
+            "state": company.get("state") or company.get("city") or "",
+            "postal_code": company.get("postal_code") or company.get("country") or ""
+        }
+        for field in ["company_type", "contact_email", "address_line1", "state", "postal_code"]:
+            if field not in transformed_doc or transformed_doc[field] is None:
+                transformed_doc[field] = ""
+        return Company(**transformed_doc)
     
     async def list_companies(self) -> List[Company]:
         cursor = self.db.companies.find({"status": "active"}).sort("created_at", -1)
         companies = []
         async for company_doc in cursor:
             company_doc = self._object_id_to_str(company_doc)
-            companies.append(Company(**company_doc))
+
+            # Normalize and map fields for Pydantic Company model
+            transformed_doc = {
+                **company_doc,
+                "company_type": str((company_doc.get("company_type") or company_doc.get("type") or "host")).lower(),
+                "contact_email": company_doc.get("contact_email") or company_doc.get("email") or "",
+                "address_line1": company_doc.get("address_line1") or company_doc.get("address") or "",
+                "state": company_doc.get("state") or company_doc.get("city") or "",
+                "postal_code": company_doc.get("postal_code") or company_doc.get("country") or ""
+            }
+            for field in ["company_type", "contact_email", "address_line1", "state", "postal_code"]:
+                if field not in transformed_doc or transformed_doc[field] is None:
+                    transformed_doc[field] = ""
+            companies.append(Company(**transformed_doc))
         return companies
     
     async def update_user_login(self, user_id: str):
