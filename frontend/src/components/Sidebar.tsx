@@ -1,6 +1,7 @@
 // Clean Sidebar with RBAC
 import React from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, Upload, ShieldCheck, MonitorSmartphone, BarChart3,
   Settings, Users, Shield, Building2, UserPlus, FileImage, PlayCircle,
@@ -17,50 +18,55 @@ const navigationGroups = [
   {
     label: "Overview",
     items: [
-      { 
-        key: "dashboard", 
-        label: "Dashboard", 
-        icon: <LayoutDashboard className="h-5 w-5" />, 
+      {
+        key: "dashboard",
+        label: "Dashboard",
+        icon: <LayoutDashboard className="h-5 w-5" />,
         description: "Main dashboard",
-        permission: { resource: "dashboard", action: "view" }
+        permission: { resource: "dashboard", action: "view" },
+        href: "/dashboard"
       }
     ]
   },
   {
     label: "User Management", 
     items: [
-      { 
-        key: "users", 
-        label: "Users", 
-        icon: <Users className="h-5 w-5" />, 
+      {
+        key: "users",
+        label: "Users",
+        icon: <Users className="h-5 w-5" />,
         description: "Manage users",
         permission: { resource: "user", action: "read" },
         requiredRoles: ["ADMIN"],
-        userTypes: ["SUPER_USER", "COMPANY_USER"]
+        userTypes: ["SUPER_USER", "COMPANY_USER"],
+        href: "/dashboard/users"
       },
-      { 
-        key: "companies", 
-        label: "Companies", 
-        icon: <Building2 className="h-5 w-5" />, 
+      {
+        key: "companies",
+        label: "Companies",
+        icon: <Building2 className="h-5 w-5" />,
         description: "Manage companies",
         permission: { resource: "company", action: "read" },
-        userTypes: ["SUPER_USER"]
+        userTypes: ["SUPER_USER"],
+        href: "/dashboard/companies"
       },
-      { 
-        key: "roles", 
-        label: "Roles", 
-        icon: <Shield className="h-5 w-5" />, 
+      {
+        key: "roles",
+        label: "Roles",
+        icon: <Shield className="h-5 w-5" />,
         description: "Manage roles",
         permission: { resource: "user", action: "read" },
-        userTypes: ["SUPER_USER"]
+        userTypes: ["SUPER_USER"],
+        href: "/dashboard/roles"
       },
-      { 
-        key: "registration", 
-        label: "Registration", 
-        icon: <UserPlus className="h-5 w-5" />, 
+      {
+        key: "registration",
+        label: "Registration",
+        icon: <UserPlus className="h-5 w-5" />,
         description: "Company registration",
         permission: { resource: "user", action: "create" },
-        userTypes: ["SUPER_USER"]
+        userTypes: ["SUPER_USER"],
+        href: "/dashboard/registration"
       },
     ]
   },
@@ -72,56 +78,63 @@ const navigationGroups = [
         label: "All Content",
         icon: <FileImage className="h-5 w-5" />,
         description: "View all content",
-        permission: { resource: "content", action: "read" }
+        permission: { resource: "content", action: "read" },
+        href: "/dashboard/content"
       },
       {
         key: "content-overlay",
         label: "Overlay Designer",
         icon: <Layers className="h-5 w-5" />,
         description: "Design content overlays",
-        permission: { resource: "overlay", action: "create" }
+        permission: { resource: "overlay", action: "create" },
+        href: "/dashboard/content-overlay"
       },
       {
         key: "digital-twin",
         label: "Digital Twin",
         icon: <Smartphone className="h-5 w-5" />,
         description: "Test in virtual environment",
-        permission: { resource: "digital_twin", action: "view" }
+        permission: { resource: "digital_twin", action: "view" },
+        href: "/dashboard/digital-twin"
       },
       {
         key: "moderation",
         label: "Moderation",
         icon: <Eye className="h-5 w-5" />,
         description: "Content moderation",
-        permission: { resource: "content", action: "moderate" }
+        permission: { resource: "content", action: "moderate" },
+        href: "/dashboard/moderation"
       },
     ]
   },
   {
     label: "Device Management",
     items: [
-      { 
-        key: "devices", 
-        label: "Devices", 
-        icon: <MonitorSmartphone className="h-5 w-5" />, 
+      {
+        key: "devices",
+        label: "Devices",
+        icon: <MonitorSmartphone className="h-5 w-5" />,
         description: "Manage devices",
-        permission: { resource: "device", action: "read" }
+        permission: { resource: "device", action: "read" },
+        href: "/dashboard/devices"
       },
-      { 
-        key: "kiosks", 
-        label: "Kiosks", 
-        icon: <MonitorSmartphone className="h-5 w-5" />, 
+      {
+        key: "kiosks",
+        label: "Kiosks",
+        icon: <MonitorSmartphone className="h-5 w-5" />,
         description: "Manage kiosks",
         permission: { resource: "device", action: "read" },
-        companyTypes: ["HOST"]
+        companyTypes: ["HOST"],
+        href: "/dashboard/kiosks"
       },
-      { 
-        key: "device-keys", 
-        label: "Device Keys", 
-        icon: <Key className="h-5 w-5" />, 
+      {
+        key: "device-keys",
+        label: "Device Keys",
+        icon: <Key className="h-5 w-5" />,
         description: "Manage device keys",
         permission: { resource: "device", action: "register" },
-        companyTypes: ["HOST"]
+        companyTypes: ["HOST"],
+        href: "/dashboard/device-keys"
       },
     ]
   },
@@ -183,46 +196,51 @@ const navigationGroups = [
   {
     label: "Analytics & Reports",
     items: [
-      { 
-        key: "analytics", 
-        label: "Analytics", 
-        icon: <BarChart3 className="h-5 w-5" />, 
+      {
+        key: "analytics",
+        label: "Analytics",
+        icon: <BarChart3 className="h-5 w-5" />,
         description: "View analytics",
-        permission: { resource: "analytics", action: "read" }
+        permission: { resource: "analytics", action: "read" },
+        href: "/dashboard/analytics"
       },
-      { 
-        key: "analytics/real-time", 
-        label: "Real-Time", 
-        icon: <Activity className="h-5 w-5" />, 
+      {
+        key: "analytics/real-time",
+        label: "Real-Time",
+        icon: <Activity className="h-5 w-5" />,
         description: "Real-time analytics",
-        permission: { resource: "analytics", action: "read" }
+        permission: { resource: "analytics", action: "read" },
+        href: "/dashboard/analytics/real-time"
       },
-      { 
-        key: "performance", 
-        label: "Performance", 
-        icon: <TrendingUp className="h-5 w-5" />, 
+      {
+        key: "performance",
+        label: "Performance",
+        icon: <TrendingUp className="h-5 w-5" />,
         description: "Performance metrics",
-        permission: { resource: "analytics", action: "reports" }
+        permission: { resource: "analytics", action: "reports" },
+        href: "/dashboard/performance"
       },
     ]
   },
   {
     label: "System & Admin",
     items: [
-      { 
-        key: "settings", 
-        label: "Settings", 
-        icon: <Settings className="h-5 w-5" />, 
+      {
+        key: "settings",
+        label: "Settings",
+        icon: <Settings className="h-5 w-5" />,
         description: "System settings",
-        permission: { resource: "settings", action: "read" }
+        permission: { resource: "settings", action: "read" },
+        href: "/dashboard/settings"
       },
-      { 
-        key: "master-data", 
-        label: "Master Data", 
-        icon: <Database className="h-5 w-5" />, 
+      {
+        key: "master-data",
+        label: "Master Data",
+        icon: <Database className="h-5 w-5" />,
         description: "Manage master data",
         permission: { resource: "settings", action: "manage" },
-        userTypes: ["SUPER_USER"]
+        userTypes: ["SUPER_USER"],
+        href: "/dashboard/master-data"
       },
     ]
   },
@@ -236,6 +254,7 @@ interface SidebarProps {
 
 export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarProps) {
   const { user, canAccessNavigation, getRoleDisplay, hasPermission, isSuperUser } = useAuth();
+  const router = useRouter();
 
   const getAccessibleNavigation = () => {
     if (!user) return [];
@@ -358,7 +377,13 @@ export function Sidebar({ pathname, setPathname, isCollapsed = true }: SidebarPr
                           ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 text-blue-900 shadow-sm' 
                           : 'hover:bg-muted text-muted-foreground hover:text-foreground hover:shadow-sm'
                       }`}
-                      onClick={() => setPathname(item.key)}
+                      onClick={() => {
+                        if (item.href) {
+                          router.push(item.href);
+                        } else {
+                          setPathname(item.key);
+                        }
+                      }}
                       title={isCollapsed ? `${item.label} - ${item.description}` : undefined}
                     >
                       <span className={`shrink-0 flex items-center justify-center transition-all duration-200 ${
