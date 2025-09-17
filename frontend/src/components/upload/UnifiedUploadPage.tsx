@@ -195,7 +195,7 @@ export default function UnifiedUploadPage({
         {user && (
           <div className="flex items-center space-x-2">
             <User className="h-4 w-4 text-gray-500" />
-            <span className="text-sm text-gray-600">{user.first_name} {user.last_name}</span>
+            <span className="text-sm text-gray-600">{user.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email}</span>
             {user.company && (
               <>
                 <Building className="h-4 w-4 text-gray-500 ml-4" />

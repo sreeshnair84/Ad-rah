@@ -11,6 +11,9 @@ from enum import Enum
 import uuid
 from decimal import Decimal
 
+# Import RBAC enums for consistency
+from app.rbac_models import UserType, CompanyType, CompanyRole
+
 
 # ==============================
 # ENUMS AND TYPES
@@ -73,24 +76,29 @@ class InvoiceStatus(str, Enum):
 # ==============================
 
 class User(BaseModel):
-    """Enhanced user model for multi-tenant system"""
+    """Enhanced user model for multi-tenant system - Compatible with RBAC"""
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()))
     email: str = Field(..., unique=True)
-    username: str = Field(..., unique=True)
-    full_name: str
-    role: UserRole
+    username: Optional[str] = None  # Made optional for RBAC compatibility
+    full_name: Optional[str] = None  # Made optional for RBAC compatibility
+
+    # Role fields - support both old and new systems
+    role: Optional[Union[UserRole, CompanyRole, str]] = None  # Made optional and flexible
+    user_type: Optional[UserType] = None  # New RBAC field
+    company_role: Optional[CompanyRole] = None  # New RBAC field
+
     is_active: bool = True
     is_verified: bool = False
-    
+
     # Profile information
     phone: Optional[str] = None
     company_id: Optional[str] = None
     profile_image: Optional[str] = None
     timezone: str = "UTC"
     language: str = "en"
-    
-    # Security
-    password_hash: str
+
+    # Security - made optional for compatibility
+    password_hash: Optional[str] = None  # Made optional to fix validation error
     mfa_enabled: bool = False
     mfa_secret: Optional[str] = None
     last_login: Optional[datetime] = None

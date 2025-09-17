@@ -127,7 +127,7 @@ export default function UsersPage() {
       // Transform the RBAC user data to match the expected format
       const transformedUsers = data.map((user: any) => ({
         id: user.id,
-        name: user.display_name || `${user.first_name} ${user.last_name}`.trim(),
+        name: user.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
         email: user.email,
         phone: user.phone || '',
         status: user.is_active ? 'active' : 'inactive',
