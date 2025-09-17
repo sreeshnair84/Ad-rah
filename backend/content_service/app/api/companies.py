@@ -2,14 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from app.rbac_models import Company
 from app.repo import repo
+from app.database_service import db_service
 from app.api.auth import get_current_user
 from app.rbac_models import UserProfile, UserType
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.get("/", response_model=List[Company])
-@router.get("", response_model=List[Company])  # Add route without trailing slash
+@router.get("/")
+@router.get("")  # Add route without trailing slash
 async def list_companies(current_user: UserProfile = Depends(get_current_user)):
     """List companies accessible to the current user"""
     
@@ -20,18 +21,18 @@ async def list_companies(current_user: UserProfile = Depends(get_current_user)):
         # For SUPER_USER, return all companies
         if current_user.user_type == UserType.SUPER_USER:
             print(f"[COMPANIES] DEBUG: Super user, fetching all companies")
-            companies = await repo.list_companies()
+            companies = await db_service.list_companies()
         else:
             # For regular users, return only their company
             user_company_id = current_user.company_id
             print(f"[COMPANIES] DEBUG: Regular user, fetching company: {user_company_id}")
             if user_company_id:
                 try:
-                    print(f"[COMPANIES] DEBUG: About to call repo.get_company({user_company_id})")
-                    company = await repo.get_company(user_company_id)
-                    print(f"[COMPANIES] DEBUG: repo.get_company returned: {company}")
+                    print(f"[COMPANIES] DEBUG: About to call db_service.get_company({user_company_id})")
+                    company = await db_service.get_company(user_company_id)
+                    print(f"[COMPANIES] DEBUG: db_service.get_company returned: {company}")
                     if company:
-                        print(f"[COMPANIES] DEBUG: Successfully fetched company: {company.get('name', 'Unknown')}")
+                        print(f"[COMPANIES] DEBUG: Successfully fetched company: {company.name}")
                         companies = [company]
                     else:
                         print(f"[COMPANIES] WARNING: Company with ID {user_company_id} not found in database")
@@ -47,42 +48,31 @@ async def list_companies(current_user: UserProfile = Depends(get_current_user)):
         
         print(f"[COMPANIES] INFO: Found {len(companies)} companies for user {current_user.email}")
         
-        # Only ensure datetime serialization if needed
-        for company in companies:
-            if "created_at" in company and hasattr(company["created_at"], 'isoformat'):
-                company["created_at"] = company["created_at"].isoformat()
-            if "updated_at" in company and hasattr(company["updated_at"], 'isoformat'):
-                company["updated_at"] = company["updated_at"].isoformat()
-        
-        # Create Company objects to ensure proper validation and serialization
-        return [Company(**company) for company in companies]
+        # Database service already returns proper Company objects, no need for re-instantiation
+        return companies
         
     except Exception as e:
         print(f"[COMPANIES] ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching companies: {str(e)}")
 
 
-@router.get("/{company_id}", response_model=Company)
+@router.get("/{company_id}")
 async def get_company(company_id: str, current_user: UserProfile = Depends(get_current_user)):
     """Get a specific company by ID"""
-    
+
     try:
-        company = await repo.get_company(company_id)
+        company = await db_service.get_company(company_id)
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
-        
+
         # Check access permissions
         if current_user.user_type != UserType.SUPER_USER:
             user_company_id = current_user.company_id
             if user_company_id != company_id:
                 raise HTTPException(status_code=403, detail="Access denied")
-        
-        # Only ensure datetime serialization if needed
-        if "created_at" in company and hasattr(company["created_at"], 'isoformat'):
-            company["created_at"] = company["created_at"].isoformat()
-        if "updated_at" in company and hasattr(company["updated_at"], 'isoformat'):
-            company["updated_at"] = company["updated_at"].isoformat()
-        return Company(**company)
+
+        # Database service already returns proper Company object
+        return company
         
     except HTTPException:
         raise

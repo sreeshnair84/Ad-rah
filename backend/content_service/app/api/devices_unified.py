@@ -812,6 +812,26 @@ async def unblock_ip_address(request_data: Dict, current_user: dict = Depends(ge
         logger.error(f"Error unblocking IP: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to unblock IP: {str(e)}")
 
+@router.get("/keys", response_model=List[Dict])
+async def list_device_registration_keys(current_user: dict = Depends(get_current_user)):
+    """List device registration keys for the current user's company"""
+    try:
+        # Get user's company context
+        company_id = current_user.get("company_id")
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="User must be associated with a company")
+
+        # Get all keys for the company
+        keys = await repo.list_device_registration_keys()
+        company_keys = [key for key in keys if key.get("company_id") == company_id]
+
+        return company_keys
+
+    except Exception as e:
+        logger.error(f"Failed to list device registration keys: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list device registration keys: {str(e)}")
+
 @router.delete("/keys/cleanup", response_model=Dict)
 async def cleanup_orphaned_keys(current_user: dict = Depends(get_current_user)):
     """Clean up registration keys with invalid company associations"""

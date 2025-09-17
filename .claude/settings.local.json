@@ -12,7 +12,8 @@
       "Bash(timeout 10 uv run:*)",
       "Bash(docker-compose:*)",
       "WebSearch",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []
